@@ -319,14 +319,14 @@ const CoursePage = () => {
           </div>
 
           <div className="space-y-8">
-            <div className="bg-white dark:bg-dark-tertiary p-6 rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
+            {/* <div className="bg-white dark:bg-dark-tertiary p-6 rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
               <div className="flex items-start">
                 <FaAward className="w-10 h-10 text-yellow-500 mr-4" />
                 <div>
                   <h3 className="font-bold">Earn certificate after completing all the problems.</h3>
                 </div>
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

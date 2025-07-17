@@ -14,7 +14,8 @@ import ExamMonitor from './pages/Admin/ExamMonitor';
 import ProtectedRoute from './ProtectedRoute';
 import CompilerPage from './pages/CompilerPage';
 import LoadingPage from './pages/LoadingPage';
-import AdminStudents from './pages/Admin/AdminStudents';
+import AdminMonitor from './pages/Admin/AdminMonitor';
+
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
@@ -33,6 +34,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><TestsList /></ProtectedRoute>} />
+            <Route path="/adminmonitor" element={<ProtectedRoute requireAdmin={true}><AdminMonitor /></ProtectedRoute>} />
             <Route path="/testedit/:testId" element={<ProtectedRoute requireAdmin={true}><TestManage /></ProtectedRoute>} />
 
             <Route path="/problem/:course/:subcourse/:questionId" element={<ProtectedRoute > <DynamicComponent /></ProtectedRoute>} />
@@ -49,7 +51,6 @@ function App() {
             <Route path="/examwindow/:testid" element={<ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute>} />
             <Route path="/exammonitor/:testid" element={<ProtectedRoute requireAdmin={true}><ExamMonitor /></ProtectedRoute>} />
             <Route path="/adminresults/:testid" element={<ProtectedRoute requireAdmin={true}><AdminResult /></ProtectedRoute>} />
-            <Route path="/studentsprogress" element={<ProtectedRoute requireAdmin={true}><AdminStudents /></ProtectedRoute>} />
             <Route path="/studentresults/:testid" element={<ProtectedRoute requireUser={true}><StudentResult /></ProtectedRoute>} />
           </Routes>
         </Suspense>

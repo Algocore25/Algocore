@@ -6,6 +6,7 @@ import { getDatabase, ref, get, child } from "firebase/database";
 import { database } from "../../firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import SkeletonLoader from '../../components/SkeletonLoader';
 
 
 
@@ -13,6 +14,7 @@ import { useAuth } from "../../context/AuthContext";
 const AvailableTests = () => {
     const [tests, setTests] = useState([]);
     const [filteredTests, setFilteredTests] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     const navigate = useNavigate();
 
@@ -57,6 +59,8 @@ const AvailableTests = () => {
         }
     } catch (error) {
         console.error("Error loading mock exams from Firebase:", error);
+    } finally {
+        setLoading(false);
     }
 };
 
@@ -68,7 +72,13 @@ const AvailableTests = () => {
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTests.length > 0 ? (
+            {loading ? (
+                <>
+                    <SkeletonLoader />
+                    <SkeletonLoader />
+                    <SkeletonLoader />
+                </>
+            ) : filteredTests.length > 0 ? (
                 filteredTests.map((test) => (
                     <TestCard key={test.id} test={test} onStart={handleStartTest} />
                 ))

@@ -38,12 +38,20 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireUser = false })
         if (requireAdmin && !isAdmin) {
           setAuthStatus("unauthorized");
           console.log("meow1");
-        } else if (requireUser && isAdmin) {
-          setAuthStatus("unauthorized");
-          console.log("meow2");
         } else {
           setAuthStatus("authenticated");
         }
+
+        const stu = await get(   ref(database , `Students` ) );
+
+        if( stu.exists() )
+        {
+          if( stu.val().indexOf( user.email ) === -1 && !isAdmin )
+          {
+            setAuthStatus("unauthorized");
+          }
+        }
+
 
       } catch (error) {
         console.error("Error fetching user data:", error);

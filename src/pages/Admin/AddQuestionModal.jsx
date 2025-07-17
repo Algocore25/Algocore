@@ -239,25 +239,25 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium">Examples (JSON format)</label>
+                <label className="block text-sm font-medium">Examples </label>
                 <textarea
                   name="Example"
                   value={formData.Example}
                   onChange={handleChange}
                   className="w-full p-2 border rounded-md mt-1 font-mono"
                   rows="4"
-                  placeholder='[\n  {\n    "input": "nums = [2,7,11,15], target = 9",\n    "output": "[0,1]"\n  }\n]'
+                  placeholder='Type Here'
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium">Test Cases (JSON format)</label>
+                <label className="block text-sm font-medium">Test Cases </label>
                 <textarea
                   name="testcases"
                   value={formData.testcases}
                   onChange={handleChange}
                   className="w-full p-2 border rounded-md mt-1 font-mono"
                   rows="4"
-                  placeholder='[\n  {\n    "input": "[2,7,11,15], 9",\n    "output": "[0,1]"\n  },\n  {\n    "input": "[3,2,4], 6",\n    "output": "[1,2]"\n  }\n]'
+                  placeholder='Type Here'
                 />
               </div>
               <div className="flex justify-end space-x-3 pt-4 border-t">
