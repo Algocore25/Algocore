@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiTrash2, FiUserPlus, FiMail } from 'react-icons/fi';
+import { FiTrash2, FiUserPlus, FiMail, FiUpload, FiDownload } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { ref, get, set, remove, push, update } from 'firebase/database';
 import { database } from '../../firebase';
@@ -12,6 +12,8 @@ const Students = ({ test, setTest, testId }) => {
   const [newStudent, setNewStudent] = useState({ name: '', email: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch students
   const fetchStudents = useCallback(async () => {
@@ -145,6 +147,104 @@ const Students = ({ test, setTest, testId }) => {
     }
   }, [testId]);
 
+  // Parse CSV content
+  const parseCSV = (csvText) => {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    const students = [];
+    
+    // Skip header if it exists
+    const startIndex = lines[0].toLowerCase().includes('name') || lines[0].toLowerCase().includes('email') ? 1 : 0;
+    
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const [name, email] = line.split(',').map(field => field.trim().replace(/"/g, ''));
+      
+      if (name && email && email.includes('@')) {
+        students.push({ name, email });
+      }
+    }
+    
+    return students;
+  };
+
+  // Handle CSV file upload
+  const handleCSVUpload = async () => {
+    if (!csvFile) {
+      toast.error('Please select a CSV file');
+      return;
+    }
+
+    setIsUploading(true);
+    
+    try {
+      const text = await csvFile.text();
+      const studentsFromCSV = parseCSV(text);
+      
+      if (studentsFromCSV.length === 0) {
+        toast.error('No valid students found in CSV file');
+        return;
+      }
+
+      // Get current students
+      const eligibleRef = ref(database, `Exam/${testId}/Eligible`);
+      const snapshot = await get(eligibleRef);
+      const currentStudents = snapshot.exists() ? snapshot.val() : {};
+      
+      let addedCount = 0;
+      let skippedCount = 0;
+      const newStudents = { ...currentStudents };
+      
+      for (const student of studentsFromCSV) {
+        // Check for duplicate name or email
+        if (currentStudents[student.name] || Object.values(currentStudents).includes(student.email)) {
+          skippedCount++;
+          continue;
+        }
+        
+        newStudents[student.name] = student.email;
+        addedCount++;
+      }
+      
+      if (addedCount > 0) {
+        // Update Firebase
+        await set(eligibleRef, newStudents);
+        
+        // Update local state
+        setManualStudents(newStudents);
+        setEnrolledStudents(Object.keys(newStudents));
+        
+        toast.success(`Added ${addedCount} students successfully${skippedCount > 0 ? `. Skipped ${skippedCount} duplicates.` : ''}`);
+      } else {
+        toast.warning('All students in the CSV already exist');
+      }
+      
+      setCsvFile(null);
+      
+    } catch (error) {
+      console.error('CSV upload error:', error);
+      toast.error('Failed to process CSV file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Download CSV template
+  const downloadCSVTemplate = () => {
+    const csvContent = 'Name,Email\nJohn Doe,john.doe@example.com\nJane Smith,jane.smith@example.com';
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'students_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    toast.success('CSV template downloaded');
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -216,6 +316,53 @@ const Students = ({ test, setTest, testId }) => {
       {/* Add Student Form */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Students</h4>
+        
+        {/* CSV Upload Section */}
+        <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Bulk Upload from CSV</h5>
+          <div className="flex flex-col sm:flex-row gap-3 items-start">
+            <div className="flex-1">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setCsvFile(e.target.files[0])}
+                className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-gray-600 dark:file:text-gray-200"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                CSV format: Name, Email (one student per line)
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={downloadCSVTemplate}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <FiDownload className="mr-1.5 h-4 w-4" />
+                Template
+              </button>
+              <button
+                onClick={handleCSVUpload}
+                disabled={!csvFile || isUploading}
+                className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                {isUploading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-1.5"></div>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <FiUpload className="mr-1.5 h-4 w-4" />
+                    Upload CSV
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        {/* Manual Add Section */}
+        <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Individual Student</h5>
         <div className="flex flex-col sm:flex-row gap-3 mb-3">
           <input
             type="text"

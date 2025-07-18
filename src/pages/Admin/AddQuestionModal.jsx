@@ -16,24 +16,37 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
     questionname: '',
     question: '',
     difficulty: 'Easy',
-    type: '',
-    constraints: '',
-    Example: '',
-    testcases: ''
+    type: 'MCQ',
+    // MCQ specific fields
+    options: ['', '', '', ''],
+    correctAnswer: 1,
+    explanation: '',
+    // Programming specific fields
+    constraints: [],
+    Example: [],
+    testcases: [],
+    solution: ''
   });
 
   const isEditMode = !!question;
 
   useEffect(() => {
     if (isEditMode) {
+      const questionType = question.type || 'MCQ';
       setFormData({
         questionname: question.questionname || '',
         question: question.question || '',
         difficulty: question.difficulty || 'Easy',
-        type: question.type || '',
-        constraints: question.constraints || '',
-        Example: Array.isArray(question.Example) ? JSON.stringify(question.Example, null, 2) : (question.Example || ''),
-        testcases: Array.isArray(question.testcases) ? JSON.stringify(question.testcases, null, 2) : (question.testcases || '')
+        type: questionType,
+        // MCQ specific fields
+        options: question.options || ['', '', '', ''],
+        correctAnswer: question.correctAnswer || 1,
+        explanation: question.explanation || '',
+        // Programming specific fields
+        constraints: question.constraints || [],
+        Example: question.Example || [],
+        testcases: question.testcases || [],
+        solution: question.solution || ''
       });
       setActiveTab('create');
     } else {
@@ -41,10 +54,16 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         questionname: '',
         question: '',
         difficulty: 'Easy',
-        type: '',
-        constraints: '',
-        Example: '',
-        testcases: ''
+        type: 'MCQ',
+        // MCQ specific fields
+        options: ['', '', '', ''],
+        correctAnswer: 1,
+        explanation: '',
+        // Programming specific fields
+        constraints: [],
+        Example: [],
+        testcases: [],
+        solution: ''
       });
     }
   }, [isOpen, question, isEditMode]);
@@ -100,18 +119,50 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
       return;
     }
 
-    let questionData = { ...formData };
+    // Validate based on question type
+    if (formData.type === 'MCQ') {
+      if (formData.options.some(option => !option.trim())) {
+        toast.error('All MCQ options are required.');
+        return;
+      }
+      if (!formData.explanation.trim()) {
+        toast.error('Explanation is required for MCQ questions.');
+        return;
+      }
+    } else if (formData.type === 'Programming') {
+      if (formData.constraints.length === 0) {
+        toast.error('At least one constraint is required for Programming questions.');
+        return;
+      }
+      if (formData.testcases.length === 0) {
+        toast.error('At least one test case is required for Programming questions.');
+        return;
+      }
+    }
 
-    try {
-      if (formData.Example.trim()) {
-        questionData.Example = JSON.parse(formData.Example);
-      }
-      if (formData.testcases.trim()) {
-        questionData.testcases = JSON.parse(formData.testcases);
-      }
-    } catch (error) {
-      toast.error('Invalid JSON format in Examples or Test Cases.');
-      return;
+    // Prepare question data based on type
+    let questionData = {
+      questionname: formData.questionname,
+      question: formData.question,
+      difficulty: formData.difficulty,
+      type: formData.type
+    };
+
+    if (formData.type === 'MCQ') {
+      questionData = {
+        ...questionData,
+        options: formData.options,
+        correctAnswer: formData.correctAnswer,
+        explanation: formData.explanation
+      };
+    } else if (formData.type === 'Programming') {
+      questionData = {
+        ...questionData,
+        constraints: formData.constraints,
+        Example: formData.Example,
+        testcases: formData.testcases,
+        solution: formData.solution
+      };
     }
 
     try {
@@ -120,9 +171,8 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         await update(questionRef, questionData);
         toast.success('Question updated successfully!');
       } else {
-        const questionsRef = ref(database, 'questions');
-        const newQuestionRef = push(questionsRef);
-        await set(newQuestionRef, questionData);
+        const questionRef = ref(database, `questions/${formData.questionname}`);
+        await set(questionRef, questionData);
         toast.success('Question added successfully!');
       }
       onClose();
@@ -217,49 +267,207 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Type</label>
-                  <input
-                    type="text"
+                  <select
                     name="type"
                     value={formData.type}
                     onChange={handleChange}
                     className="w-full p-2 border rounded-md mt-1"
-                    placeholder="e.g., Array, String, DP"
-                  />
+                  >
+                    <option value="MCQ">MCQ</option>
+                    <option value="Programming">Programming</option>
+                  </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium">Constraints</label>
-                <textarea
-                  name="constraints"
-                  value={formData.constraints}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-md mt-1"
-                  rows="2"
-                  placeholder="Enter constraints"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Examples </label>
-                <textarea
-                  name="Example"
-                  value={formData.Example}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-md mt-1 font-mono"
-                  rows="4"
-                  placeholder='Type Here'
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Test Cases </label>
-                <textarea
-                  name="testcases"
-                  value={formData.testcases}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-md mt-1 font-mono"
-                  rows="4"
-                  placeholder='Type Here'
-                />
-              </div>
+              
+              {/* MCQ Specific Fields */}
+              {formData.type === 'MCQ' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium">Options</label>
+                    {formData.options.map((option, index) => (
+                      <input
+                        key={index}
+                        type="text"
+                        value={option}
+                        onChange={(e) => {
+                          const newOptions = [...formData.options];
+                          newOptions[index] = e.target.value;
+                          setFormData(prev => ({ ...prev, options: newOptions }));
+                        }}
+                        className="w-full p-2 border rounded-md mt-1"
+                        placeholder={`Option ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium">Correct Answer</label>
+                    <select
+                      value={formData.correctAnswer}
+                      onChange={(e) => setFormData(prev => ({ ...prev, correctAnswer: parseInt(e.target.value) }))}
+                      className="w-full p-2 border rounded-md mt-1"
+                    >
+                      {formData.options.map((_, index) => (
+                        <option key={index} value={index + 1}>
+                          Option {index + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium">Explanation</label>
+                    <textarea
+                      value={formData.explanation}
+                      onChange={(e) => setFormData(prev => ({ ...prev, explanation: e.target.value }))}
+                      className="w-full p-2 border rounded-md mt-1"
+                      rows="3"
+                      placeholder="Explain why this is the correct answer"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Programming Specific Fields */}
+              {formData.type === 'Programming' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium">Constraints</label>
+                    {formData.constraints.map((constraint, index) => (
+                      <div key={index} className="flex gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={constraint}
+                          onChange={(e) => {
+                            const newConstraints = [...formData.constraints];
+                            newConstraints[index] = e.target.value;
+                            setFormData(prev => ({ ...prev, constraints: newConstraints }));
+                          }}
+                          className="flex-1 p-2 border rounded-md"
+                          placeholder={`Constraint ${index + 1}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newConstraints = formData.constraints.filter((_, i) => i !== index);
+                            setFormData(prev => ({ ...prev, constraints: newConstraints }));
+                          }}
+                          className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, constraints: [...prev.constraints, ''] }))}
+                      className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    >
+                      Add Constraint
+                    </button>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium">Examples</label>
+                    {formData.Example.map((example, index) => (
+                      <div key={index} className="flex gap-2 mt-1">
+                        <textarea
+                          value={example}
+                          onChange={(e) => {
+                            const newExamples = [...formData.Example];
+                            newExamples[index] = e.target.value;
+                            setFormData(prev => ({ ...prev, Example: newExamples }));
+                          }}
+                          className="flex-1 p-2 border rounded-md font-mono"
+                          rows="3"
+                          placeholder={`Example ${index + 1}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newExamples = formData.Example.filter((_, i) => i !== index);
+                            setFormData(prev => ({ ...prev, Example: newExamples }));
+                          }}
+                          className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, Example: [...prev.Example, ''] }))}
+                      className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    >
+                      Add Example
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium">Test Cases</label>
+                    {formData.testcases.map((testcase, index) => (
+                      <div key={index} className="border rounded-md p-3 mt-2">
+                        <div className="grid grid-cols-1 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600">Input</label>
+                            <textarea
+                              value={testcase.input || ''}
+                              onChange={(e) => {
+                                const newTestcases = [...formData.testcases];
+                                newTestcases[index] = { ...newTestcases[index], input: e.target.value };
+                                setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                              }}
+                              className="w-full p-2 border rounded-md font-mono text-sm"
+                              rows="2"
+                              placeholder="Test case input"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600">Expected Output</label>
+                            <textarea
+                              value={testcase.expectedOutput || ''}
+                              onChange={(e) => {
+                                const newTestcases = [...formData.testcases];
+                                newTestcases[index] = { ...newTestcases[index], expectedOutput: e.target.value };
+                                setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                              }}
+                              className="w-full p-2 border rounded-md font-mono text-sm"
+                              rows="2"
+                              placeholder="Expected output"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newTestcases = formData.testcases.filter((_, i) => i !== index);
+                              setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                            }}
+                            className="self-start px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm"
+                          >
+                            Remove Test Case
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, testcases: [...prev.testcases, { input: '', expectedOutput: '' }] }))}
+                      className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    >
+                      Add Test Case
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium">Solution (Optional)</label>
+                    <textarea
+                      value={formData.solution}
+                      onChange={(e) => setFormData(prev => ({ ...prev, solution: e.target.value }))}
+                      className="w-full p-2 border rounded-md mt-1 font-mono"
+                      rows="6"
+                      placeholder="Enter the solution code (optional)"
+                    />
+                  </div>
+                </>
+              )}
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
                   type="button"

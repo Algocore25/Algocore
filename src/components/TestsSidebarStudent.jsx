@@ -14,23 +14,22 @@ const TestsSidebar = ({ activeTab, setActiveTab }) => {
         <nav className="space-y-2">
           {menuItems.map((item) => {
             const isActive = activeTab === item.id;
-            
+
             return (
               <motion.button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                  isActive
+                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive
                     ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                     : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-                }`}
+                  }`}
                 whileHover={{ x: 4 }}
                 whileTap={{ scale: 0.98 }}
               >
                 <span className="mr-3 text-lg">{item.icon}</span>
                 {item.label}
                 {isActive && (
-                  <motion.span 
+                  <motion.span
                     className="ml-auto h-2 w-2 rounded-full bg-blue-500"
                     layoutId="activeTab"
                     transition={{

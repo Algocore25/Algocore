@@ -26,7 +26,7 @@ const Icons = {
   )
 };
 
-function MCQPage({ data }) {
+function MCQPage({ data, onNext, onPrevious }) {
   const [activeTab, setActiveTab] = useState('description');
   const [selectedOption, setSelectedOption] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -35,7 +35,7 @@ function MCQPage({ data }) {
 
   const { user } = useAuth();
 
-  const { course, subcourse, questionId } = useParams();
+  const { course, subcourse, questionId, testid } = useParams();
 
   useEffect(() => {
     const loadUserAnswer = async () => {
@@ -76,19 +76,37 @@ function MCQPage({ data }) {
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-white dark:bg-gray-900">
-      <div className="flex-1 flex overflow-hidden">
+    <div className="flex flex-col w-full bg-white dark:bg-gray-900 overflow-hidden">
+      {/* Navigation Bar */}
+      <div className="flex justify-between items-center p-4 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <button 
+          onClick={onPrevious}
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors duration-150"
+        >
+          Previous
+        </button>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Question: {data?.questionname}</h2>
+        <button 
+          onClick={onNext}
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors duration-150"
+        >
+          Next
+        </button>
+      </div>
+      
+      <div className="flex flex-1 overflow-hidden">
         {/* Left Panel */}
         <div
-          className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden h-full shadow-sm"
+          className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden shadow-sm"
           style={{ width: `${leftPanelWidth}%` }}
         >
           <div className="flex border-b border-gray-200 dark:border-gray-700">
             <button
-              className={`px-6 py-4 text-sm font-medium ${activeTab === 'description'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-500'
-                : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
-                }`}
+              className={`px-6 py-4 text-sm font-medium ${
+                activeTab === 'description'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-500'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
               onClick={() => setActiveTab('description')}
             >
               <div className="flex items-center gap-2">
@@ -97,8 +115,7 @@ function MCQPage({ data }) {
               </div>
             </button>
           </div>
-
-          <div className="p-6 flex-1 overflow-auto">
+          <div className="p-6 flex-1 overflow-y-auto">
             {activeTab === 'description' && (
               <div className="text-gray-700 dark:text-gray-300">
                 <div className="mb-6">

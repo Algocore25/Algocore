@@ -147,8 +147,8 @@ function CodePage() {
       for (const { input: testInput, expectedOutput } of testCases) {
         const { run: result } = await executeCode(selectedLanguage, code, testInput);
 
-const pattern = /Child => PPID: \d+, PID: \d+\s+Parent => PID: \d+\s+Waiting for child process to finish\.\s+Child process finished\./;
-        console.log( String(result.output));
+        const pattern = /Child => PPID: \d+, PID: \d+\s+Parent => PID: \d+\s+Waiting for child process to finish\.\s+Child process finished\./;
+        console.log(String(result.output));
         console.log(pattern.test(result.output));
 
         const resultlist = result.output ? result.output.split("\n") : ["No output received."];
@@ -458,7 +458,7 @@ const pattern = /Child => PPID: \d+, PID: \d+\s+Parent => PID: \d+\s+Waiting for
   }, [course]);
 
   return (
-    <div className="h-screen w-full flex bg-white dark:bg-dark-primary select-none">      {/* Left Panel */}
+    <div className="h-[calc(100vh-4rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">      {/* Left Panel */}
       <div
         className="bg-white dark:bg-dark-secondary border-r border-gray-200 dark:border-dark-tertiary flex flex-col overflow-hidden h-full"
         style={{ width: `${leftPanelWidth}%` }}
@@ -559,7 +559,7 @@ const pattern = /Child => PPID: \d+, PID: \d+\s+Parent => PID: \d+\s+Waiting for
                   </ul>
                 </div>
 
-                <div className="flex justify-end gap-2 mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
+                {/* <div className="flex justify-end gap-2 mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <button
                     onClick={() => {
                       if (!courseData) return;
@@ -647,7 +647,7 @@ const pattern = /Child => PPID: \d+, PID: \d+\s+Parent => PID: \d+\s+Waiting for
                   >
                     Next
                   </button>
-                </div>
+                </div> */}
               </div>
             </div>
           )}

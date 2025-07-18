@@ -6,14 +6,14 @@ import { languageTemplates } from './constants';
 
 const CompilerPage = () => {
   const { theme } = useTheme();
-  const [code, setCode] = useState(languageTemplates['javascript']);
+  const [code, setCode] = useState(languageTemplates['cpp']);
   const [output, setOutput] = useState({
     stdout: 'Your output will appear here.',
     stderr: null,
     time: null,
     memory: null,
   });
-  const [language, setLanguage] = useState('javascript');
+  const [language, setLanguage] = useState('cpp');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ const CompilerPage = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-4 p-4 md:p-6 bg-gray-100 dark:bg-gray-900 h-[calc(100vh-80px)]">
+    <div className="flex flex-col md:flex-row gap-4 p-4 md:p-6 bg-gray-100 dark:bg-gray-900 h-[calc(100vh-4rem)] overflow-hidden">
 
       {/* Code Editor Panel */}
       <div className="flex flex-col w-full md:w-3/5 h-full bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
@@ -60,17 +60,17 @@ const CompilerPage = () => {
             onChange={handleLanguageChange}
             className="bg-white dark:bg-gray-700 text-sm rounded-md px-2 py-1 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white"
           >
+            <option value="cpp">C</option>
             <option value="javascript">JavaScript</option>
             <option value="python">Python</option>
             <option value="java">Java</option>
-            <option value="cpp">C++</option>
           </select>
         </div>
 
         {/* Monaco Editor */}
         <div className="flex-grow overflow-hidden" style={{ height: '100%' }}>
           <Editor
-            height="calc(100% - 1px)"
+            height="100%"
             language={language}
             theme={theme === 'dark' ? 'vs-dark' : 'light'}
             value={code}
@@ -80,6 +80,10 @@ const CompilerPage = () => {
               wordWrap: 'on',
               automaticLayout: true,
               minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              overviewRulerLanes: 0,
+              hideCursorInOverviewRuler: true,
+              overviewRulerBorder: false,
             }}
           />
         </div>
