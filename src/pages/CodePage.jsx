@@ -15,7 +15,7 @@ import { executeCode } from './api';
 import { useAuth } from '../context/AuthContext';
 import AISuggestionsTab from '../components/AISuggestions';
 
-function CodePage() {
+function CodePage({ data, navigation }) {
   const [code, setCode] = useState("");
   const [activeTab, setActiveTab] = useState('description');
   const [output, setOutput] = useState(null);
@@ -837,6 +837,35 @@ function CodePage() {
               <Icons.ChevronRight />
               Submit
             </button>
+
+            {/* Navigation Buttons */}
+            {navigation?.showNavigation && (
+              <>
+                <button
+                  onClick={navigation.onPrevious}
+                  disabled={navigation.currentQuestionIndex === 0}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === 0
+                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
+                    }`}
+                >
+                  <navigation.NavigationIcons.ChevronLeft />
+                  Previous
+                </button>
+
+                <button
+                  onClick={navigation.onNext}
+                  disabled={navigation.currentQuestionIndex === navigation.totalQuestions - 1}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === navigation.totalQuestions - 1
+                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
+                    }`}
+                >
+                  Next
+                  <navigation.NavigationIcons.ChevronRight />
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
@@ -864,8 +893,12 @@ function CodePage() {
           />
         </div>
       </div>
+
+
+
+      
     </div>
   );
-}
+};
 
 export default CodePage;
