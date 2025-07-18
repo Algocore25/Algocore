@@ -1,48 +1,38 @@
-// components/TestCard.jsx
-import React from "react";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import TestsSidebar from '../../components/TestsSidebarStudent';
+import AvailableTests from './AvailableTests';
+import Results from './Results';
 
-const TestCard = ({ test, onStart }) => {
-  console.log(test);
+const TestsPage = () => {
+  const [activeTab, setActiveTab] = useState('available-tests');
 
-  const status = test?.Properties?.status || "Unknown";
 
   return (
-        <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200 border border-gray-200 dark:border-dark-tertiary">
-            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{test.name}</h3>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">Duration: {test.duration} minutes</p>
-            <p className="text-gray-600 dark:text-gray-400">Questions: {test.questions?.length || 0}</p>
-
-      <div className="mt-4">
-        {status === "NotStarted" && (
-                    <button
-            className="w-full bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 py-2 px-4 rounded-md cursor-not-allowed"
-            disabled
-          >
-            Available Soon
-          </button>
-        )}
-
-        {status === "Started" && (
-                    <button
-            onClick={() => onStart(test.id)}
-            className="w-full bg-blue-600 dark:bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
-          >
-            View
-          </button>
-        )}
-
-        {status === "Completed" && (
-                    <button
-            className="w-full bg-green-500 dark:bg-green-600 text-white py-2 px-4 rounded-md cursor-not-allowed"
-            disabled
-          >
-            Completed
-          </button>
-        )}
+        <div className="flex h-screen bg-gray-50 dark:bg-dark-primary">
+      <TestsSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <main className="flex-1 p-8 overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Tests</h1>
+        </div>
         
-      </div>
+        {activeTab === 'available-tests' && (
+  
+          <AvailableTests/>
+
+
+        )}
+
+        {activeTab === 'download-results' && (
+
+          <Results/>
+
+        )}
+
+
+      </main>
     </div>
   );
 };
 
-export default TestCard;
+export default TestsPage;

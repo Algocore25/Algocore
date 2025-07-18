@@ -80,7 +80,7 @@ const DynamicComponent = () => {
 
   if (loading) return <LoadingPage/>;
 
-  if (!data) return <LoadingPage message= "No data found" />;
+  if (!data) return <LoadingPage message= "Slow internet, loading...." />;
 
   return (
     <div>

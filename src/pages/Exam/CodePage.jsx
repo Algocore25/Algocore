@@ -30,23 +30,23 @@ function CodePage({ question }) {
   const [testCaseTab, setTestCaseTab] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(45);
-  const [selectedLanguage, setSelectedLanguage] = useState('python');
+  const [selectedLanguage, setSelectedLanguage] = useState('cpp');
   const { theme } = useTheme();
   const [questionData, setQuestionData] = useState(null);
   const [testCasesrun, setTestCases] = useState([]); // Added missing state
   const [allowlanguages, setallowlanguages] = useState([]);
-   // Added missing state
+  // Added missing state
 
   const { testid } = useParams();
   const { user } = useAuth();
-    const [submissionStatus, setSubmissionStatus] = useState('not_attended'); // Added state for status
+  const [submissionStatus, setSubmissionStatus] = useState('not_attended'); // Added state for status
 
-    // Function to fetch submission status from Firebase
+  // Function to fetch submission status from Firebase
   const fetchSubmissionStatus = useCallback(async () => {
     try {
       const resultRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/${question}/`);
       const snapshot = await get(resultRef);
-      
+
       if (snapshot.exists()) {
         const result = snapshot.val();
         setSubmissionStatus(result === 'true' ? 'correct' : 'wrong');
@@ -58,7 +58,7 @@ function CodePage({ question }) {
       setSubmissionStatus('not_attended');
     }
   }, [testid, question]);
-  
+
 
 
 
@@ -67,61 +67,61 @@ function CodePage({ question }) {
     fetchSubmissionStatus();
   }, [question]);
 
-const handleSubmit2 = async () => {
-  const testCases = questionData.testcases;
-  const initialResults = testCases.map(tc => ({
-    input: tc.input,
-    expected: tc.expectedOutput,
-    output: '',
-    passed: false,
-    status: 'running',
-  }));
+  const handleSubmit2 = async () => {
+    const testCases = questionData.testcases;
+    const initialResults = testCases.map(tc => ({
+      input: tc.input,
+      expected: tc.expectedOutput,
+      output: '',
+      passed: false,
+      status: 'running',
+    }));
 
-  setTestResults(initialResults);
-  setOutput(null);
-  setActiveTab('output');
+    setTestResults(initialResults);
+    setOutput(null);
+    setActiveTab('output');
 
-  const updatedResults = [...initialResults];
+    const updatedResults = [...initialResults];
 
-  for (let i = 0; i < testCases.length; i++) {
-    const { input, expectedOutput } = testCases[i];
-    const { run: result } = await executeCode(selectedLanguage, code, input);
+    for (let i = 0; i < testCases.length; i++) {
+      const { input, expectedOutput } = testCases[i];
+      const { run: result } = await executeCode(selectedLanguage, code, input);
 
-    const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-    while (resultlist[resultlist.length - 1] === "") resultlist.pop();
+      const resultlist = result.output ? result.output.split("\n") : ["No output received."];
+      while (resultlist[resultlist.length - 1] === "") resultlist.pop();
 
-    const expectedLines = expectedOutput.split("\n");
-    while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
+      const expectedLines = expectedOutput.split("\n");
+      while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
 
-    const passed = resultlist.length === expectedLines.length &&
-      resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+      const passed = resultlist.length === expectedLines.length &&
+        resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
 
-    updatedResults[i] = {
-      input,
-      expected: expectedOutput,
-      output: result.output,
-      passed,
-      status: 'done',
-    };
+      updatedResults[i] = {
+        input,
+        expected: expectedOutput,
+        output: result.output,
+        passed,
+        status: 'done',
+      };
 
-    setTestResults([...updatedResults]);
-  }
+      setTestResults([...updatedResults]);
+    }
 
-  const allPassed = updatedResults.every(tc => tc.passed);
-  const finalResult = allPassed ? 'true' : 'false';
+    const allPassed = updatedResults.every(tc => tc.passed);
+    const finalResult = allPassed ? 'true' : 'false';
 
-  // setOutput(finalResult);
+    // setOutput(finalResult);
 
-  // ✅ Save final result to Firebase Realtime Database
-  const resultRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/${question}/`); // 'submissions' node, new entry
+    // ✅ Save final result to Firebase Realtime Database
+    const resultRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/${question}/`); // 'submissions' node, new entry
 
-  await set(resultRef, finalResult );
+    await set(resultRef, finalResult);
 
-      setSubmissionStatus(allPassed ? 'correct' : 'wrong');
+    setSubmissionStatus(allPassed ? 'correct' : 'wrong');
 
 
-  console.log("Saved to Firebase:", finalResult);
-};
+    console.log("Saved to Firebase:", finalResult);
+  };
 
 
 
@@ -434,7 +434,7 @@ const handleSubmit2 = async () => {
           {activeTab === 'description' && (
             <div className="text-gray-700 dark:text-gray-400">
               <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)} { `{${submissionStatus }}`}</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)} {`{${submissionStatus}}`}</h1>
                 <div className="flex flex-wrap items-center gap-4 mt-2">
                   <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">Easy</span>
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
@@ -635,7 +635,7 @@ const handleSubmit2 = async () => {
         <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
           <Editor
             height="100%"
-            defaultLanguage="python"
+            defaultLanguage="cpp"
             language={selectedLanguage === 'cpp' ? 'cpp' : selectedLanguage}
             theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
             value={code}

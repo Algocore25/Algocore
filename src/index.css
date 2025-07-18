@@ -14,8 +14,10 @@
 
   /* Hide scrollbar for IE, Edge and Firefox */
   html {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
   }
 }
 
@@ -23,11 +25,11 @@
   .btn {
     @apply px-4 py-2 rounded-md font-medium transition-colors;
   }
-  
+
   .btn-primary {
     @apply bg-[#4285F4] text-white hover:bg-[#4285F4]/90;
   }
-  
+
   .btn-secondary {
     @apply text-[#4285F4] hover:bg-[#4285F4]/10;
   }
@@ -38,6 +40,7 @@
     transform: translateY(100%);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -48,6 +51,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -63,10 +67,13 @@
 
 /* Custom scrollbar hiding utility */
 .hide-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }
 
 .hide-scrollbar::-webkit-scrollbar {
-  display: none;  /* Safari and Chrome */
+  display: none;
+  /* Safari and Chrome */
 }

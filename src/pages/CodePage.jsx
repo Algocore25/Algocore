@@ -26,6 +26,7 @@ function CodePage() {
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
   const { theme } = useTheme();
   const [questionData, setQuestionData] = useState(null);
+  const [courseData, setCourseData] = useState(null);
   const [testCasesrun, setTestCases] = useState([]);
   const [allowlanguages, setallowlanguages] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -33,6 +34,7 @@ function CodePage() {
 
   const { course, subcourse, questionId } = useParams();
   const user = useAuth();
+  const navigate = useNavigate();
 
   // Refs for cleanup and debouncing
   const saveTimeoutRef = useRef(null);
@@ -144,6 +146,11 @@ function CodePage() {
 
       for (const { input: testInput, expectedOutput } of testCases) {
         const { run: result } = await executeCode(selectedLanguage, code, testInput);
+
+const pattern = /Child => PPID: \d+, PID: \d+\s+Parent => PID: \d+\s+Waiting for child process to finish\.\s+Child process finished\./;
+        console.log( String(result.output));
+        console.log(pattern.test(result.output));
+
         const resultlist = result.output ? result.output.split("\n") : ["No output received."];
         while (resultlist[resultlist.length - 1] === "") {
           resultlist.pop();
@@ -279,6 +286,7 @@ function CodePage() {
       }
 
       const data = snapshot.val();
+      console.log(data)
       setallowlanguages(data);
       console.log(allowlanguages);
 
@@ -301,6 +309,7 @@ function CodePage() {
 
         if (questionSnapshot.exists()) {
           const question = questionSnapshot.val();
+          console.log('question', question.type)
 
           setTestCases([
             { input: question?.testcases[0].input, expectedOutput: question?.testcases[0].expectedOutput },
@@ -318,7 +327,7 @@ function CodePage() {
     fetchData();
     loadCode();
     getAllowedLanguageTemplates();
-  }, []);
+  }, [questionId]);
 
   // Fixed Monaco Editor layout handling
   const handleEditorDidMount = useCallback((editor) => {
@@ -429,6 +438,25 @@ function CodePage() {
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  useEffect(() => {
+    const fetchCourseData = async () => {
+      try {
+        const dbRef = ref(database);
+        const snapshot = await get(child(dbRef, `/AlgoCore/${course}`));
+
+        if (snapshot.exists()) {
+          setCourseData(snapshot.val());
+        } else {
+          console.warn("No course data found in Firebase.");
+        }
+      } catch (error) {
+        console.error("Error fetching course data:", error);
+      }
+    };
+
+    fetchCourseData();
+  }, [course]);
+
   return (
     <div className="h-screen w-full flex bg-white dark:bg-dark-primary select-none">      {/* Left Panel */}
       <div
@@ -529,6 +557,96 @@ function CodePage() {
                     <li>{questionData?.constraints[0]}</li>
                     <li>{questionData?.constraints[1]}</li>
                   </ul>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => {
+                      if (!courseData) return;
+
+                      const lessons = courseData.lessons || {};
+                      const subcourses = Object.keys(lessons);
+                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
+                      const currentSubcourse = lessons[subcourse];
+                      const questions = currentSubcourse?.questions || [];
+                      const currentQuestionIndex = questions.indexOf(questionId);
+
+                      let prevCourse = course;
+                      let prevSubcourse = subcourse;
+                      let prevProblem = questionId;
+
+                      if (currentQuestionIndex > 0) {
+                        // Previous question in same topic
+                        prevProblem = questions[currentQuestionIndex - 1];
+                      } else if (currentSubcourseIndex > 0) {
+                        // Last question of previous topic
+                        prevSubcourse = subcourses[currentSubcourseIndex - 1];
+                        const prevSubcourseQuestions = lessons[prevSubcourse]?.questions || [];
+                        prevProblem = prevSubcourseQuestions[prevSubcourseQuestions.length - 1];
+                      }
+
+                      if (prevCourse && prevSubcourse && prevProblem) {
+                        navigate(`/problem/${prevCourse}/${prevSubcourse}/${prevProblem}`);
+                      }
+                    }}
+                    disabled={!courseData || (() => {
+                      const lessons = courseData.lessons || {};
+                      const subcourses = Object.keys(lessons);
+                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
+                      const currentSubcourse = lessons[subcourse];
+                      const questions = currentSubcourse?.questions || [];
+                      const currentQuestionIndex = questions.indexOf(questionId);
+
+                      return currentQuestionIndex === 0 && currentSubcourseIndex === 0;
+                    })()}
+                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!courseData) return;
+
+                      const lessons = courseData.lessons || {};
+                      const subcourses = Object.keys(lessons);
+                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
+                      const currentSubcourse = lessons[subcourse];
+                      const questions = currentSubcourse?.questions || [];
+                      const currentQuestionIndex = questions.indexOf(questionId);
+
+                      let nextCourse = course;
+                      let nextSubcourse = subcourse;
+                      let nextProblem = questionId;
+
+                      if (currentQuestionIndex < questions.length - 1) {
+                        // Next question in same topic
+                        nextProblem = questions[currentQuestionIndex + 1];
+                      } else if (currentSubcourseIndex < subcourses.length - 1) {
+                        // First question of next topic
+                        nextSubcourse = subcourses[currentSubcourseIndex + 1];
+                        const nextSubcourseQuestions = lessons[nextSubcourse]?.questions || [];
+                        nextProblem = nextSubcourseQuestions[0];
+                      }
+
+                      if (nextCourse && nextSubcourse && nextProblem) {
+                        navigate(`/problem/${nextCourse}/${nextSubcourse}/${nextProblem}`);
+                      }
+                    }}
+                    disabled={!courseData || (() => {
+
+                      const lessons = courseData.lessons || {};
+                      const subcourses = Object.keys(lessons);
+                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
+                      const currentSubcourse = lessons[subcourse];
+                      const questions = currentSubcourse?.questions || [];
+                      const currentQuestionIndex = questions.indexOf(questionId);
+
+                      return currentQuestionIndex === questions.length - 1 && currentSubcourseIndex === subcourses.length - 1;
+                    })()}
+                    className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             </div>
