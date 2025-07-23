@@ -123,7 +123,8 @@ const DynamicComponent = () => {
       console.log('Navigation URL:', url);
       navigate(url);
     } else {
-      console.log('Already at first question');
+      console.log('Already at first question - redirecting to home');
+      navigate('/course/os'); // Redirect to home when at first question
     }
   };
 
@@ -139,7 +140,8 @@ const DynamicComponent = () => {
       console.log('Navigation URL:', url);
       navigate(url);
     } else {
-      console.log('Already at last question');
+      console.log('At last question - redirecting to home');
+      navigate('/course/os'); // Redirect to home when at last question
     }
   };
 
@@ -168,9 +170,10 @@ const DynamicComponent = () => {
         <div className="fixed bottom-6 right-6 flex gap-3 z-50">
           <button
             onClick={handlePreviousQuestion}
-            disabled={currentQuestionIndex === 0}
+            // disabled={currentQuestionIndex === 0}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 shadow-lg ${
-              currentQuestionIndex === 0
+              // currentQuestionIndex === 0
+              false
                 ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl transform hover:scale-105'
             }`}
@@ -181,9 +184,10 @@ const DynamicComponent = () => {
           
           <button
             onClick={handleNextQuestion}
-            disabled={currentQuestionIndex === allQuestions.length - 1}
+            // disabled={currentQuestionIndex === allQuestions.length - 1}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 shadow-lg ${
-              currentQuestionIndex === allQuestions.length - 1
+              // currentQuestionIndex === allQuestions.length - 1
+              false
                 ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl transform hover:scale-105'
             }`}
