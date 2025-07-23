@@ -559,95 +559,6 @@ function CodePage({ data, navigation }) {
                   </ul>
                 </div>
 
-                {/* <div className="flex justify-end gap-2 mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <button
-                    onClick={() => {
-                      if (!courseData) return;
-
-                      const lessons = courseData.lessons || {};
-                      const subcourses = Object.keys(lessons);
-                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
-                      const currentSubcourse = lessons[subcourse];
-                      const questions = currentSubcourse?.questions || [];
-                      const currentQuestionIndex = questions.indexOf(questionId);
-
-                      let prevCourse = course;
-                      let prevSubcourse = subcourse;
-                      let prevProblem = questionId;
-
-                      if (currentQuestionIndex > 0) {
-                        // Previous question in same topic
-                        prevProblem = questions[currentQuestionIndex - 1];
-                      } else if (currentSubcourseIndex > 0) {
-                        // Last question of previous topic
-                        prevSubcourse = subcourses[currentSubcourseIndex - 1];
-                        const prevSubcourseQuestions = lessons[prevSubcourse]?.questions || [];
-                        prevProblem = prevSubcourseQuestions[prevSubcourseQuestions.length - 1];
-                      }
-
-                      if (prevCourse && prevSubcourse && prevProblem) {
-                        navigate(`/problem/${prevCourse}/${prevSubcourse}/${prevProblem}`);
-                      }
-                    }}
-                    disabled={!courseData || (() => {
-                      const lessons = courseData.lessons || {};
-                      const subcourses = Object.keys(lessons);
-                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
-                      const currentSubcourse = lessons[subcourse];
-                      const questions = currentSubcourse?.questions || [];
-                      const currentQuestionIndex = questions.indexOf(questionId);
-
-                      return currentQuestionIndex === 0 && currentSubcourseIndex === 0;
-                    })()}
-                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!courseData) return;
-
-                      const lessons = courseData.lessons || {};
-                      const subcourses = Object.keys(lessons);
-                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
-                      const currentSubcourse = lessons[subcourse];
-                      const questions = currentSubcourse?.questions || [];
-                      const currentQuestionIndex = questions.indexOf(questionId);
-
-                      let nextCourse = course;
-                      let nextSubcourse = subcourse;
-                      let nextProblem = questionId;
-
-                      if (currentQuestionIndex < questions.length - 1) {
-                        // Next question in same topic
-                        nextProblem = questions[currentQuestionIndex + 1];
-                      } else if (currentSubcourseIndex < subcourses.length - 1) {
-                        // First question of next topic
-                        nextSubcourse = subcourses[currentSubcourseIndex + 1];
-                        const nextSubcourseQuestions = lessons[nextSubcourse]?.questions || [];
-                        nextProblem = nextSubcourseQuestions[0];
-                      }
-
-                      if (nextCourse && nextSubcourse && nextProblem) {
-                        navigate(`/problem/${nextCourse}/${nextSubcourse}/${nextProblem}`);
-                      }
-                    }}
-                    disabled={!courseData || (() => {
-
-                      const lessons = courseData.lessons || {};
-                      const subcourses = Object.keys(lessons);
-                      const currentSubcourseIndex = subcourses.indexOf(subcourse);
-                      const currentSubcourse = lessons[subcourse];
-                      const questions = currentSubcourse?.questions || [];
-                      const currentQuestionIndex = questions.indexOf(questionId);
-
-                      return currentQuestionIndex === questions.length - 1 && currentSubcourseIndex === subcourses.length - 1;
-                    })()}
-                    className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </div> */}
               </div>
             </div>
           )}
@@ -843,8 +754,8 @@ function CodePage({ data, navigation }) {
               <>
                 <button
                   onClick={navigation.onPrevious}
-                  disabled={navigation.currentQuestionIndex === 0}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === 0
+                  // disabled={navigation.currentQuestionIndex === 0}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === 0 || false
                       ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                       : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
                     }`}
@@ -855,8 +766,8 @@ function CodePage({ data, navigation }) {
 
                 <button
                   onClick={navigation.onNext}
-                  disabled={navigation.currentQuestionIndex === navigation.totalQuestions - 1}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === navigation.totalQuestions - 1
+                  // disabled={navigation.currentQuestionIndex === navigation.totalQuestions - 1}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === navigation.totalQuestions - 1 || false
                       ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                       : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
                     }`}

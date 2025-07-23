@@ -41,7 +41,7 @@ function MCQPage({ data }) {
     // Reset state when question changes
     setSelectedOption(null);
     setIsSubmitted(false);
-    
+
     const loadUserAnswer = async () => {
       if (user && course && subcourse && questionId) {
         const answerRef = ref(database, `userprogress/${user.uid}/${course}/${subcourse}/${questionId}`);
@@ -50,18 +50,18 @@ function MCQPage({ data }) {
           if (snapshot.exists()) {
             const userAnswer = snapshot.val();
             // Set the actual user's selected option, not the correct answer
-            setSelectedOption(userAnswer.selectedOption);   
+            setSelectedOption(data.correctAnswer-1);
             // console.log(userAnswer.selectedOption);
-            setIsSubmitted(userAnswer.isSubmitted || false);
+            setIsSubmitted(true);
           }
         } catch (error) {
           console.error("Error loading user answer:", error);
         }
       }
     };
-    
+
     loadUserAnswer();
-    
+
     // Cleanup function to reset state when component unmounts or question changes
     return () => {
       setSelectedOption(null);
@@ -70,16 +70,12 @@ function MCQPage({ data }) {
   }, [user, course, subcourse, questionId]);
 
   const handleSubmit2 = async () => {
-    if (selectedOption === null || !user || !course || !subcourse || !questionId || !data  ) return;
+    if (selectedOption === null || !user || !course || !subcourse || !questionId || !data) return;
 
     const answerRef = ref(database, `userprogress/${user.uid}/${course}/${subcourse}/${questionId}`);
     try {
       // Store both the selected option and submission status
-      await set(answerRef, {
-        selectedOption,
-        isSubmitted: true,
-        timestamp: Date.now()
-      });
+      await set(answerRef, true);
       setIsSubmitted(true);
     } catch (error) {
       console.error("Failed to save answer:", error);
@@ -178,9 +174,9 @@ function MCQPage({ data }) {
                 let optionClasses = "p-4 border rounded-lg cursor-pointer transition-colors duration-150 ";
 
                 if (isSubmitted) {
-                  if (index === data.correctAnswer-1) {
+                  if (index === data.correctAnswer - 1) {
                     optionClasses += "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200";
-                  } else if (index === selectedOption && index !== data.correctAnswer-1) {
+                  } else if (index === selectedOption && index !== data.correctAnswer - 1) {
                     optionClasses += "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-800 dark:text-red-200";
                   } else {
                     optionClasses += "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300";
@@ -223,9 +219,9 @@ function MCQPage({ data }) {
                   <div className="flex items-center">
                     <Icons.CheckCircle2 className="text-blue-500 dark:text-blue-400 mr-3 flex-shrink-0" />
                     <span className="text-blue-800 dark:text-blue-200">
-                      {selectedOption === data.correctAnswer-1
+                      {selectedOption === data.correctAnswer - 1
                         ? "Correct! Well done!"
-                        : `Incorrect. The correct answer is ${String.fromCharCode(65 + data.correctAnswer-1)}.`}
+                        : `Incorrect. The correct answer is ${String.fromCharCode(65 + data.correctAnswer - 1)}.`}
                     </span>
                   </div>
                 </div>
