@@ -17,6 +17,7 @@ import {
   Legend
 } from 'chart.js';
 import LoadingPage from "./LoadingPage";
+import useUserActivityTime from '../hooks/useUserActivityTime';
 
 ChartJS.register(
   CategoryScale,
@@ -280,6 +281,7 @@ function ProfilePage() {
     labels: [],
     data: []
   });
+  const { totalTime, formatTime } = useUserActivityTime();
 
   // Helper to get all dates from start of month to today
   const getMonthDates = () => {
@@ -441,7 +443,7 @@ function ProfilePage() {
                 ]) {
                   const submission =
                     submissionsData[courseKey][subKey][questionId][
-                      timestampKey
+                    timestampKey
                     ];
                   totalSubmissions++;
 
@@ -508,7 +510,7 @@ function ProfilePage() {
 
   if (loading) {
     return (
-      <LoadingPage/>
+      <LoadingPage />
     );
   }
 
@@ -518,7 +520,7 @@ function ProfilePage() {
 
   if (!profileData) {
     return (
-      <LoadingPage/>
+      <LoadingPage />
     );
   }
 
@@ -540,7 +542,7 @@ function ProfilePage() {
                     className="w-full h-full rounded-full border-4 border-white dark:border-gray-800"
                   />
                 </div>
-               
+
               </div>
 
               {/* User Info */}
@@ -549,7 +551,7 @@ function ProfilePage() {
                   <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                     {profileData.username}
                   </h1>
-              
+
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -586,7 +588,13 @@ function ProfilePage() {
                     <div className="text-2xl font-bold">
                       {profileData.stats.rank}
                     </div>
-                    {/* <div className="text-sm opacity-90">Rank</div> */}
+                    <div className="text-sm opacity-90">Rank</div>
+                  </div>
+                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 rounded-xl">
+                    <div className="text-2xl font-bold">
+                      {formatTime(totalTime)}
+                    </div>
+                    <div className="text-sm opacity-90">Time Spent</div>
                   </div>
                 </div>
               </div>
@@ -597,26 +605,24 @@ function ProfilePage() {
           <div className="bg-white/80 backdrop-blur-sm dark:bg-gray-800/80 rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 mb-8">
             <div className="flex border-b border-gray-200 dark:border-gray-700">
               <button
-                className={`px-6 py-4 text-sm font-medium transition-all duration-200 ${
-                  activeTab === "overview"
+                className={`px-6 py-4 text-sm font-medium transition-all duration-200 ${activeTab === "overview"
                     ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20"
                     : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-                }`}
+                  }`}
                 onClick={() => setActiveTab("overview")}
               >
                 Overview
               </button>
               <button
-                className={`px-6 py-4 text-sm font-medium transition-all duration-200 ${
-                  activeTab === "submissions"
+                className={`px-6 py-4 text-sm font-medium transition-all duration-200 ${activeTab === "submissions"
                     ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20"
                     : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-                }`}
+                  }`}
                 onClick={() => setActiveTab("submissions")}
               >
                 Submissions
               </button>
-             
+
             </div>
 
             <div className="p-8">
@@ -690,10 +696,10 @@ function ProfilePage() {
                                     timeFilter === "hourly"
                                       ? "Hours"
                                       : timeFilter === "weekly"
-                                      ? "Date"
-                                      : timeFilter === "monthly"
-                                      ? "Month & Year"
-                                      : "Month & Year",
+                                        ? "Date"
+                                        : timeFilter === "monthly"
+                                          ? "Month & Year"
+                                          : "Month & Year",
                                   font: { size: 14 }
                                 }
                               },
@@ -713,7 +719,7 @@ function ProfilePage() {
                               title: { display: false },
                               tooltip: {
                                 callbacks: {
-                                  label: function(context) {
+                                  label: function (context) {
                                     return `Correct submissions: ${context.parsed.y}`;
                                   }
                                 }
@@ -840,7 +846,7 @@ function ProfilePage() {
                                 </div>
                               </td>
                               */}
-                              
+
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-600 dark:text-gray-400">
                                   {submission.date || "N/A"}
@@ -886,13 +892,13 @@ function ProfilePage() {
                       disabled={
                         profileData.recentSubmissions.length === 0 ||
                         profileData.allSubmissions.length <=
-                          profileData.recentSubmissions.length ||
+                        profileData.recentSubmissions.length ||
                         profileData.recentSubmissions[
                           profileData.recentSubmissions.length - 1
                         ].timestamp ===
-                          profileData.allSubmissions[
-                            profileData.allSubmissions.length - 1
-                          ].timestamp
+                        profileData.allSubmissions[
+                          profileData.allSubmissions.length - 1
+                        ].timestamp
                       }
                       onClick={() => {
                         const currentIndex =
@@ -919,7 +925,7 @@ function ProfilePage() {
                 </div>
               )}
 
-          
+
             </div>
           </div>
         </div>

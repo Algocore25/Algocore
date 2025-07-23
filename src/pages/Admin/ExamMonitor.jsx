@@ -53,7 +53,7 @@ const ExamMonitor = () => {
                 const currentTestTitle = exam.Properties?.testTitle || 'Untitled Test';
                 setTestTitle(currentTestTitle);
 
-                const usersRef = ref(database, 'Users');
+                const usersRef = ref(database, 'users');
                 const usersSnapshot = await get(usersRef);
                 const users = usersSnapshot.val() || {};
 

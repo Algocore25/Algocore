@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import PageLayout from './components/PageLayout';
+import ActivityTracker from './components/ActivityTracker'; // Add this import
 import DynamicComponent from './pages/DynamicComponent';
 import StudentResult from './pages/Exam/StudentResults';
 import AdminResult from './pages/Admin/AdminResults';
@@ -28,33 +29,35 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 function App() {
   return (
     <BrowserRouter basename='/AlgoCore'>
-      <Toaster position="top-center" reverseOrder={false} />
-      <PageLayout>
-        <Suspense fallback={<LoadingPage message="Loading page, please wait..." />}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><TestsList /></ProtectedRoute>} />
-            <Route path="/adminmonitor" element={<ProtectedRoute requireAdmin={true}><AdminMonitor /></ProtectedRoute>} />
-            <Route path="/testedit/:testId" element={<ProtectedRoute requireAdmin={true}><TestManage /></ProtectedRoute>} />
+      <ActivityTracker> {/* Wrap everything with ActivityTracker */}
+        <Toaster position="top-center" reverseOrder={false} />
+        <PageLayout>
+          <Suspense fallback={<LoadingPage message="Loading page, please wait..." />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><TestsList /></ProtectedRoute>} />
+              <Route path="/adminmonitor" element={<ProtectedRoute requireAdmin={true}><AdminMonitor /></ProtectedRoute>} />
+              <Route path="/testedit/:testId" element={<ProtectedRoute requireAdmin={true}><TestManage /></ProtectedRoute>} />
 
-            <Route path="/problem/:course/:subcourse/:questionId" element={<ProtectedRoute > <DynamicComponent /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/compiler" element={<CompilerPage />} />
-            <Route path="/courses" element={<CoursesPage />} />
-            <Route path="/course/:course" element={<CoursePage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/contact" element={<ContactPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="*" element={<NotFoundPage />} />
+              <Route path="/problem/:course/:subcourse/:questionId" element={<ProtectedRoute > <DynamicComponent /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/compiler" element={<CompilerPage />} />
+              <Route path="/courses" element={<CoursesPage />} />
+              <Route path="/course/:course" element={<CoursePage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="*" element={<NotFoundPage />} />
 
-            <Route path="/test" element={<ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>} />
-            <Route path="/examwindow/:testid" element={<ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute>} />
-            <Route path="/exammonitor/:testid" element={<ProtectedRoute requireAdmin={true}><ExamMonitor /></ProtectedRoute>} />
-            <Route path="/adminresults/:testid" element={<ProtectedRoute requireAdmin={true}><AdminResult /></ProtectedRoute>} />
-            <Route path="/studentresults/:testid" element={<ProtectedRoute requireUser={true}><StudentResult /></ProtectedRoute>} />
-          </Routes>
-        </Suspense>
-      </PageLayout>
+              <Route path="/test" element={<ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>} />
+              <Route path="/examwindow/:testid" element={<ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute>} />
+              <Route path="/exammonitor/:testid" element={<ProtectedRoute requireAdmin={true}><ExamMonitor /></ProtectedRoute>} />
+              <Route path="/adminresults/:testid" element={<ProtectedRoute requireAdmin={true}><AdminResult /></ProtectedRoute>} />
+              <Route path="/studentresults/:testid" element={<ProtectedRoute requireUser={true}><StudentResult /></ProtectedRoute>} />
+            </Routes>
+          </Suspense>
+        </PageLayout>
+      </ActivityTracker>
     </BrowserRouter>
   );
 }
