@@ -87,6 +87,61 @@ function CodePage({ question }) {
       const { input, expectedOutput } = testCases[i];
       const { run: result } = await executeCode(selectedLanguage, code, input);
 
+
+
+
+
+
+
+
+
+
+
+
+      // regex
+
+      if (questionData.testcases[2].input === "regex2") {
+        const passed = result.output.match(questionData.testcases[2].expectedOutput);
+        console.log(result.output);
+        console.log(questionData.testcases[2].expectedOutput);
+        const regex = new RegExp(
+          // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
+          /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
+        );
+        console.log(regex.test(result.output))
+        updatedResults[i] = {
+          input,
+          expected: expectedOutput,
+          output: result.output,
+          passed: regex.test(result.output),
+          status: 'done',
+        };
+        setTestResults([...updatedResults]);
+        await new Promise(res => setTimeout(res, 300));
+        continue;
+      }
+      if (questionData.testcases[2].input === "regex") {
+        const passed = result.output.match(questionData.testcases[2].expectedOutput);
+        console.log(result.output);
+        console.log(questionData.testcases[2].expectedOutput);
+        const regex = new RegExp(
+          /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/
+        );
+        console.log(regex.test(result.output))
+        updatedResults[i] = {
+          input,
+          expected: expectedOutput,
+          output: result.output,
+          passed: regex.test(result.output),
+          status: 'done',
+        };
+
+        setTestResults([...updatedResults]);
+        await new Promise(res => setTimeout(res, 300));
+        continue;
+      }
+
+
       const resultlist = result.output ? result.output.split("\n") : ["No output received."];
       while (resultlist[resultlist.length - 1] === "") resultlist.pop();
 
@@ -131,56 +186,182 @@ function CodePage({ question }) {
   const runCode = async () => {
 
     const testCases = testCasesrun;
+    console.log('Running test cases:', testCases);
 
-    console.log(testCases);
     try {
+      // Initialize test results with 'running' status
+      const initialResults = testCases.map(tc => ({
+        input: tc.input || '',
+        expected: tc.expectedOutput || '',
+        output: '',
+        passed: false,
+        status: 'running',
+        isFirstFailure: false
+      }));
 
-      const results = [];
-      const display = [];
-      for (const { input: testInput, expectedOutput } of testCases) {
-        const { run: result } = await executeCode(selectedLanguage, code, testInput);
-        const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-        while (resultlist[resultlist.length - 1] === "") {
-          resultlist.pop();
-        }
-
-        const expectedOutputLines = expectedOutput.split("\n");
-        while (expectedOutputLines[expectedOutputLines.length - 1] === "") {
-          expectedOutputLines.pop();
-        }
-
-        console.log(resultlist + "====" + expectedOutputLines);
-
-        const areEqual =
-          resultlist.length === expectedOutputLines.length &&
-          resultlist.every(
-            (value, index) => value.replace(/\s+$/, "") === expectedOutputLines[index].replace(/\s+$/, "")
-          );
-
-        display.push({ passed: areEqual, input: testInput, output: result.output });
-
-        results.push(areEqual);
-      }
-
-      const allPassed = results.every((passed) => passed);
-
-
-      if (allPassed) {
-        console.log("Correct Answer! All test cases passed.")
-      } else {
-        console.log("Wrong Answer! Some test cases failed.")
-      }
-
-      setTestResults(display);
+      setTestResults(initialResults);
       setOutput(null);
       setActiveTab('output');
 
+      const updatedResults = [...initialResults];
+      let firstFailureShown = false;
 
+      for (let i = 0; i < testCases.length; i++) {
+        const { input: testInput, expectedOutput } = testCases[i];
+
+        try {
+          const { run: result } = await executeCode(selectedLanguage, code, testInput);
+
+
+
+
+
+
+
+
+
+
+
+
+
+          // regex
+
+          if (questionData.testcases[2].input === "regex2") {
+            const passed = result.output.match(questionData.testcases[2].expectedOutput);
+            console.log(result.output);
+            console.log(questionData.testcases[2].expectedOutput);
+            const regex = new RegExp(
+              // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
+              /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
+            );
+            console.log(regex.test(result.output))
+            updatedResults[i] = {
+              input: testInput,
+              expected: expectedOutput,
+              output: result.output,
+              passed: regex.test(result.output),
+              status: 'done',
+              isFirstFailure: !passed && !firstFailureShown
+            };
+            if (!passed && !firstFailureShown) {
+              firstFailureShown = true;
+              // Auto-expand the first failed test case
+              setTestCaseTab(i);
+            }
+          }
+          else if (questionData.testcases[2].input === "regex") {
+            const passed = result.output.match(questionData.testcases[2].expectedOutput);
+            console.log(result.output);
+            console.log(questionData.testcases[2].expectedOutput);
+            const regex = new RegExp(
+              /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
+            console.log(regex.test(result.output))
+            updatedResults[i] = {
+              input: testInput,
+              expected: expectedOutput,
+              output: result.output,
+              passed: regex.test(result.output),
+              status: 'done',
+              isFirstFailure: !passed && !firstFailureShown
+            };
+            if (!passed && !firstFailureShown) {
+              firstFailureShown = true;
+              // Auto-expand the first failed test case
+              setTestCaseTab(i);
+            }
+          }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          else {
+
+            const resultOutput = result.output || '';
+            const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
+            const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
+
+            const passed = resultLines.length === expectedLines.length &&
+              resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+
+            updatedResults[i] = {
+              input: testInput,
+              expected: expectedOutput,
+              output: resultOutput,
+              passed,
+              status: 'done',
+              isFirstFailure: !passed && !firstFailureShown
+            };
+            if (!passed && !firstFailureShown) {
+              firstFailureShown = true;
+              // Auto-expand the first failed test case
+              setTestCaseTab(i);
+            }
+
+          }
+
+
+        } catch (error) {
+          console.error(`Error executing test case ${i + 1}:`, error);
+          updatedResults[i] = {
+            input: testInput,
+            expected: expectedOutput || '',
+            output: error.message || 'Error executing code',
+            passed: false,
+            status: 'done',
+            isFirstFailure: !firstFailureShown
+          };
+
+          if (!firstFailureShown) {
+            firstFailureShown = true;
+            // Auto-expand the first failed test case
+            setTestCaseTab(i);
+          }
+        }
+
+        // Update UI after each test case
+        setTestResults([...updatedResults]);
+
+        // Small delay to show test cases running one by one
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
     } catch (error) {
       console.error("Error during test cases:", error);
-
-    } finally {
+      setTestResults([{
+        input: '',
+        expected: '',
+        output: error.message || 'Error executing test cases',
+        passed: false,
+        status: 'done',
+        isFirstFailure: true
+      }]);
     }
+
+
+
+
+
+
+
+
+
   };
 
 
@@ -207,7 +388,7 @@ function CodePage({ question }) {
       // Fallback to default template on error
       setCode(languageTemplates[selectedLanguage] || "");
     }
-  }, [selectedLanguage]);
+  }, [selectedLanguage , questionData]);
 
   // Fixed saveCode function
   const saveCode = useCallback(async (codeToSave) => {
@@ -592,11 +773,11 @@ function CodePage({ question }) {
               value={selectedLanguage}
               onChange={handleLanguageChange}
             >
-              <option value="typescript">TypeScript</option>
+              {/* <option value="typescript">TypeScript</option>
               <option value="javascript">JavaScript</option>
               <option value="python">Python</option>
-              <option value="java">Java</option>
-              <option value="cpp">C++</option>
+              <option value="java">Java</option> */}
+              <option value="cpp">C</option>
               {/* {  allowlanguages.map((lang) => (
                 <option key={lang} value={lang}>
                   { lang}

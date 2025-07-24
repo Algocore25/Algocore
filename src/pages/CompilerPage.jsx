@@ -6,7 +6,7 @@ import { languageTemplates } from './constants';
 
 const CompilerPage = () => {
   const { theme } = useTheme();
-  const [code, setCode] = useState(languageTemplates['cpp']);
+  const [code, setCode] = useState('');
   const [output, setOutput] = useState({
     stdout: 'Your output will appear here.',
     stderr: null,
@@ -16,8 +16,32 @@ const CompilerPage = () => {
   const [language, setLanguage] = useState('cpp');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Load code from localStorage on component mount
   useEffect(() => {
-    setCode(languageTemplates[language]);
+    const savedCode = localStorage.getItem('compiler-code');
+    const savedLanguage = localStorage.getItem('compiler-language');
+    
+    if (savedCode) {
+      setCode(savedCode);
+    } else {
+      setCode(languageTemplates['cpp']);
+    }
+    
+    if (savedLanguage) {
+      setLanguage(savedLanguage);
+    }
+  }, []);
+
+  // Save code to localStorage whenever it changes
+  useEffect(() => {
+    if (code) {
+      localStorage.setItem('compiler-code', code);
+    }
+  }, [code]);
+
+  // Save language to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('compiler-language', language);
   }, [language]);
 
   const handleRunCode = async () => {
@@ -45,26 +69,42 @@ const CompilerPage = () => {
   const handleLanguageChange = (e) => {
     const newLanguage = e.target.value;
     setLanguage(newLanguage);
+    // Note: We're NOT setting code to the template anymore
+    // The user's existing code is preserved
+  };
+
+  // Function to reset code to language template (optional - you can add a reset button)
+  const resetToTemplate = () => {
+    setCode(languageTemplates[language]);
   };
 
   return (
     <div className="flex flex-col md:flex-row gap-4 p-4 md:p-6 bg-gray-100 dark:bg-gray-900 h-[calc(100vh-4rem)] overflow-hidden">
-
       {/* Code Editor Panel */}
       <div className="flex flex-col w-full md:w-3/5 h-full bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center px-4 py-2 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-gray-800 dark:text-white font-semibold">Code Editor</h2>
-          <select
-            value={language}
-            onChange={handleLanguageChange}
-            className="bg-white dark:bg-gray-700 text-sm rounded-md px-2 py-1 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white"
-          >
-            <option value="cpp">C</option>
-            <option value="javascript">JavaScript</option>
-            <option value="python">Python</option>
-            <option value="java">Java</option>
-          </select>
+          <div className="flex gap-2 items-center">
+            <select
+              value={language}
+              onChange={handleLanguageChange}
+              className="bg-white dark:bg-gray-700 text-sm rounded-md px-2 py-1 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-white"
+            >
+              <option value="cpp">C++</option>
+              <option value="javascript">JavaScript</option>
+              <option value="python">Python</option>
+              <option value="java">Java</option>
+            </select>
+            {/* Optional: Reset button to load language template */}
+            <button
+              onClick={resetToTemplate}
+              className="text-xs bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 px-2 py-1 rounded transition"
+              title="Reset to template"
+            >
+              Reset
+            </button>
+          </div>
         </div>
 
         {/* Monaco Editor */}

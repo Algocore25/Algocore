@@ -29,7 +29,7 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 
-const Exam2 = ({ Questions, startTime, onExamComplete }) => {
+const Exam2 = ({ Questions, startTime, onExamComplete, duration }) => {
 
     const { testid } = useParams();
 
@@ -43,7 +43,10 @@ const Exam2 = ({ Questions, startTime, onExamComplete }) => {
 
     
 
-        const examDuration = 60 * 30;
+        const examDuration = 60*duration;
+
+
+        
         const start = new Date(startTime);
         const now = new Date();
         console.log('Start Time:', start);
@@ -109,7 +112,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete }) => {
 
         // Calculate remaining time based on startTime and exam duration
         const calculateRemainingTime = () => {
-            const examDuration = 60 * 30; // 30 minutes in seconds (adjust if you store duration elsewhere)
+            const examDuration = 60 * duration; // 30 minutes in seconds (adjust if you store duration elsewhere)
             const start = new Date(startTime);
             const now = new Date();
             const elapsedSeconds = Math.floor((now - start) / 1000);

@@ -15,6 +15,8 @@ const DynamicExam = () => {
   const [startTime, setStartTime] = useState(null);
   const [violation, setviolation] = useState(null);
   const [isViolationReady, setIsViolationReady] = useState(false); // New state
+
+  const [ duration, setDuration] = useState(60*30); // New state
   const containerRef = useRef(null);
 
   const { testid } = useParams();
@@ -57,6 +59,31 @@ const DynamicExam = () => {
       return false;
     }
   };
+
+  const fetchDuration = async () => {
+    try {
+      const statusRef = ref(database, `Exam/${testid}/duration`);
+      const statusSnapshot = await get(statusRef);
+
+      if (statusSnapshot.exists()) {
+        const statusData = statusSnapshot.val();
+
+        setDuration(statusData);
+
+        console.log(statusData);
+      }
+    } catch (error) {
+      console.error("Error checking exam status:", error);
+    }
+  };
+
+
+
+
+
+
+
+
   const checkviolation = async () => {
     try {
       const violationRef = ref(database, `Exam/${testid}/Properties2/Progress/${user.uid}`);
@@ -146,6 +173,9 @@ const DynamicExam = () => {
     };
 
     if (testid) fetchData();
+
+    fetchDuration();
+    
   }, [testid]);
 
   useEffect(() => {
@@ -250,12 +280,8 @@ const DynamicExam = () => {
   // Function to mark exam as blocked due to violations
   const markExamBlocked = async () => {
     try {
-      const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
-      await set(statusRef, {
-        status: "blocked",
-
-        endTime: new Date().toISOString(),
-      });
+      const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
+      await set(statusRef, "blocked");
       setStage("blocked");
     } catch (error) {
       console.error("Error marking exam as blocked:", error);
@@ -292,6 +318,7 @@ const DynamicExam = () => {
             Questions={Questions}
             onExamComplete={markExamCompleted} // Pass the completion handler
             startTime={startTime}
+            duration={duration}
           />
         </>
       )}
