@@ -67,7 +67,7 @@ function MCQPage({ data }) {
       setSelectedOption(null);
       setIsSubmitted(false);
     };
-  }, [user, course, subcourse, questionId]);
+  }, [user, course, subcourse, questionId , data]);
 
   const handleSubmit2 = async () => {
     if (selectedOption === null || !user || !course || !subcourse || !questionId || !data) return;
