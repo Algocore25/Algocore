@@ -16,6 +16,7 @@ import ProtectedRoute from './ProtectedRoute';
 import CompilerPage from './pages/CompilerPage';
 import LoadingPage from './pages/LoadingPage';
 import AdminMonitor from './pages/Admin/AdminMonitor';
+import CpuApp from './pages/Visual/Cpu/CpuApp';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -48,6 +49,8 @@ function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="*" element={<NotFoundPage />} />
+
+              <Route path="/cpu" element={<CpuApp />} />
 
               <Route path="/test" element={<ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>} />
               <Route path="/examwindow/:testid" element={<ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute>} />

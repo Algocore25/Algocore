@@ -478,15 +478,6 @@ function CodePage({ question }) {
             </div>
           )}
 
-          {/* {activeTab === 'testcases' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Add Manual Test Case</h3>
-
-              </div>
-            </div>
-          )} */}
-
           {activeTab === 'testcases' && (
             <div className="space-y-6">
               <div>

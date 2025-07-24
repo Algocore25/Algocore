@@ -91,8 +91,32 @@ function CodePage({ data, navigation }) {
     const updatedResults = [...initialResults];
 
     for (let i = 0; i < testCases.length; i++) {
+
+
       const { input, expectedOutput } = testCases[i];
       const { run: result } = await executeCode(selectedLanguage, code, input);
+
+      // if ( questionData.testcases[2].input === "regex") {
+      //   const passed = result.output.match( questionData.testcases[2].expectedOutput );
+      //   console.log(result.output);
+      //   console.log(questionData.testcases[2].expectedOutput);
+      //   const regex = new RegExp(
+      //     "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
+      //   );
+      //   console.log( regex.test(result.output) )
+      //   updatedResults[i] = {
+      //     input,
+      //     expected: expectedOutput,
+      //     output: result.output,
+      //     passed: regex.test(result.output),
+      //     status: 'done',
+      //   };
+
+      //   setTestResults([...updatedResults]);
+      //   await new Promise(res => setTimeout(res, 300));
+      //   continue;
+      // }
+
 
       const resultlist = result.output ? result.output.split("\n") : ["No output received."];
       while (resultlist[resultlist.length - 1] === "") resultlist.pop();
@@ -138,55 +162,86 @@ function CodePage({ data, navigation }) {
 
   const runCode = async () => {
     const testCases = testCasesrun;
-    console.log(testCases);
+    console.log('Running test cases:', testCases);
 
     try {
-      const results = [];
-      const display = [];
+      // Initialize test results with 'running' status
+      const initialResults = testCases.map(tc => ({
+        input: tc.input || '',
+        expected: tc.expectedOutput || '',
+        output: '',
+        passed: false,
+        status: 'running',
+        isFirstFailure: false
+      }));
 
-      for (const { input: testInput, expectedOutput } of testCases) {
-        const { run: result } = await executeCode(selectedLanguage, code, testInput);
-
-        const pattern = /Child => PPID: \d+, PID: \d+\s+Parent => PID: \d+\s+Waiting for child process to finish\.\s+Child process finished\./;
-        console.log(String(result.output));
-        console.log(pattern.test(result.output));
-
-        const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-        while (resultlist[resultlist.length - 1] === "") {
-          resultlist.pop();
-        }
-
-        const expectedOutputLines = expectedOutput.split("\n");
-        while (expectedOutputLines[expectedOutputLines.length - 1] === "") {
-          expectedOutputLines.pop();
-        }
-
-        console.log(resultlist + "====" + expectedOutputLines);
-
-        const areEqual =
-          resultlist.length === expectedOutputLines.length &&
-          resultlist.every(
-            (value, index) => value.replace(/\s+$/, "") === expectedOutputLines[index].replace(/\s+$/, "")
-          );
-
-        display.push({ passed: areEqual, input: testInput, output: result.output });
-        results.push(areEqual);
-      }
-
-      const allPassed = results.every((passed) => passed);
-
-      if (allPassed) {
-        console.log("Correct Answer! All test cases passed.")
-      } else {
-        console.log("Wrong Answer! Some test cases failed.")
-      }
-
-      setTestResults(display);
+      setTestResults(initialResults);
       setOutput(null);
       setActiveTab('output');
 
+      const updatedResults = [...initialResults];
+      let firstFailureShown = false;
+
+      for (let i = 0; i < testCases.length; i++) {
+        const { input: testInput, expectedOutput } = testCases[i];
+        try {
+          const { run: result } = await executeCode(selectedLanguage, code, testInput);
+          
+          const resultOutput = result.output || '';
+          const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
+          const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
+
+          const passed = resultLines.length === expectedLines.length &&
+            resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+
+          updatedResults[i] = {
+            input: testInput,
+            expected: expectedOutput,
+            output: resultOutput,
+            passed,
+            status: 'done',
+            isFirstFailure: !passed && !firstFailureShown
+          };
+
+          if (!passed && !firstFailureShown) {
+            firstFailureShown = true;
+            // Auto-expand the first failed test case
+            setTestCaseTab(i);
+          }
+        } catch (error) {
+          console.error(`Error executing test case ${i + 1}:`, error);
+          updatedResults[i] = {
+            input: testInput,
+            expected: expectedOutput || '',
+            output: error.message || 'Error executing code',
+            passed: false,
+            status: 'done',
+            isFirstFailure: !firstFailureShown
+          };
+          
+          if (!firstFailureShown) {
+            firstFailureShown = true;
+            // Auto-expand the first failed test case
+            setTestCaseTab(i);
+          }
+        }
+        
+        // Update UI after each test case
+        setTestResults([...updatedResults]);
+        
+        // Small delay to show test cases running one by one
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
     } catch (error) {
       console.error("Error during test cases:", error);
+      setTestResults([{
+        input: '',
+        expected: '',
+        output: error.message || 'Error executing test cases',
+        passed: false,
+        status: 'done',
+        isFirstFailure: true
+      }]);
     }
   };
 
@@ -503,7 +558,7 @@ function CodePage({ data, navigation }) {
               Submissions
             </div>
           </button>
-          <button
+          {/* <button
             className={`px-4 py-3 text-sm font-medium ${activeTab === 'suggestions' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
             onClick={() => setActiveTab('suggestions')}
           >
@@ -511,7 +566,7 @@ function CodePage({ data, navigation }) {
               <Icons.Play />
               AI Suggestions
             </div>
-          </button>
+          </button> */}
         </div>
 
         <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
@@ -564,77 +619,90 @@ function CodePage({ data, navigation }) {
           )}
 
           {activeTab === 'testcases' && (
+
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Manual Test Cases</h3>
-                <div className="flex items-center gap-2 mb-4">
-                  {testCasesrun.map((_, idx) => (
-                    <button
-                      key={idx}
-                      className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
-                        }`}
-                      onClick={() => setTestCaseTab(idx)}
-                    >
-                      Case {idx + 1}
-                    </button>
-                  ))}
-                  <button
-                    className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
-                    onClick={() => {
-                      setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
-                      setTestCaseTab(testCasesrun.length);
-                    }}
-                  >
-                    +
-                  </button>
-                </div>
-                <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {
+                (questionData?.testcases?.length >= 3 && questionData?.testcases?.[2].input === "regex") ?
+                  (
+                    <h1>No input</h1>
+                  )
+                  :
+                  (
+
+
                     <div>
-                      <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
-                      <input
-                        className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
-                        type="text"
-                        value={testCasesrun[testCaseTab]?.input || ''}
-                        onChange={e => {
-                          const updated = [...testCasesrun];
-                          updated[testCaseTab].input = e.target.value;
-                          setTestCases(updated);
-                        }}
-                        placeholder="e.g., aabbccdd"
-                      />
+                      <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white"> Manual Test Cases </h3>
+                      <div className="flex items-center gap-2 mb-4">
+                        {testCasesrun.map((_, idx) => (
+                          <button
+                            key={idx}
+                            className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
+                              }`}
+                            onClick={() => setTestCaseTab(idx)}
+                          >
+                            Case {idx + 1}
+                          </button>
+                        ))}
+                        <button
+                          className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
+                          onClick={() => {
+                            setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
+                            setTestCaseTab(testCasesrun.length);
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
+                            <input
+                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
+                              type="text"
+                              value={testCasesrun[testCaseTab]?.input || ''}
+                              onChange={e => {
+                                const updated = [...testCasesrun];
+                                updated[testCaseTab].input = e.target.value;
+                                setTestCases(updated);
+                              }}
+                              placeholder="e.g., aabbccdd"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
+                            <input
+                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
+                              type="text"
+                              value={testCasesrun[testCaseTab]?.expectedOutput || ''}
+                              onChange={e => {
+                                const updated = [...testCasesrun];
+                                updated[testCaseTab].expectedOutput = e.target.value;
+                                setTestCases(updated);
+                              }}
+                              placeholder="e.g., 7"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end mt-4">
+                          <button
+                            className="text-red-500 hover:text-red-700 font-medium"
+                            onClick={() => {
+                              const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
+                              setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
+                              setTestCaseTab(prev => Math.max(0, prev - 1));
+                            }}
+                            disabled={testCasesrun.length <= 1}
+                            title="Delete this test case"
+                          >
+                            Delete Case
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
-                      <input
-                        className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
-                        type="text"
-                        value={testCasesrun[testCaseTab]?.expectedOutput || ''}
-                        onChange={e => {
-                          const updated = [...testCasesrun];
-                          updated[testCaseTab].expectedOutput = e.target.value;
-                          setTestCases(updated);
-                        }}
-                        placeholder="e.g., 7"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end mt-4">
-                    <button
-                      className="text-red-500 hover:text-red-700 font-medium"
-                      onClick={() => {
-                        const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
-                        setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
-                        setTestCaseTab(prev => Math.max(0, prev - 1));
-                      }}
-                      disabled={testCasesrun.length <= 1}
-                      title="Delete this test case"
-                    >
-                      Delete Case
-                    </button>
-                  </div>
-                </div>
-              </div>
+                  )
+              }
             </div>
           )}
 
@@ -756,8 +824,8 @@ function CodePage({ data, navigation }) {
                   onClick={navigation.onPrevious}
                   // disabled={navigation.currentQuestionIndex === 0}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === 0 || false
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
                     }`}
                 >
                   <navigation.NavigationIcons.ChevronLeft />
@@ -768,8 +836,8 @@ function CodePage({ data, navigation }) {
                   onClick={navigation.onNext}
                   // disabled={navigation.currentQuestionIndex === navigation.totalQuestions - 1}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === navigation.totalQuestions - 1 || false
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
                     }`}
                 >
                   Next
@@ -807,7 +875,7 @@ function CodePage({ data, navigation }) {
 
 
 
-      
+
     </div>
   );
 };

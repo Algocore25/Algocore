@@ -5,6 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import CodePage from "./CodePage";
 import MCQPage from "./MCQPage";
 import LoadingPage from "./LoadingPage";
+import CpuApp from "./Visual/Cpu/CpuApp";
 
 // Navigation Icons
 const NavigationIcons = {
@@ -107,7 +108,16 @@ const DynamicComponent = () => {
 
     fetchData();
     fetchDataQuestions();
+
+    if( questionId === "CpuVisual" ) {
+      setData({
+        type: "CpuVisual"
+      })
+    }
+
+
     setLoading(false);
+
 
   }, [questionId, course, subcourse]); // Dependencies adjusted
 
@@ -147,7 +157,7 @@ const DynamicComponent = () => {
 
   if (loading) return <LoadingPage />;
 
-  if (!data) return <LoadingPage message="Slow internet, loading...." />;
+  if (!data ) return <LoadingPage message="Slow internet, loading...." />;
 
   // Navigation props to pass to child components
   const navigationProps = {
@@ -163,10 +173,11 @@ const DynamicComponent = () => {
     <div className="relative">
       {data.type === "Programming" && <CodePage data={data} navigation={navigationProps} />}
       {data.type === "MCQ" && <MCQPage data={data} />}
+      { data.type === "CpuVisual" && <CpuApp />}
       {/* Add more conditional components as needed */}
       
       {/* Navigation Buttons - Only show for MCQ since CodePage handles its own */}
-      {data.type === "MCQ" && allQuestions.length > 1 && (
+      { (data.type === "MCQ"|| data.type === "CpuVisual") && allQuestions.length > 1 && (
         <div className="fixed bottom-6 right-6 flex gap-3 z-50">
           <button
             onClick={handlePreviousQuestion}
