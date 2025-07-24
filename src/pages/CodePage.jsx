@@ -515,6 +515,8 @@ function CodePage({ data, navigation }) {
     fetchData();
     loadCode();
     getAllowedLanguageTemplates();
+    setActiveTab('description');
+    setTestResults([]);
   }, [questionId]);
 
   // Fixed Monaco Editor layout handling

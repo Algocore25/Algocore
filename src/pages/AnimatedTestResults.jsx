@@ -189,7 +189,7 @@ export default function AnimatedTestResults({ testResults }) {
             <p className="font-medium">🎉 All test cases passed successfully!</p>
           ) : (
             <div className="space-y-4">
-              <p className="font-medium">❌ Some test cases failed. Please review your code and try again.</p>
+              {/* <p className="font-medium">❌ Some test cases failed. Please review your code and try again.</p> */}
               
               {firstFailedTest && (
                 <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-lg border border-red-200 dark:border-red-800">
