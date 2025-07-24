@@ -90,18 +90,23 @@ const AdminMonitor = () => {
 
   // Add this function to calculate total questions
   const calculateTotalQuestions = (courseName) => {
-    if (!courses[courseName]?.lessons) return 0;
-    
+    if (!courses || !courses[courseName] || !courses[courseName].lessons) return 0;
+
     let total = 0;
-    Object.values(courses[courseName].lessons).forEach(lesson => {
-      if (lesson.questions) {
-        total += lesson.questions.length;
-      }
-    });
+    const lessons = courses[courseName].lessons;
+
+    if (lessons && typeof lessons === 'object') {
+      Object.values(lessons).forEach(lesson => {
+        if (lesson && lesson.questions && Array.isArray(lesson.questions)) {
+          total += lesson.questions.length;
+        }
+      });
+    }
+
     return total;
   };
 
-  // Update the processedData logic
+
   const processedData = React.useMemo(() => {
     const processedUsers = {};
     const availableCourses = new Set();
@@ -115,110 +120,143 @@ const AdminMonitor = () => {
       });
     }
 
-    // Process submissions and calculate progress
-    Object.entries(submissions).forEach(([userId, userSubmissions]) => {
-      const userDetails = users[userId] || {};
-      if (!processedUsers[userId]) {
-        processedUsers[userId] = {
-          id: userId,
-          name: userDetails.name || 'Anonymous',
-          email: userDetails.email || 'No email',
-          photo: userDetails.profilePhoto || '',
-          submissions: {},
-          stats: { attempted: 0, correct: 0, wrong: 0 },
-          courseProgress: {}
+    // FIRST: Process ALL users from the users object
+    Object.entries(users).forEach(([userId, userDetails]) => {
+      processedUsers[userId] = {
+        id: userId,
+        name: userDetails.name || 'Anonymous',
+        email: userDetails.email || 'No email',
+        photo: userDetails.profilePhoto || '',
+        submissions: {},
+        stats: { attempted: 0, correct: 0, wrong: 0 },
+        courseProgress: {},
+        overallProgress: { completed: 0, total: 0, percentage: '0.0' } // Add this default
+      };
+
+      // Initialize progress for all available courses
+      availableCourses.forEach(course => {
+        processedUsers[userId].courseProgress[course] = {
+          completed: 0,
+          total: calculateTotalQuestions(course),
+          percentage: '0.0' // Ensure it's a string
         };
-
-        // Initialize progress for all available courses
-        availableCourses.forEach(course => {
-          processedUsers[userId].courseProgress[course] = {
-            completed: 0,
-            total: calculateTotalQuestions(course),
-            percentage: 0
-          };
-        });
-      }
-
-      // Process submissions
-      Object.entries(userSubmissions).forEach(([course, courseData]) => {
-        availableCourses.add(course);
-        if (!processedUsers[userId].submissions[course]) {
-          processedUsers[userId].submissions[course] = {};
-          processedUsers[userId].courseProgress[course] = { completed: 0, total: 0 };
-        }
-
-        Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
-          if (!processedUsers[userId].submissions[course][subcourse]) {
-            processedUsers[userId].submissions[course][subcourse] = {};
-          }
-
-          Object.entries(subcourseData).forEach(([question, questionData]) => {
-            const submissions = Object.entries(questionData).map(([timestamp, submission]) => ({
-              timestamp,
-              ...submission,
-              question
-            }));
-
-            processedUsers[userId].submissions[course][subcourse][question] = submissions;
-
-            // Update stats
-            const latestSubmission = submissions[submissions.length - 1];
-            processedUsers[userId].stats.attempted++;
-            if (latestSubmission.status === 'correct') {
-              processedUsers[userId].stats.correct++;
-            } else {
-              processedUsers[userId].stats.wrong++;
-            }
-          });
-        });
       });
     });
 
-    // Calculate course progress
-    Object.entries(userProgress).forEach(([userId, progress]) => {
+
+    // SECOND: Process submissions for users who have them
+    Object.entries(submissions).forEach(([userId, userSubmissions]) => {
+      // Only process if user exists (should always be true now)
       if (processedUsers[userId]) {
-        Object.entries(progress).forEach(([course, courseData]) => {
-          const totalQuestions = calculateTotalQuestions(course);
-          let completed = 0;
-          
-          Object.values(courseData).forEach(subcourse => {
-            completed += Object.values(subcourse).filter(Boolean).length;
+        Object.entries(userSubmissions).forEach(([course, courseData]) => {
+          availableCourses.add(course);
+          if (!processedUsers[userId].submissions[course]) {
+            processedUsers[userId].submissions[course] = {};
+            // Update course progress initialization if needed
+            if (!processedUsers[userId].courseProgress[course]) {
+              processedUsers[userId].courseProgress[course] = {
+                completed: 0,
+                total: calculateTotalQuestions(course),
+                percentage: 0
+              };
+            }
+          }
+
+          Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
+            if (!processedUsers[userId].submissions[course][subcourse]) {
+              processedUsers[userId].submissions[course][subcourse] = {};
+            }
+
+            Object.entries(subcourseData).forEach(([question, questionData]) => {
+              const submissions = Object.entries(questionData).map(([timestamp, submission]) => ({
+                timestamp,
+                ...submission,
+                question
+              }));
+
+              processedUsers[userId].submissions[course][subcourse][question] = submissions;
+
+              // Update stats
+              const latestSubmission = submissions[submissions.length - 1];
+              processedUsers[userId].stats.attempted++;
+              if (latestSubmission.status === 'correct') {
+                processedUsers[userId].stats.correct++;
+              } else {
+                processedUsers[userId].stats.wrong++;
+              }
+            });
           });
-          
-          processedUsers[userId].courseProgress[course] = {
-            completed,
-            total: totalQuestions,
-            percentage: totalQuestions > 0 ? (completed / totalQuestions * 100).toFixed(1) : 0
-          };
+        });
+      }
+    });
+
+    // THIRD: Calculate course progress based on correct submissions only
+    Object.entries(processedUsers).forEach(([userId, userData]) => {
+      // Reset all progress to 0 first
+      Object.keys(userData.courseProgress).forEach(course => {
+        userData.courseProgress[course] = {
+          completed: 0,
+          total: calculateTotalQuestions(course),
+          percentage: '0.0'
+        };
+      });
+
+      // Count only questions that have correct submissions
+      Object.entries(userData.submissions).forEach(([course, courseData]) => {
+        let correctCount = 0;
+
+        Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
+          Object.entries(subcourseData).forEach(([question, submissions]) => {
+            // Check if the latest submission for this question is correct
+            const latestSubmission = submissions[submissions.length - 1];
+            if (latestSubmission && latestSubmission.status === 'correct') {
+              correctCount++;
+            }
+          });
         });
 
-        // Calculate overall progress
-        let totalCompleted = 0;
-        let totalQuestions = 0;
-        
-        Object.values(processedUsers[userId].courseProgress).forEach(progress => {
-          totalCompleted += progress.completed;
-          totalQuestions += progress.total;
-        });
-        
-        processedUsers[userId].overallProgress = {
-          completed: totalCompleted,
+        // Update course progress based on correct submissions
+        const totalQuestions = calculateTotalQuestions(course);
+        userData.courseProgress[course] = {
+          completed: correctCount,
           total: totalQuestions,
-          percentage: totalQuestions > 0 ? (totalCompleted / totalQuestions * 100).toFixed(1) : 0
+          percentage: totalQuestions > 0 ? ((correctCount / totalQuestions) * 100).toFixed(1) : '0.0'
         };
-      }
+      });
+
+      // Calculate overall progress
+      let totalCompleted = 0;
+      let totalQuestions = 0;
+
+      Object.values(userData.courseProgress).forEach(progress => {
+        if (progress && typeof progress === 'object') {
+          totalCompleted += progress.completed || 0;
+          totalQuestions += progress.total || 0;
+        }
+      });
+
+      userData.overallProgress = {
+        completed: totalCompleted,
+        total: totalQuestions,
+        percentage: totalQuestions > 0 ? ((totalCompleted / totalQuestions) * 100).toFixed(1) : '0.0'
+      };
     });
 
     return {
       users: Object.values(processedUsers),
       courses: Array.from(availableCourses)
     };
-  }, [submissions, userProgress, users, courses]);  // Add courses to dependencies
+  }, [submissions, userProgress, users, courses]);
 
   // Add new function to format percentage
   const formatPercentage = (value) => {
-    return Number(value).toFixed(1) + '%';
+    const numValue = Number(value);
+    if (isNaN(numValue) || !isFinite(numValue)) {
+      return '0.0%';
+    }
+    return numValue.toFixed(1) + '%';
   };
+
 
   // Add sorting function
   const sortUsers = (users) => {
@@ -255,7 +293,7 @@ const AdminMonitor = () => {
   // Update filteredUsers to include sorting
   const filteredUsers = React.useMemo(() => {
     const filtered = processedData.users.filter(user => {
-      const matchesSearch = !filters.search || 
+      const matchesSearch = !filters.search ||
         user.name.toLowerCase().includes(filters.search.toLowerCase()) ||
         user.email.toLowerCase().includes(filters.search.toLowerCase());
       return matchesSearch;
@@ -401,7 +439,7 @@ const AdminMonitor = () => {
         </div>
 
         {/* Students Grid */}
-        <motion.div 
+        <motion.div
           layout
           className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6"
         >
@@ -466,21 +504,27 @@ const AdminMonitor = () => {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Overall Progress</span>
                       <span className="text-sm font-bold text-gray-900 dark:text-white">
-                        {formatPercentage(user.overallProgress.percentage)}
+                        {user.overallProgress ? formatPercentage(user.overallProgress.percentage) : '0.0%'}
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                       <div
                         className="bg-blue-600 dark:bg-blue-500 h-3 rounded-full transition-all duration-300"
-                        style={{ width: `${user.overallProgress.percentage}%` }}
+                        style={{
+                          width: `${user.overallProgress ?
+                            Math.min(100, Math.max(0, parseFloat(user.overallProgress.percentage) || 0)) : 0}%`
+                        }}
                       ></div>
                     </div>
                   </div>
 
-                  {/* Course Progress - Now using sortedCourseNames */}
+
+                  {/* Course Progress */}
                   <div className="space-y-2">
                     {sortedCourseNames.map(course => {
-                      const progress = user.courseProgress[course] || { percentage: '0.0' };
+                      const progress = user.courseProgress && user.courseProgress[course] ?
+                        user.courseProgress[course] : { percentage: '0.0', completed: 0, total: 0 };
+
                       return (
                         <div key={course} className="flex items-center justify-between text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{course}</span>
@@ -491,6 +535,7 @@ const AdminMonitor = () => {
                       );
                     })}
                   </div>
+
                 </div>
               </motion.div>
             ))}

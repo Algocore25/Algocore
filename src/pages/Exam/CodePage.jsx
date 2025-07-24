@@ -8,7 +8,8 @@ import { useParams, useNavigate } from "react-router-dom";
 
 
 import { Icons, languageTemplates } from '../constants';
-
+import { RxCrossCircled, RxCheckCircled } from "react-icons/rx";
+import { BsDashCircle } from "react-icons/bs";
 
 import { database } from "../../firebase";
 import { ref, get, set, child } from "firebase/database";
@@ -388,7 +389,7 @@ function CodePage({ question }) {
       // Fallback to default template on error
       setCode(languageTemplates[selectedLanguage] || "");
     }
-  }, [selectedLanguage , questionData]);
+  }, [selectedLanguage, questionData]);
 
   // Fixed saveCode function
   const saveCode = useCallback(async (codeToSave) => {
@@ -615,7 +616,12 @@ function CodePage({ question }) {
           {activeTab === 'description' && (
             <div className="text-gray-700 dark:text-gray-400">
               <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)} {`{${submissionStatus}}`}</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words flex items-center gap-2">
+                  {String(questionData?.questionname)}
+                  {submissionStatus === "not_submitted" && <BsDashCircle className="text-yellow-500" />}
+                  {submissionStatus === "correct" && <RxCheckCircled className="text-green-500" />}
+                  {submissionStatus === "wrong" && <RxCrossCircled className="text-red-500" />}
+                </h1>
                 <div className="flex flex-wrap items-center gap-4 mt-2">
                   <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">Easy</span>
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">

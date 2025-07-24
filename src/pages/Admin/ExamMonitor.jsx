@@ -50,7 +50,8 @@ const ExamMonitor = () => {
                     return;
                 }
 
-                const currentTestTitle = exam.Properties?.testTitle || 'Untitled Test';
+                console.log(exam)
+                const currentTestTitle = exam.name || 'Untitled Test';
                 setTestTitle(currentTestTitle);
 
                 const usersRef = ref(database, 'users');

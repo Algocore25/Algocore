@@ -33,7 +33,7 @@ function CodePage({ data, navigation }) {
   const [submissionTrigger, setSubmissionTrigger] = useState(0); // New state to trigger submission refresh
 
   const { course, subcourse, questionId } = useParams();
-  const {user} = useAuth();
+  const user = useAuth();
   const navigate = useNavigate();
 
   // Refs for cleanup and debouncing
@@ -96,73 +96,26 @@ function CodePage({ data, navigation }) {
       const { input, expectedOutput } = testCases[i];
       const { run: result } = await executeCode(selectedLanguage, code, input);
 
+      // if ( questionData.testcases[2].input === "regex") {
+      //   const passed = result.output.match( questionData.testcases[2].expectedOutput );
+      //   console.log(result.output);
+      //   console.log(questionData.testcases[2].expectedOutput);
+      //   const regex = new RegExp(
+      //     "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
+      //   );
+      //   console.log( regex.test(result.output) )
+      //   updatedResults[i] = {
+      //     input,
+      //     expected: expectedOutput,
+      //     output: result.output,
+      //     passed: regex.test(result.output),
+      //     status: 'done',
+      //   };
 
-
-
-
-
-
-
-      // regex
-
-      if (questionData.testcases[2].input === "regex2") {
-        const passed = result.output.match(questionData.testcases[2].expectedOutput);
-        console.log(result.output);
-        console.log(questionData.testcases[2].expectedOutput);
-        const regex = new RegExp(
-          // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-          /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
-        );
-        console.log(regex.test(result.output))
-        updatedResults[i] = {
-          input,
-          expected: expectedOutput,
-          output: result.output,
-          passed: regex.test(result.output),
-          status: 'done',
-        };
-        setTestResults([...updatedResults]);
-        await new Promise(res => setTimeout(res, 300));
-        continue;
-      }
-      if (questionData.testcases[2].input === "regex") {
-        const passed = result.output.match(questionData.testcases[2].expectedOutput);
-        console.log(result.output);
-        console.log(questionData.testcases[2].expectedOutput);
-        const regex = new RegExp(
-          /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/
-        );
-        console.log(regex.test(result.output))
-        updatedResults[i] = {
-          input,
-          expected: expectedOutput,
-          output: result.output,
-          passed: regex.test(result.output),
-          status: 'done',
-        };
-
-        setTestResults([...updatedResults]);
-        await new Promise(res => setTimeout(res, 300));
-        continue;
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+      //   setTestResults([...updatedResults]);
+      //   await new Promise(res => setTimeout(res, 300));
+      //   continue;
+      // }
 
 
       const resultlist = result.output ? result.output.split("\n") : ["No output received."];
@@ -231,116 +184,30 @@ function CodePage({ data, navigation }) {
 
       for (let i = 0; i < testCases.length; i++) {
         const { input: testInput, expectedOutput } = testCases[i];
-
         try {
           const { run: result } = await executeCode(selectedLanguage, code, testInput);
+          
+          const resultOutput = result.output || '';
+          const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
+          const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
 
+          const passed = resultLines.length === expectedLines.length &&
+            resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
 
+          updatedResults[i] = {
+            input: testInput,
+            expected: expectedOutput,
+            output: resultOutput,
+            passed,
+            status: 'done',
+            isFirstFailure: !passed && !firstFailureShown
+          };
 
-
-
-
-
-
-
-
-
-
-
-          // regex
-
-          if (questionData.testcases[2].input === "regex2") {
-            const passed = result.output.match(questionData.testcases[2].expectedOutput);
-            console.log(result.output);
-            console.log(questionData.testcases[2].expectedOutput);
-            const regex = new RegExp(
-              // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-              /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
-            );
-            console.log(regex.test(result.output))
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
+          if (!passed && !firstFailureShown) {
+            firstFailureShown = true;
+            // Auto-expand the first failed test case
+            setTestCaseTab(i);
           }
-          else if (questionData.testcases[2].input === "regex") {
-            const passed = result.output.match(questionData.testcases[2].expectedOutput);
-            console.log(result.output);
-            console.log(questionData.testcases[2].expectedOutput);
-            const regex = new RegExp(
-/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/            );
-            console.log(regex.test(result.output))
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
-          }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          else {
-
-            const resultOutput = result.output || '';
-            const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
-            const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
-
-            const passed = resultLines.length === expectedLines.length &&
-              resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
-
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: resultOutput,
-              passed,
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
-
-          }
-
-
         } catch (error) {
           console.error(`Error executing test case ${i + 1}:`, error);
           updatedResults[i] = {
@@ -351,17 +218,17 @@ function CodePage({ data, navigation }) {
             status: 'done',
             isFirstFailure: !firstFailureShown
           };
-
+          
           if (!firstFailureShown) {
             firstFailureShown = true;
             // Auto-expand the first failed test case
             setTestCaseTab(i);
           }
         }
-
+        
         // Update UI after each test case
         setTestResults([...updatedResults]);
-
+        
         // Small delay to show test cases running one by one
         await new Promise(resolve => setTimeout(resolve, 300));
       }
@@ -381,7 +248,7 @@ function CodePage({ data, navigation }) {
   const loadCode = useCallback(async () => {
     try {
       const dbRef = ref(database);
-      const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}`;
+      const codeKey = `savedCode/${course}/${questionId}/${selectedLanguage}`;
       const snapshot = await get(child(dbRef, codeKey));
 
       console.log(snapshot.val());
@@ -402,7 +269,7 @@ function CodePage({ data, navigation }) {
 
   const saveCode = useCallback(async (codeToSave) => {
     try {
-      const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}`;
+      const codeKey = `savedCode/${course}/${questionId}/${selectedLanguage}`;
       const dbRef = ref(database, codeKey);
       await set(dbRef, codeToSave);
       console.log("Code auto-saved successfully!");
@@ -515,8 +382,6 @@ function CodePage({ data, navigation }) {
     fetchData();
     loadCode();
     getAllowedLanguageTemplates();
-    setActiveTab('description');
-    setTestResults([]);
   }, [questionId]);
 
   // Fixed Monaco Editor layout handling
