@@ -392,7 +392,7 @@ const CoursePage = () => {
                       <div className="flex items-center">
                         <div className="bg-gray-100 dark:bg-dark-tertiary rounded-full w-10 h-10 flex items-center justify-center mr-4 font-bold text-lg">{index + 1}</div>
                         <div>
-                          <h3 className="font-semibold text-lg">{topic.title}</h3>
+                          <h3 className="font-semibold text-lg">{topic.title.substring(3)}</h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400">{topic.description}</p>
                           {user && (
                             <div className="flex items-center mt-1">
