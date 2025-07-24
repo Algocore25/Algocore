@@ -190,57 +190,52 @@ const AdminMonitor = () => {
       }
     });
 
-    // THIRD: Calculate course progress based on correct submissions only
-    Object.entries(processedUsers).forEach(([userId, userData]) => {
-      // Reset all progress to 0 first
-      Object.keys(userData.courseProgress).forEach(course => {
-        userData.courseProgress[course] = {
-          completed: 0,
-          total: calculateTotalQuestions(course),
-          percentage: '0.0'
-        };
-      });
+    // THIRD: Calculate course progress (match course page logic exactly)
+    Object.entries(userProgress).forEach(([userId, progress]) => {
+      if (processedUsers[userId]) {
+        Object.entries(progress).forEach(([course, courseData]) => {
+          const totalQuestions = calculateTotalQuestions(course);
+          let completed = 0;
 
-      // Count only questions that have correct submissions
-      Object.entries(userData.submissions).forEach(([course, courseData]) => {
-        let correctCount = 0;
+          if (courseData && typeof courseData === 'object') {
+            Object.values(courseData).forEach(subcourse => {
+              if (subcourse && typeof subcourse === 'object') {
+                // EXACT SAME LOGIC AS COURSE PAGE: only count items that are exactly true
+                Object.values(subcourse).forEach(problemStatus => {
+                  if (problemStatus === true) {
+                    completed++;
+                  }
+                });
+              }
+            });
+          }
 
-        Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
-          Object.entries(subcourseData).forEach(([question, submissions]) => {
-            // Check if the latest submission for this question is correct
-            const latestSubmission = submissions[submissions.length - 1];
-            if (latestSubmission && latestSubmission.status === 'correct') {
-              correctCount++;
-            }
-          });
+          processedUsers[userId].courseProgress[course] = {
+            completed,
+            total: totalQuestions,
+            percentage: totalQuestions > 0 ? ((completed / totalQuestions) * 100).toFixed(1) : '0.0'
+          };
         });
 
-        // Update course progress based on correct submissions
-        const totalQuestions = calculateTotalQuestions(course);
-        userData.courseProgress[course] = {
-          completed: correctCount,
+        // Calculate overall progress
+        let totalCompleted = 0;
+        let totalQuestions = 0;
+
+        Object.values(processedUsers[userId].courseProgress).forEach(progress => {
+          if (progress && typeof progress === 'object') {
+            totalCompleted += progress.completed || 0;
+            totalQuestions += progress.total || 0;
+          }
+        });
+
+        processedUsers[userId].overallProgress = {
+          completed: totalCompleted,
           total: totalQuestions,
-          percentage: totalQuestions > 0 ? ((correctCount / totalQuestions) * 100).toFixed(1) : '0.0'
+          percentage: totalQuestions > 0 ? ((totalCompleted / totalQuestions) * 100).toFixed(1) : '0.0'
         };
-      });
-
-      // Calculate overall progress
-      let totalCompleted = 0;
-      let totalQuestions = 0;
-
-      Object.values(userData.courseProgress).forEach(progress => {
-        if (progress && typeof progress === 'object') {
-          totalCompleted += progress.completed || 0;
-          totalQuestions += progress.total || 0;
-        }
-      });
-
-      userData.overallProgress = {
-        completed: totalCompleted,
-        total: totalQuestions,
-        percentage: totalQuestions > 0 ? ((totalCompleted / totalQuestions) * 100).toFixed(1) : '0.0'
-      };
+      }
     });
+
 
     return {
       users: Object.values(processedUsers),
