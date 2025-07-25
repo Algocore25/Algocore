@@ -47,6 +47,10 @@ const AdminMonitor = () => {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
+
+  const [Students, setStudents] = useState([]);
+
+
   const [filters, setFilters] = useState({
     search: '',
     sortBy: 'name',
@@ -58,6 +62,7 @@ const AdminMonitor = () => {
     const progressRef = ref(database, 'userprogress');
     const usersRef = ref(database, 'users');
     const coursesRef = ref(database, 'AlgoCore');  // Add this line
+    const studentsRef = ref(database, 'Students');  // Add this line
 
     const unsubscribeCourses = onValue(coursesRef, (snapshot) => {
       const data = snapshot.val();
@@ -77,6 +82,11 @@ const AdminMonitor = () => {
     const unsubscribeProgress = onValue(progressRef, (snapshot) => {
       const data = snapshot.val();
       setUserProgress(data || {});
+    });
+
+    const unsubscribeStudents = onValue(studentsRef, (snapshot) => {  // Add this block
+      const data = snapshot.val();
+      setStudents(data || []);
       setLoading(false);
     });
 
@@ -85,6 +95,7 @@ const AdminMonitor = () => {
       unsubscribeProgress();
       unsubscribeUsers();  // Add this line
       unsubscribeCourses();  // Add this line
+      unsubscribeStudents();  // Add this line
     };
   }, []);
 
@@ -125,6 +136,9 @@ const AdminMonitor = () => {
 
     // FIRST: Process ALL users from the users object
     Object.entries(users).forEach(([userId, userDetails]) => {
+      
+      if (Students.indexOf(userDetails.email) === -1) return;
+      
       processedUsers[userId] = {
         id: userId,
         name: userDetails.name || 'Anonymous',
@@ -144,6 +158,7 @@ const AdminMonitor = () => {
           percentage: '0.0' // Ensure it's a string
         };
       });
+
     });
 
 
@@ -280,6 +295,8 @@ const AdminMonitor = () => {
           total: totalQuestions,
           percentage: totalQuestions > 0 ? ((totalCompleted / totalQuestions) * 100).toFixed(1) : '0.0'
         };
+
+
       }
     });
 
