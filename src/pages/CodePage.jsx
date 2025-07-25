@@ -15,6 +15,14 @@ import { executeCode } from './api';
 import { useAuth } from '../context/AuthContext';
 import AISuggestionsTab from '../components/AISuggestions';
 
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry";
+
+
+
+
 function CodePage({ data, navigation }) {
   const [code, setCode] = useState("");
   const [activeTab, setActiveTab] = useState('description');
@@ -503,6 +511,67 @@ function CodePage({ data, navigation }) {
       resizeObserverRef.current.disconnect();
     }
 
+       // Disable Copy (Ctrl + C)
+       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+        const copyDisabled = getItemWithExpiry("copyDisabled");
+        console.log(copyDisabled)
+        if (copyDisabled === null) {
+          toast.error("Copy disabled!", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+          setItemWithExpiry("copyDisabled", true, 5000);
+
+          return;
+        }
+
+        
+      });
+  
+      // Disable Paste (Ctrl + V)
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+        const pasteDisabled = getItemWithExpiry("pasteDisabled");
+        if (pasteDisabled === null) {
+          toast.error("Paste disabled!", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+          setItemWithExpiry("pasteDisabled", true, 5000);
+          return;
+        }
+
+        
+      });
+  
+      editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
+        const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
+        if (shiftInsertDisabled === null) {
+          toast.error("Shift insert disabled!😭", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+          setItemWithExpiry("shiftInsertDisabled", true, 5000);
+
+          return;
+        }
+
+        
+      });
+
+
+       // 🚫 2. Remove Paste from Right-Click Menu
+    editor.updateOptions({
+      contextmenu: false, // Disables right-click menu
+    });
+
+    // 🚫 3. Block Clipboard Events (Prevents extensions & force-paste)
+    const blockPaste = (event) => {
+      event.preventDefault();
+      alert("Pasting is completely disabled!");
+    };
+
+  
+
     // Create new ResizeObserver with proper error handling
     resizeObserverRef.current = new ResizeObserver((entries) => {
       // Clear any existing timeout
@@ -985,7 +1054,7 @@ function CodePage({ data, navigation }) {
 
 
 
-
+      <ToastContainer />
     </div>
   );
 };
