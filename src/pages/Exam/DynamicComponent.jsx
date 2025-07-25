@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ref, onValue , get} from "firebase/database";
+import { ref, onValue, get } from "firebase/database";
 import { database } from "../../firebase";
 import MCQPage from "./MCQPage";
 import CodePage from "./CodePage";
@@ -8,7 +8,7 @@ import LoadingPage from "../LoadingPage";
 
 
 
-const DynamicComponent = ( {question} ) => {
+const DynamicComponent = ({ question }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -20,7 +20,7 @@ const DynamicComponent = ( {question} ) => {
   useEffect(() => {
 
     const fetchData = async () => {
-       setLoading(true);
+      setLoading(true);
 
       try {
         // Single call for both question data and next question URL
@@ -33,7 +33,7 @@ const DynamicComponent = ( {question} ) => {
           get(questionRef),
         ]);
 
-        console.log( questionSnapshot.val() );
+        console.log(questionSnapshot.val());
 
         if (questionSnapshot.exists()) {
           const question = questionSnapshot.val();
@@ -47,7 +47,7 @@ const DynamicComponent = ( {question} ) => {
     };
 
 
-    console.log( data?.type );
+    console.log(data?.type);
 
 
 
@@ -65,9 +65,9 @@ const DynamicComponent = ( {question} ) => {
 
   return (
     <div>
-      {data?.type === "Programming" && <CodePage  question={question}  />}
+      {data?.type === "Programming" && <CodePage question={question} />}
       {/* {data?.type === "MCQ" && <MCQPage  data= {data} />} */}
-      {data?.type === "MCQ" &&  <MCQPage data={data} /> }
+      {data?.type === "MCQ" && <MCQPage data={data} />}
       {/* Add more conditional components as needed */}
     </div>
   );

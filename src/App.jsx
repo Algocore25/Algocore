@@ -29,7 +29,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 
 function App() {
   return (
-    <BrowserRouter basename='/AlgoCore'>
+    <BrowserRouter basename='/'>
       <ActivityTracker> {/* Wrap everything with ActivityTracker */}
         <Toaster position="top-center" reverseOrder={false} />
         <PageLayout>

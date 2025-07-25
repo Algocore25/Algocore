@@ -122,25 +122,25 @@ const AlgorithmExplanation = ({ algorithm }) => {
   const explanation = explanations[algorithm];
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transition-colors duration-200">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-800 text-white p-6">
         <h3 className="text-xl font-bold mb-2">{explanation.title}</h3>
-        <p className="text-blue-100 leading-relaxed">{explanation.description}</p>
+        <p className="text-blue-100/90 dark:text-blue-100/80 leading-relaxed">{explanation.description}</p>
       </div>
 
       <div className="p-6 space-y-6">
         {/* Characteristics */}
-        <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
-          <h4 className="font-semibold text-indigo-800 mb-3 flex items-center gap-2">
-            <Zap size={18} />
+        <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-lg p-4 border border-indigo-200 dark:border-indigo-800/50">
+          <h4 className="font-semibold text-indigo-800 dark:text-indigo-200 mb-3 flex items-center gap-2">
+            <Zap size={18} className="text-indigo-600 dark:text-indigo-400" />
             Key Characteristics
           </h4>
           <div className="flex flex-wrap gap-2">
             {explanation.characteristics.map((char, index) => (
               <span
                 key={index}
-                className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium"
+                className="px-3 py-1 bg-indigo-100 dark:bg-indigo-800/50 text-indigo-700 dark:text-indigo-200 rounded-full text-sm font-medium border border-indigo-200 dark:border-indigo-700/50"
               >
                 {char}
               </span>
@@ -151,14 +151,14 @@ const AlgorithmExplanation = ({ algorithm }) => {
         {/* Pros and Cons */}
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-3">
-            <h4 className="font-semibold text-green-700 mb-3 flex items-center gap-2">
-              <CheckCircle size={18} />
+            <h4 className="font-semibold text-green-700 dark:text-green-400 mb-3 flex items-center gap-2">
+              <CheckCircle size={18} className="text-green-600 dark:text-green-500" />
               Advantages
             </h4>
             <ul className="space-y-2">
               {explanation.advantages.map((advantage, index) => (
-                <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
-                  <span className="text-green-500 mt-1 flex-shrink-0">•</span>
+                <li key={index} className="text-sm text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                  <span className="text-green-500 dark:text-green-400 mt-1 flex-shrink-0">•</span>
                   <span>{advantage}</span>
                 </li>
               ))}
@@ -166,14 +166,14 @@ const AlgorithmExplanation = ({ algorithm }) => {
           </div>
           
           <div className="space-y-3">
-            <h4 className="font-semibold text-red-700 mb-3 flex items-center gap-2">
-              <XCircle size={18} />
+            <h4 className="font-semibold text-red-700 dark:text-red-400 mb-3 flex items-center gap-2">
+              <XCircle size={18} className="text-red-600 dark:text-red-500" />
               Disadvantages
             </h4>
             <ul className="space-y-2">
               {explanation.disadvantages.map((disadvantage, index) => (
-                <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
-                  <span className="text-red-500 mt-1 flex-shrink-0">•</span>
+                <li key={index} className="text-sm text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                  <span className="text-red-500 dark:text-red-400 mt-1 flex-shrink-0">•</span>
                   <span>{disadvantage}</span>
                 </li>
               ))}
@@ -182,18 +182,18 @@ const AlgorithmExplanation = ({ algorithm }) => {
         </div>
         
         {/* Technical Details */}
-        <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-gray-200">
-          <div className="bg-blue-50 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-700 mb-2 flex items-center gap-2">
-              <Clock size={16} />
+        <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-100 dark:border-blue-900/30">
+            <h4 className="font-semibold text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
+              <Clock size={16} className="text-blue-600 dark:text-blue-400" />
               Time Complexity
             </h4>
-            <p className="text-blue-800 font-mono text-lg">{explanation.timeComplexity}</p>
+            <p className="text-blue-800 dark:text-blue-200 font-mono text-lg">{explanation.timeComplexity}</p>
           </div>
           
-          <div className="bg-purple-50 rounded-lg p-4">
-            <h4 className="font-semibold text-purple-700 mb-2">Best Use Cases</h4>
-            <p className="text-sm text-purple-800 leading-relaxed">{explanation.usage}</p>
+          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border border-purple-100 dark:border-purple-900/30">
+            <h4 className="font-semibold text-purple-700 dark:text-purple-300 mb-2">Best Use Cases</h4>
+            <p className="text-sm text-purple-800 dark:text-purple-200 leading-relaxed">{explanation.usage}</p>
           </div>
         </div>
       </div>

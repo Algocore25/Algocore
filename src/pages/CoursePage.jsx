@@ -91,7 +91,8 @@ const CoursePage = () => {
         practiceTopics.push({
           title: topicKey,
           description: topicData.description,
-          problems: problems
+          problems: problems,
+          status: topicData.status
         });
       });
 
@@ -288,15 +289,29 @@ const CoursePage = () => {
                         </thead>
                         <tbody>
                           {topic.problems.map((problem, pIndex) => (
-                            <tr key={pIndex} className="border-t border-gray-200 dark:border-dark-tertiary hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <tr 
+                              key={pIndex} 
+                              className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked' ? 'opacity-60' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
+                            >
                               <td
-                                className="p-4 text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center"
-                                onClick={() => navigate(`/problem/${course}/${topic.title}/${problem.name}`)}
+                                className={`p-4 flex items-center ${topic.status === 'blocked' 
+                                  ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' 
+                                  : 'text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'}`}
+                                onClick={() => {
+                                  if (topic.status !== 'blocked') {
+                                    navigate(`/problem/${course}/${topic.title}/${problem.name}`);
+                                  }
+                                }}
                               >
                                 {problem.status === 'Completed' && (
                                   <FaCheck className="text-green-500 mr-2" />
                                 )}
                                 {problem.name}
+                                {topic.status === 'blocked' && (
+                                  <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded">
+                                    Locked
+                                  </span>
+                                )}
                               </td>
                               <td className="p-4">
                                 <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'

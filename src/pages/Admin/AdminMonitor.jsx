@@ -88,6 +88,9 @@ const AdminMonitor = () => {
     };
   }, []);
 
+  console.log('submissions:', submissions);
+  console.log('user progress:', userProgress);
+
   // Add this function to calculate total questions
   const calculateTotalQuestions = (courseName) => {
     if (!courses || !courses[courseName] || !courses[courseName].lessons) return 0;
@@ -146,18 +149,16 @@ const AdminMonitor = () => {
 
     // SECOND: Process submissions for users who have them
     Object.entries(submissions).forEach(([userId, userSubmissions]) => {
-      // Only process if user exists (should always be true now)
       if (processedUsers[userId]) {
         Object.entries(userSubmissions).forEach(([course, courseData]) => {
           availableCourses.add(course);
           if (!processedUsers[userId].submissions[course]) {
             processedUsers[userId].submissions[course] = {};
-            // Update course progress initialization if needed
             if (!processedUsers[userId].courseProgress[course]) {
               processedUsers[userId].courseProgress[course] = {
                 completed: 0,
                 total: calculateTotalQuestions(course),
-                percentage: 0
+                percentage: '0.0'
               };
             }
           }
@@ -171,12 +172,13 @@ const AdminMonitor = () => {
               const submissions = Object.entries(questionData).map(([timestamp, submission]) => ({
                 timestamp,
                 ...submission,
-                question
+                question,
+                type: 'code' // Mark as code submission
               }));
 
               processedUsers[userId].submissions[course][subcourse][question] = submissions;
 
-              // Update stats
+              // Update stats for code submissions
               const latestSubmission = submissions[submissions.length - 1];
               processedUsers[userId].stats.attempted++;
               if (latestSubmission.status === 'correct') {
@@ -189,6 +191,51 @@ const AdminMonitor = () => {
         });
       }
     });
+
+    // SECOND-B: Process MCQ progress and add to stats
+    Object.entries(userProgress).forEach(([userId, progress]) => {
+      if (processedUsers[userId]) {
+        Object.entries(progress).forEach(([course, courseData]) => {
+          if (courseData && typeof courseData === 'object') {
+            Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
+              if (subcourseData && typeof subcourseData === 'object') {
+                Object.entries(subcourseData).forEach(([question, status]) => {
+                  // Add MCQ entries to submissions for display
+                  if (!processedUsers[userId].submissions[course]) {
+                    processedUsers[userId].submissions[course] = {};
+                  }
+                  if (!processedUsers[userId].submissions[course][subcourse]) {
+                    processedUsers[userId].submissions[course][subcourse] = {};
+                  }
+
+                  // Only add if it's not already a code submission
+                  if (!processedUsers[userId].submissions[course][subcourse][question]) {
+                    processedUsers[userId].submissions[course][subcourse][question] = [{
+                      timestamp: 'mcq-entry', // Special timestamp for MCQs
+                      status: status === true ? 'correct' : (status === false ? 'wrong' : 'not-started'),
+                      question,
+                      type: 'mcq', // Mark as MCQ
+                      code: null // No code for MCQs
+                    }];
+
+                    // Update stats for MCQs
+                    if (status === true || status === false) {
+                      processedUsers[userId].stats.attempted++;
+                      if (status === true) {
+                        processedUsers[userId].stats.correct++;
+                      } else {
+                        processedUsers[userId].stats.wrong++;
+                      }
+                    }
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+
 
     // THIRD: Calculate course progress (match course page logic exactly)
     Object.entries(userProgress).forEach(([userId, progress]) => {
@@ -301,9 +348,10 @@ const AdminMonitor = () => {
     return [...processedData.courses].sort();
   }, [processedData.courses]);
 
-  // Get all submissions for a user
+  // Get all submissions for a user (including MCQs)
   const getUserSubmissions = (user) => {
     const allSubmissions = [];
+
     Object.entries(user.submissions).forEach(([course, courseData]) => {
       Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
         Object.entries(subcourseData).forEach(([question, submissions]) => {
@@ -312,14 +360,22 @@ const AdminMonitor = () => {
               ...submission,
               course,
               subcourse,
-              question
+              question: submission.question || question
             });
           });
         });
       });
     });
-    return allSubmissions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // Sort by timestamp, but handle MCQ entries specially
+    return allSubmissions.sort((a, b) => {
+      if (a.timestamp === 'mcq-entry' && b.timestamp === 'mcq-entry') return 0;
+      if (a.timestamp === 'mcq-entry') return 1; // MCQs go to bottom
+      if (b.timestamp === 'mcq-entry') return -1; // MCQs go to bottom
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
   };
+
 
   // Calculate completion percentage
   const getCompletionPercentage = (user, course, subcourse) => {
@@ -558,41 +614,62 @@ const AdminMonitor = () => {
 
             <div className="p-6">
               <div className="space-y-4">
-                {getUserSubmissions(selectedUser).map((submission, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-3 h-3 rounded-full ${submission.status === 'correct' ? 'bg-green-500' : 'bg-red-500'
-                          }`}></div>
-                        <span className="font-medium text-gray-900">
-                          {submission.course} - {submission.subcourse} - {submission.question}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          {submission.language}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-500">
-                          {formatCustomTimestamp(submission.timestamp)}
-                        </span>
-                        <button
-                          onClick={() => setSelectedSubmission(submission)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          <FiCode />
-                        </button>
+                {getUserSubmissions(selectedUser).length > 0 ? (
+                  getUserSubmissions(selectedUser).map((submission, index) => (
+                    <div key={index} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-3 h-3 rounded-full ${submission.status === 'correct' ? 'bg-green-500' :
+                            submission.status === 'wrong' ? 'bg-red-500' :
+                              'bg-gray-400'
+                            }`}></div>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                            {submission.course} - {submission.subcourse} - {submission.question}
+                          </span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${submission.type === 'mcq'
+                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                            }`}>
+                            {submission.type === 'mcq' ? 'MCQ' : submission.language || 'CODE'}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {submission.timestamp !== 'mcq-entry' && (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              {formatCustomTimestamp(submission.timestamp)}
+                            </span>
+                          )}
+                          {submission.type !== 'mcq' && submission.code && (
+                            <button
+                              onClick={() => setSelectedSubmission(submission)}
+                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                            >
+                              <FiCode />
+                            </button>
+                          )}
+                          {submission.type === 'mcq' && (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              MCQ Answer
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                    No submissions or progress found for this user.
                   </div>
-                ))}
+                )}
               </div>
             </div>
+
           </div>
         </div>
       )}
 
       {/* Code Viewer Modal */}
-      {selectedSubmission && (
+      {selectedSubmission && selectedSubmission.type !== 'mcq' && selectedSubmission.code && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4">

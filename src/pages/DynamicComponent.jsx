@@ -30,6 +30,8 @@ const DynamicComponent = () => {
   const { course, subcourse, questionId } = useParams();
   const navigate = useNavigate();
 
+  const [status, setStatus] = useState("active");
+
 
   // Fetch question data from Firebase
   useEffect(() => {
@@ -43,18 +45,25 @@ const DynamicComponent = () => {
           database,
           `questions/${questionId}`);
 
+          const statusRef = ref(
+            database,
+            `AlgoCore/${course}/lessons/${subcourse}/status`);
+
         // Get both question data and all questions in parallel
-        const [questionSnapshot] = await Promise.all([
+        const [questionSnapshot, statusSnapshot] = await Promise.all([
           get(questionRef),
+          get(statusRef)
         ]);
 
         console.log(questionSnapshot.val());
+        console.log(statusSnapshot.val());
 
         if (questionSnapshot.exists()) {
           const question = questionSnapshot.val();
 
           console.log(question);
           setData(question);
+          setStatus(statusSnapshot.val());
         }
       } catch (error) {
         console.error("Error fetching data from Firebase:", error);
@@ -168,6 +177,10 @@ const DynamicComponent = () => {
     onNext: handleNextQuestion,
     NavigationIcons
   };
+
+  if(status === "blocked") {
+    return <LoadingPage message="This topic is blocked" />;
+  }
 
   return (
     <div className="relative">
