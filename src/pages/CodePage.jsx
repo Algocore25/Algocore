@@ -41,7 +41,7 @@ function CodePage({ data, navigation }) {
   const [submissionTrigger, setSubmissionTrigger] = useState(0); // New state to trigger submission refresh
 
   const { course, subcourse, questionId } = useParams();
-  const user = useAuth();
+  const {user} = useAuth();
   const navigate = useNavigate();
 
   // Refs for cleanup and debouncing
@@ -366,7 +366,7 @@ function CodePage({ data, navigation }) {
   const loadCode = useCallback(async () => {
     try {
       const dbRef = ref(database);
-      const codeKey = `savedCode/${course}/${questionId}/${selectedLanguage}`;
+      const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}`;
       const snapshot = await get(child(dbRef, codeKey));
 
       console.log(snapshot.val());
@@ -387,7 +387,7 @@ function CodePage({ data, navigation }) {
 
   const saveCode = useCallback(async (codeToSave) => {
     try {
-      const codeKey = `savedCode/${course}/${questionId}/${selectedLanguage}`;
+      const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}`;
       const dbRef = ref(database, codeKey);
       await set(dbRef, codeToSave);
       console.log("Code auto-saved successfully!");
