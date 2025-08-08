@@ -224,13 +224,6 @@ const Navbar = () => {
               />
             </div>
           )}
-          {/* {isLoading && (
-            <div className="w-48 mr-4 flex items-center">
-              <div className="animate-pulse text-sm text-gray-500 dark:text-gray-400">
-                Loading progress...
-              </div>
-            </div>
-          )} */}
 
 
           <button

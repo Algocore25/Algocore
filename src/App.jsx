@@ -50,8 +50,6 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="*" element={<NotFoundPage />} />
 
-              <Route path="/cpu" element={<CpuApp />} />
-
               <Route path="/test" element={<ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>} />
               <Route path="/examwindow/:testid" element={<ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute>} />
               <Route path="/exammonitor/:testid" element={<ProtectedRoute requireAdmin={true}><ExamMonitor /></ProtectedRoute>} />

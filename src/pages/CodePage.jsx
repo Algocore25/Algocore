@@ -92,6 +92,8 @@ function CodePage({ data, navigation }) {
       status: 'running',
     }));
 
+    console.log(initialResults);
+
     setTestResults(initialResults);
     setOutput(null);
     setActiveTab('output');
@@ -106,10 +108,10 @@ function CodePage({ data, navigation }) {
 
        // regex
 
-       if (questionData.testcases[2].input === "regex2") {
-        const passed = result.output.match(questionData.testcases[2].expectedOutput);
+       if (questionData.testcases[2]?.input === "regex2") {
+        const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
         console.log(result.output);
-        console.log(questionData.testcases[2].expectedOutput);
+        console.log(questionData.testcases[2]?.expectedOutput);
         const regex = new RegExp(
           // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
           /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
@@ -126,10 +128,10 @@ function CodePage({ data, navigation }) {
         await new Promise(res => setTimeout(res, 300));
         continue;
       }
-      if (questionData.testcases[2].input === "regex") {
-        const passed = result.output.match(questionData.testcases[2].expectedOutput);
+      if (questionData.testcases[2] ?.input === "regex") {
+        const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
         console.log(result.output);
-        console.log(questionData.testcases[2].expectedOutput);
+        console.log(questionData.testcases[2]?.expectedOutput);
         const regex = new RegExp(
           /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/
         );
@@ -229,10 +231,10 @@ function CodePage({ data, navigation }) {
 
           // regex
 
-          if (questionData.testcases[2].input === "regex2") {
-            const passed = result.output.match(questionData.testcases[2].expectedOutput);
+          if (questionData.testcases[2]?.input === "regex2") {
+            const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
             console.log(result.output);
-            console.log(questionData.testcases[2].expectedOutput);
+            console.log(questionData.testcases[2]?.expectedOutput);
             const regex = new RegExp(
               // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
               /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
@@ -252,10 +254,10 @@ function CodePage({ data, navigation }) {
               setTestCaseTab(i);
             }
           }
-          else if (questionData.testcases[2].input === "regex") {
-            const passed = result.output.match(questionData.testcases[2].expectedOutput);
+          else if (questionData.testcases[2]?.input === "regex") {
+            const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
             console.log(result.output);
-            console.log(questionData.testcases[2].expectedOutput);
+            console.log(questionData.testcases[2]?.expectedOutput);
             const regex = new RegExp(
               /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
             console.log(regex.test(result.output))
@@ -529,19 +531,19 @@ function CodePage({ data, navigation }) {
       });
   
       // Disable Paste (Ctrl + V)
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-        const pasteDisabled = getItemWithExpiry("pasteDisabled");
-        if (pasteDisabled === null) {
-          toast.error("Paste disabled!", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-          setItemWithExpiry("pasteDisabled", true, 5000);
-          return;
-        }
+      // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+      //   const pasteDisabled = getItemWithExpiry("pasteDisabled");
+      //   if (pasteDisabled === null) {
+      //     toast.error("Paste disabled!", {
+      //       position: "top-right",
+      //       autoClose: 3000,
+      //     });
+      //     setItemWithExpiry("pasteDisabled", true, 5000);
+      //     return;
+      //   }
 
         
-      });
+      // });
   
       editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
         const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
