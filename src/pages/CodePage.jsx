@@ -57,9 +57,9 @@ function CodePage({ data, navigation }) {
 
   const logSubmission = async (status, submittedCode) => {
     console.log("logging submission");
-    console.log(user?.user?.email);
+    console.log(user?.email);
 
-    if (!user?.user?.uid) return;
+    if (!user?.uid) return;
 
     const timestamp = new Date().toISOString();
     const safeCourse = sanitizeKey(course);
@@ -67,7 +67,7 @@ function CodePage({ data, navigation }) {
     const safeQuestionId = sanitizeKey(questionId);
     const safeTimestamp = sanitizeKey(timestamp);
 
-    const path = `Submissions/${user.user.uid}/${safeCourse}/${safeSubcourse}/${safeQuestionId}/${safeTimestamp}`;
+    const path = `Submissions/${user.uid}/${safeCourse}/${safeSubcourse}/${safeQuestionId}/${safeTimestamp}`;
 
     try {
       await set(ref(database, path), {
@@ -172,18 +172,19 @@ function CodePage({ data, navigation }) {
       await new Promise(res => setTimeout(res, 300));
     }
 
+
     const allPassed = updatedResults.every(tc => tc.passed);
     await markProblemAsCompleted(allPassed);
     await logSubmission(allPassed ? 'correct' : 'wrong', code);
   };
 
   const markProblemAsCompleted = async (isCorrect) => {
-    if (!user?.user?.uid) return;
+    if (!user?.uid) return;
 
     try {
       const progressRef = ref(
         database,
-        `userprogress/${user.user.uid}/${course}/${subcourse}/${questionId}`
+        `userprogress/${user.uid}/${course}/${subcourse}/${questionId}`
       );
 
       await set(progressRef, isCorrect);
@@ -254,7 +255,7 @@ function CodePage({ data, navigation }) {
               setTestCaseTab(i);
             }
           }
-          else if (questionData.testcases[2]?.input === "regex") {
+          else if (questionData.testcases[2] ?.input === "regex") {
             const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
             console.log(result.output);
             console.log(questionData.testcases[2]?.expectedOutput);
@@ -401,13 +402,13 @@ function CodePage({ data, navigation }) {
   // Fetch submissions
   useEffect(() => {
     const fetchSubmissions = async () => {
-      if (!user?.user?.uid || !course || !subcourse || !questionId) return;
+      if (!user?.uid || !course || !subcourse || !questionId) return;
 
       const safeCourse = sanitizeKey(course);
       const safeSubcourse = sanitizeKey(subcourse);
       const safeQuestionId = sanitizeKey(questionId);
 
-      const path = `Submissions/${user.user.uid}/${safeCourse}/${safeSubcourse}/${safeQuestionId}`;
+      const path = `Submissions/${user.uid}/${safeCourse}/${safeSubcourse}/${safeQuestionId}`;
       const snapshot = await get(ref(database, path));
 
       if (snapshot.exists()) {
@@ -948,7 +949,7 @@ function CodePage({ data, navigation }) {
             <AISuggestionsTab
               questionData={questionData}
               userCode={code}
-              userId={user.user.uid}
+              userId={user.uid}
             />
           )}
         </div>

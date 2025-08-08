@@ -151,21 +151,21 @@ const Students = ({ test, setTest, testId }) => {
   const parseCSV = (csvText) => {
     const lines = csvText.split('\n').filter(line => line.trim());
     const students = [];
-    
+
     // Skip header if it exists
     const startIndex = lines[0].toLowerCase().includes('name') || lines[0].toLowerCase().includes('email') ? 1 : 0;
-    
+
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
-      
+
       const [name, email] = line.split(',').map(field => field.trim().replace(/"/g, ''));
-      
+
       if (name && email && email.includes('@')) {
         students.push({ name, email });
       }
     }
-    
+
     return students;
   };
 
@@ -177,11 +177,11 @@ const Students = ({ test, setTest, testId }) => {
     }
 
     setIsUploading(true);
-    
+
     try {
       const text = await csvFile.text();
       const studentsFromCSV = parseCSV(text);
-      
+
       if (studentsFromCSV.length === 0) {
         toast.error('No valid students found in CSV file');
         return;
@@ -191,37 +191,43 @@ const Students = ({ test, setTest, testId }) => {
       const eligibleRef = ref(database, `Exam/${testId}/Eligible`);
       const snapshot = await get(eligibleRef);
       const currentStudents = snapshot.exists() ? snapshot.val() : {};
-      
+
       let addedCount = 0;
       let skippedCount = 0;
       const newStudents = { ...currentStudents };
-      
+
       for (const student of studentsFromCSV) {
         // Check for duplicate name or email
         if (currentStudents[student.name] || Object.values(currentStudents).includes(student.email)) {
           skippedCount++;
           continue;
         }
-        
+
         newStudents[student.name] = student.email;
         addedCount++;
       }
-      
+
       if (addedCount > 0) {
         // Update Firebase
         await set(eligibleRef, newStudents);
-        
+
+        console.log(newStudents);
+
+        console.log(newStudents);
+
+        console.log(skippedCount);
+
         // Update local state
         setManualStudents(newStudents);
         setEnrolledStudents(Object.keys(newStudents));
-        
+
         toast.success(`Added ${addedCount} students successfully${skippedCount > 0 ? `. Skipped ${skippedCount} duplicates.` : ''}`);
       } else {
         toast.warning('All students in the CSV already exist');
       }
-      
+
       setCsvFile(null);
-      
+
     } catch (error) {
       console.error('CSV upload error:', error);
       toast.error('Failed to process CSV file');
@@ -316,7 +322,7 @@ const Students = ({ test, setTest, testId }) => {
       {/* Add Student Form */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Students</h4>
-        
+
         {/* CSV Upload Section */}
         <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
           <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Bulk Upload from CSV</h5>
@@ -360,7 +366,7 @@ const Students = ({ test, setTest, testId }) => {
             </div>
           </div>
         </div>
-        
+
         {/* Manual Add Section */}
         <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Individual Student</h5>
         <div className="flex flex-col sm:flex-row gap-3 mb-3">
