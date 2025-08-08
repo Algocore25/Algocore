@@ -521,6 +521,43 @@ function CodePage({ question }) {
   const editorRef = useRef(null);
   function handleEditorDidMount(editor) {
     editorRef.current = editor;
+
+    // Clean up previous observer
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+    }
+
+       // Disable Copy (Ctrl + C)
+       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+        const copyDisabled = getItemWithExpiry("copyDisabled");
+        console.log(copyDisabled)
+        if (copyDisabled === null) {
+          toast.error("Copy disabled!", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+          setItemWithExpiry("copyDisabled", true, 5000);
+
+          return;
+        }
+
+        
+      });
+
+      // Disable Paste (Ctrl + V)
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+        const pasteDisabled = getItemWithExpiry("pasteDisabled");
+        if (pasteDisabled === null) {
+          toast.error("Paste disabled!", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+          setItemWithExpiry("pasteDisabled", true, 5000);
+          return;
+        }
+
+        
+      });
   }
   useEffect(() => {
     if (editorRef.current) {

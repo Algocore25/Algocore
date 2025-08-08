@@ -114,8 +114,7 @@ function CodePage({ data, navigation }) {
         console.log(questionData.testcases[2]?.expectedOutput);
         const regex = new RegExp(
           // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-          /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
-        );
+/^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/            );
         console.log(regex.test(result.output))
         updatedResults[i] = {
           input,
@@ -237,9 +236,7 @@ function CodePage({ data, navigation }) {
             console.log(result.output);
             console.log(questionData.testcases[2]?.expectedOutput);
             const regex = new RegExp(
-              // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-              /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
-            );
+/^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/            );
             console.log(regex.test(result.output))
             updatedResults[i] = {
               input: testInput,
@@ -532,19 +529,19 @@ function CodePage({ data, navigation }) {
       });
   
       // Disable Paste (Ctrl + V)
-      // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-      //   const pasteDisabled = getItemWithExpiry("pasteDisabled");
-      //   if (pasteDisabled === null) {
-      //     toast.error("Paste disabled!", {
-      //       position: "top-right",
-      //       autoClose: 3000,
-      //     });
-      //     setItemWithExpiry("pasteDisabled", true, 5000);
-      //     return;
-      //   }
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+        const pasteDisabled = getItemWithExpiry("pasteDisabled");
+        if (pasteDisabled === null) {
+          toast.error("Paste disabled!", {
+            position: "top-right",
+            autoClose: 3000,
+          });
+          setItemWithExpiry("pasteDisabled", true, 5000);
+          return;
+        }
 
         
-      // });
+      });
   
       editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
         const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
