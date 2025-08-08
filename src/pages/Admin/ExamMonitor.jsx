@@ -132,7 +132,7 @@ const ExamMonitor = () => {
                                             {user.status}
                                         </span>
                                     </td>
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${user.violations >= 3 ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${user.violations >= 2 ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
                                         {user.violations}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
