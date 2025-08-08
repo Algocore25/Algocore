@@ -113,7 +113,7 @@ const DynamicExam = () => {
       }
 
       // Check if the exam should be blocked
-      if (violation >= 3) {
+      if (violation >= 2) {
         markExamBlocked();
       }
     };
