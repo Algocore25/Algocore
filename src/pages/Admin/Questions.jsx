@@ -25,14 +25,19 @@ const Questions = ({ test, setTest, testId }) => {
     const unsubscribe = onValue(questionsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        // Convert array to object format if needed
+        const questionsObj = Array.isArray(data) 
+          ? data.reduce((acc, q) => ({ ...acc, [q]: 'mcq' }), {}) 
+          : data;
+        
         setTest(prev => ({
           ...prev,
-          questions: Array.isArray(data) ? data : Object.keys(data)
+          questions: questionsObj
         }));
       } else {
         setTest(prev => ({
           ...prev,
-          questions: []
+          questions: {}
         }));
       }
       setLoading(false);
@@ -47,22 +52,29 @@ const Questions = ({ test, setTest, testId }) => {
 
       // Get current questions
       const snapshot = await get(questionsRef);
-      let currentQuestions = snapshot.val() || [];
+      let currentQuestions = snapshot.val() || {};
 
-      // Convert to array if stored as object
-      if (currentQuestions && typeof currentQuestions === 'object' && !Array.isArray(currentQuestions)) {
-        currentQuestions = Object.keys(currentQuestions);
+      // Convert to object format if stored as array
+      if (Array.isArray(currentQuestions)) {
+        currentQuestions = currentQuestions.reduce((acc, q) => ({
+          ...acc,
+          [q]: 'mcq' // Default to 'mcq' type for existing questions
+        }), {});
       }
 
       // Convert single question to array for consistent handling
       const questionsToAdd = Array.isArray(questions) ? questions : [questions];
 
-      // Add just the question names
-      const questionNames = questionsToAdd.map(q => q.name || q.title || q);
-      const updatedQuestions = [...currentQuestions, ...questionNames];
+      // Add questions with their types
+      const updatedQuestions = { ...currentQuestions };
+      questionsToAdd.forEach(q => {
+        const questionName = q.name || q.title || q;
+        const questionType = q.type || 'mcq'; // Default to 'mcq' if type not specified
+        updatedQuestions[questionName] = questionType;
+      });
 
       await set(questionsRef, updatedQuestions);
-      toast.success(`Added ${questionNames.length} question(s) successfully`);
+      toast.success(`Added ${questionsToAdd.length} question(s) successfully`);
       return updatedQuestions;
     } catch (err) {
       toast.error('Failed to add questions');
@@ -77,17 +89,18 @@ const Questions = ({ test, setTest, testId }) => {
       // Get current questions from Firebase
       const questionsRef = ref(database, `Exam/${testId}/questions`);
       const snapshot = await get(questionsRef);
-      let currentQuestions = snapshot.exists() ? snapshot.val() : [];
+      let currentQuestions = snapshot.exists() ? snapshot.val() : {};
 
-      // Convert to array if stored as object
-      if (!Array.isArray(currentQuestions)) {
-        currentQuestions = Object.keys(currentQuestions);
+      // Convert to object format if stored as array
+      if (Array.isArray(currentQuestions)) {
+        currentQuestions = currentQuestions.reduce((acc, q) => ({
+          ...acc,
+          [q]: 'mcq'
+        }), {});
       }
 
-      // Filter out the question to delete
-      const updatedQuestions = currentQuestions.filter(
-        q => q !== questionName
-      );
+      // Remove the question
+      const { [questionName]: _, ...updatedQuestions } = currentQuestions;
 
       // Update Firebase
       await set(questionsRef, updatedQuestions);
@@ -139,21 +152,31 @@ const Questions = ({ test, setTest, testId }) => {
 
   // Filter questions based on search
   const filteredQuestions = useMemo(() => {
-    if (!questionSearchQuery) return test?.questions || [];
-    return test?.questions.filter(question =>
-      question.toLowerCase().includes(questionSearchQuery.toLowerCase())
-    ) || [];
+    if (!test?.questions) return [];
+    
+    const questions = Object.entries(test.questions).map(([name, type]) => ({
+      name,
+      type
+    }));
+    
+    if (!questionSearchQuery) return questions;
+    
+    const query = questionSearchQuery.toLowerCase();
+    return questions.filter(question => 
+      question.name.toLowerCase().includes(query) ||
+      question.type.toLowerCase().includes(query)
+    );
   }, [test?.questions, questionSearchQuery]);
 
   if (loading) {
     return (
-      <LoadingPage message="Loading questions, please wait..."/>
+      <LoadingPage message="Loading questions, please wait..." />
     );
   }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {!test?.questions?.length ? (
+      {!test?.questions || Object.keys(test.questions).length === 0 ? (
         <div className="text-center py-8">
           <p className="text-gray-500">No questions found</p>
           <button
@@ -209,37 +232,42 @@ const Questions = ({ test, setTest, testId }) => {
 
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {filteredQuestions.length > 0 ? (
-              filteredQuestions.map((question, index) => (
-                <div key={index} className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mr-2">
-                        {index + 1}.
-                      </span>
-                      <h3 className="text-base font-medium text-gray-900 dark:text-white">
-                        {question}
-                      </h3>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => {
-                          setEditingQuestion(question);
-                          setShowQuestionForm(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-800 dark:hover:text-blue-400"
-                      >
-                        <FiEdit2 className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteQuestion(question)}
-                        className="text-red-600 hover:text-red-800 dark:hover:text-red-400"
-                      >
-                        <FiTrash2 className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Question
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredQuestions.map((question, index) => (
+                    <tr key={question.name} className={index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                        {question.name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                        {String(question.type || 'mcq').toUpperCase()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleDeleteQuestion(question.name)}
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 mr-4"
+                          disabled={isSaving}
+                        >
+                          <FiTrash2 className="h-5 w-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <div className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                 {questionSearchQuery ? 'No matching questions found' : 'No questions added yet'}

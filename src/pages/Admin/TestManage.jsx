@@ -21,43 +21,166 @@ const TestManage = () => {
   const [testTitle, setTestTitle] = useState('');
   const [duration, setDuration] = useState(60);
   const [isSaving, setIsSaving] = useState(false);
+  // Initialize state with default values
+  const [questionsPerType, setQuestionsPerType] = useState({
+    mcq: 0,
+    programming: 0,
+    sql: 0,
+    other: 0
+  });
 
-  // Fetch test data
-  useEffect(() => {
-    if (!testId) {
-      setLoading(false);
-      return;
-    }
+  // Categorize questions
+  const getQuestionCategories = useCallback((questions = []) => {
+    const categories = {
+      mcq: { name: 'MCQ', count: 0, selected: 0 },
+      programming: { name: 'programming', count: 0, selected: 0 },
+      sql: { name: 'SQL', count: 0, selected: 0 },
+      other: { name: 'Other', count: 0, selected: 0 }
+    };
 
-    const testRef = ref(database, `Exam/${testId}`);
-    const unsubscribe = onValue(testRef, async (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        // Fetch students separately
-        const { eligibleStudents, enrolledStudents } = await fetchStudents(testId);
+    if (!questions || typeof questions !== 'object') return categories;
 
-        setTest({
-          id: testId,
-          ...data,
-          Eligible: eligibleStudents,
-          Properties: data.Properties || { status: 'NotStarted' },
-          Progress: data.Progress || {}
-        });
+    // Get all question types
+    const questionTypes = Object.values(questions);
 
-        // Update local state
-        setTestTitle(data.name || '');
-        setDuration(data.duration || 60);
-      } else {
-        setTest(null);
+    // Count total questions by type
+    questionTypes.forEach(type => {
+      const typeStr = String(type || '').toLowerCase();
+
+      if (typeStr === 'mcq') {
+        categories.mcq.count++;
+      } else if (typeStr === 'programming' || typeStr === 'programming') {
+        categories.programming.count++;
+      } else if (typeStr === 'sql') {
+        categories.sql.count++;
+      } else if (typeStr) {
+        categories.other.count++;
       }
-      setLoading(false);
-    }, (error) => {
-      setError(error);
-      setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [testId]);
+    // Count selected questions (assuming selected questions are stored in test.selectedQuestions)
+    if (test?.selectedQuestions) {
+      const selectedTypes = Object.values(test.selectedQuestions).map(q =>
+        String(q.type || '').toLowerCase()
+      );
+
+      selectedTypes.forEach(type => {
+        if (type === 'mcq') categories.mcq.selected++;
+        else if (type === 'programming' || type === 'programming') categories.programming.selected++;
+        else if (type === 'sql') categories.sql.selected++;
+        else if (type) categories.other.selected++;
+      });
+    }
+
+    return categories;
+  }, []);
+
+  // Calculate question statistics
+  const questionStats = useMemo(() => {
+    if (!test?.questions) return { total: 0, categories: {} };
+
+    const categories = getQuestionCategories(test.questions);
+    const total = Object.values(categories).reduce((sum, cat) => sum + cat.count, 0);
+
+    return { total, categories };
+  }, [test?.questions, getQuestionCategories]);
+
+  // Initialize questionsPerType only once when test data is first loaded
+  useEffect(() => {
+    if (test?.configure?.questionsPerType) {
+      // Use the configuration from the test object
+      const config = test.configure.questionsPerType;
+      setQuestionsPerType({
+        mcq: Number(config.mcq) || 0,
+        programming: Number(config.programming) || 0,
+        sql: Number(config.sql) || 0,
+        other: Number(config.other) || 0
+      });
+    } else if (test?.questions) {
+      // Initialize with default values if no config exists
+      const defaultValues = {
+        mcq: 0,
+        programming: 0,
+        sql: 0,
+        other: 0
+      };
+      setQuestionsPerType(defaultValues);
+      
+      // Save default config to Firebase if it doesn't exist
+      const saveDefaultConfig = async () => {
+        try {
+          await set(ref(database, `Exam/${testId}/configure`), {
+            questionsPerType: defaultValues,
+            updatedAt: Date.now()
+          });
+        } catch (error) {
+          console.error('Error saving default config:', error);
+        }
+      };
+      saveDefaultConfig();
+    }
+  }, [test?.questions, test?.configure?.questionsPerType, testId]);
+
+  // Fetch test data and configuration
+  useEffect(() => {
+    const fetchTestData = async () => {
+      try {
+        const testRef = ref(database, `Exam/${testId}`);
+        const testSnapshot = await get(testRef);
+
+        if (testSnapshot.exists()) {
+          const testData = testSnapshot.val();
+          setTest(testData);
+          
+          // Calculate question statistics
+          const stats = getQuestionCategories(testData.questions);
+          setQuestionStats(stats);
+
+          // Set duration if available
+          if (testData.duration) {
+            setDuration(testData.duration);
+          }
+
+          // Load saved configuration if exists
+          const configRef = ref(database, `Exam/${testId}/configure`);
+          const configSnapshot = await get(configRef);
+          
+          if (configSnapshot.exists() && configSnapshot.val().questionsPerType) {
+            const savedConfig = configSnapshot.val().questionsPerType;
+            // Update questionsPerType state with saved values
+            const updatedQuestionsPerType = {
+              mcq: Number(savedConfig.mcq) || 0,
+              programming: Number(savedConfig.programming) || 0,
+              sql: Number(savedConfig.sql) || 0,
+              other: Number(savedConfig.other) || 0
+            };
+            
+            setQuestionsPerType(updatedQuestionsPerType);
+            
+            // Update test data with the loaded config
+            setTest(prev => ({
+              ...prev,
+              configure: {
+                questionsPerType: updatedQuestionsPerType,
+                updatedAt: configSnapshot.val().updatedAt || Date.now()
+              }
+            }));
+          }
+        } else {
+          console.error('Test not found');
+          setTest(null);
+        }
+      } catch (error) {
+        console.error('Error fetching test data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (testId) {
+      fetchTestData();
+    }
+  }, [testId, getQuestionCategories]);
 
   // Fetch students
   const fetchStudents = async (testId) => {
@@ -129,9 +252,55 @@ const TestManage = () => {
     }
   }, [test, testTitle, handleSaveTest]);
 
+  // Function to handle question type changes
+  const handleQuestionTypeChange = useCallback(async (key, value, max) => {
+    const numValue = Math.min(parseInt(value) || 0, max);
+    
+    // Optimistically update local state
+    setQuestionsPerType(prev => {
+      const newState = {
+        ...prev,
+        [key]: numValue
+      };
+      
+      // Update Firebase in the background
+      const updateFirebase = async () => {
+        try {
+          await set(ref(database, `Exam/${testId}/configure`), {
+            questionsPerType: newState,
+            updatedAt: Date.now()
+          });
+          
+          // Update the test state with the new configuration
+          setTest(prevTest => ({
+            ...prevTest,
+            configure: {
+              ...prevTest?.configure,
+              questionsPerType: newState,
+              updatedAt: Date.now()
+            }
+          }));
+        } catch (error) {
+          console.error('Error updating question configuration:', error);
+          toast.error('Failed to update configuration');
+          
+          // Revert local state on error
+          setQuestionsPerType(prev => ({
+            ...prev,
+            [key]: prev[key]
+          }));
+        }
+      };
+      
+      updateFirebase();
+      
+      return newState;
+    });
+  }, [testId]);
+
   if (loading) {
     return (
-      <LoadingPage message="Loading test, please wait..."/>
+      <LoadingPage message="Loading test, please wait..." />
     );
   }
 
@@ -213,7 +382,7 @@ const TestManage = () => {
 
               <div className="hidden md:flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200">
-                  {test?.questions?.length || 0} Questions
+                  {Object.keys(test?.questions || {}).length} Questions
                 </span>
               </div>
             </div>
@@ -280,6 +449,123 @@ const TestManage = () => {
               </p>
             </div>
             <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:p-6">
+              {/* Question Summary */}
+              <div className="mb-8">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                  Question Summary
+                </h3>
+                <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Questions</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {Object.keys(test?.questions || {}).length}
+                      </p>
+                    </div>
+                    {Object.entries(questionStats.categories).map(([key, category]) => (
+                      category.count > 0 && (
+                        <div key={key} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                            {category.name} Questions
+                            {category.selected > 0 && (
+                              <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+                                {category.selected} selected
+                              </span>
+                            )}
+                          </p>
+                          <div className="mt-1">
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                              {category.count}
+                              <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
+                                ({(() => {
+                                  const totalQuestions = Object.keys(test?.questions || {}).length || 1;
+                                  const percentage = (category.count / totalQuestions) * 100;
+                                  return Math.round(percentage) + '%';
+                                })()})
+                              </span>
+                            </p>
+                            {category.selected > 0 && (
+                              <div className="mt-1">
+                                <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-600">
+                                  <div
+                                    className="bg-blue-600 h-2 rounded-full"
+                                    style={{ width: `${(category.selected / category.count) * 100}%` }}
+                                  ></div>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                  {category.selected} of {category.count} selected ({Math.round((category.selected / category.count) * 100)}%)
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Question Configuration */}
+              <div className="mb-8">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                  Question Configuration
+                </h3>
+                <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <div className="space-y-4">
+                    {Object.entries(questionStats.categories).map(([key, category]) => (
+                      category.count > 0 && (
+                        <div key={key} className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {category.name} Questions
+                              <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                (Max: {category.count} available)
+                              </span>
+                            </p>
+                            {category.selected > 0 && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {category.selected} currently selected
+                              </p>
+                            )}
+                          </div>
+                          <select
+                            value={questionsPerType[key] || 0}
+                            onChange={(e) => handleQuestionTypeChange(key, e.target.value, category.count)}
+                            className="mt-1 block w-24 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                          >
+                            {Array.from({ length: category.count + 1 }, (_, i) => i).map(num => (
+                              <option key={num} value={num}>
+                                {num}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                      {isSaving ? (
+                        <span className="flex items-center">
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Saving...
+                        </span>
+                      ) : (
+                        <span className="text-green-500">
+                          <svg className="h-4 w-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Changes saved
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                   <label htmlFor="test-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">

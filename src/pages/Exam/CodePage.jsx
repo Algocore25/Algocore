@@ -515,10 +515,18 @@ function CodePage({ question }) {
 
 
   const saveTimeoutRef = useRef(null); // Reference to track the debounce timer
-
-
-  // Monaco Editor layout fix
   const editorRef = useRef(null);
+  const resizeObserverRef = useRef(null);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+    };
+  }, []);
+
   function handleEditorDidMount(editor) {
     editorRef.current = editor;
 
@@ -527,37 +535,44 @@ function CodePage({ question }) {
       resizeObserverRef.current.disconnect();
     }
 
-       // Disable Copy (Ctrl + C)
-       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-        const copyDisabled = getItemWithExpiry("copyDisabled");
-        console.log(copyDisabled)
-        if (copyDisabled === null) {
-          toast.error("Copy disabled!", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-          setItemWithExpiry("copyDisabled", true, 5000);
+    // Initialize new ResizeObserver
+    resizeObserverRef.current = new ResizeObserver(() => {
+      if (editorRef.current) {
+        editorRef.current.layout();
+      }
+    });
 
-          return;
-        }
+    // Observe the editor container
+    const editorContainer = editor.getContainerDomNode();
+    if (editorContainer) {
+      resizeObserverRef.current.observe(editorContainer);
+    }
 
-        
-      });
+    // Disable Copy (Ctrl + C)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+      const copyDisabled = getItemWithExpiry("copyDisabled");
+      if (copyDisabled === null) {
+        toast.error("Copy disabled!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setItemWithExpiry("copyDisabled", true, 5000);
+        return;
+      }
+    });
 
-      // Disable Paste (Ctrl + V)
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-        const pasteDisabled = getItemWithExpiry("pasteDisabled");
-        if (pasteDisabled === null) {
-          toast.error("Paste disabled!", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-          setItemWithExpiry("pasteDisabled", true, 5000);
-          return;
-        }
-
-        
-      });
+    // Disable Paste (Ctrl + V)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+      const pasteDisabled = getItemWithExpiry("pasteDisabled");
+      if (pasteDisabled === null) {
+        toast.error("Paste disabled!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setItemWithExpiry("pasteDisabled", true, 5000);
+        return;
+      }
+    });
   }
   useEffect(() => {
     if (editorRef.current) {

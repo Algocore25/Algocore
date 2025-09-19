@@ -35,8 +35,37 @@ function CodePage({ data, navigation }) {
   const { theme } = useTheme();
   const [questionData, setQuestionData] = useState(null);
   const [courseData, setCourseData] = useState(null);
-  const [testCasesrun, setTestCases] = useState([]);
+  const [testCasesrun, setTestCases] = useState([{ input: '', expectedOutput: '' }]);
   const [allowlanguages, setallowlanguages] = useState([]);
+  const inputRef = useRef(null);
+  const outputRef = useRef(null);
+
+  const adjustTextareaHeight = (element) => {
+    if (element) {
+      // Force reflow to ensure scrollHeight is accurate
+      element.style.height = 'auto';
+      // Set height to scrollHeight, but ensure it's at least 80px and at most 200px
+      const newHeight = Math.min(200, Math.max(80, element.scrollHeight));
+      element.style.height = newHeight + 'px';
+    }
+  };
+
+  useEffect(() => {
+    // Use a small timeout to ensure the DOM is fully updated
+    const timer = setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+      }
+      if (outputRef.current) {
+        outputRef.current.style.height = 'auto';
+        outputRef.current.style.height = outputRef.current.scrollHeight + 'px';
+      }
+    }, 10);
+    
+    return () => clearTimeout(timer);
+  }, [testCaseTab, testCasesrun, activeTab]);
+
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0); // New state to trigger submission refresh
 
@@ -837,30 +866,44 @@ function CodePage({ data, navigation }) {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
-                            <input
-                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
-                              type="text"
+                            <textarea
+                              ref={inputRef}
+                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
                               value={testCasesrun[testCaseTab]?.input || ''}
                               onChange={e => {
                                 const updated = [...testCasesrun];
                                 updated[testCaseTab].input = e.target.value;
                                 setTestCases(updated);
+                                // Force update height after state update
+                                requestAnimationFrame(() => {
+                                  adjustTextareaHeight(e.target);
+                                });
                               }}
-                              placeholder="e.g., aabbccdd"
+                              onInput={e => adjustTextareaHeight(e.target)}
+                              placeholder="Enter input (supports multiple lines)"
+                              rows={1}
+                              style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
                             />
                           </div>
                           <div>
                             <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
-                            <input
-                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
-                              type="text"
+                            <textarea
+                              ref={outputRef}
+                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
                               value={testCasesrun[testCaseTab]?.expectedOutput || ''}
                               onChange={e => {
                                 const updated = [...testCasesrun];
                                 updated[testCaseTab].expectedOutput = e.target.value;
                                 setTestCases(updated);
+                                // Force update height after state update
+                                requestAnimationFrame(() => {
+                                  adjustTextareaHeight(e.target);
+                                });
                               }}
-                              placeholder="e.g., 7"
+                              onInput={e => adjustTextareaHeight(e.target)}
+                              placeholder="Enter expected output (supports multiple lines)"
+                              rows={1}
+                              style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
                             />
                           </div>
                         </div>

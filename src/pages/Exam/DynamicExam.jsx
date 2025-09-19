@@ -154,13 +154,67 @@ const DynamicExam = () => {
         const isCompleted = await checkExamStatus();
         if (isCompleted) return;
 
-        // Load questions
+
+        const myquestions = await get(ref(database, `Exam/${testid}/myquestions/${user.uid}`));
+
+        if (myquestions.exists()) {
+          setQuestions(myquestions.val());
+        }
+        else
+        {
+
+               // Load questions
         const questionRef = ref(database, `Exam/${testid}/questions`);
         const questionSnapshot = await get(questionRef);
-
-        if (questionSnapshot.exists()) {
-          setQuestions(questionSnapshot.val());
+        
+        if (!questionSnapshot.exists()) {
+          console.error('No questions found for this test');
+          return;
         }
+
+        const allQuestions = questionSnapshot.val();
+        const questionConfig = await get(ref(database, `Exam/${testid}/configure/questionsPerType`));
+        
+        if (!questionConfig.exists()) {
+          console.error('No question configuration found');
+          return;
+        }
+
+        const config = questionConfig.val();
+        let selectedQuestions = [];
+        const questionList = Object.entries(allQuestions);
+        
+        // Select questions by type based on config
+        for (const [type, count] of Object.entries(config)) {
+          const availableQuestions = questionList.filter(([id, qType]) => qType.toLowerCase() === type.toLowerCase());
+          
+          const questionsToSelect = Math.min(count, availableQuestions.length);
+          const selectedIndices = Array.from({ length: questionsToSelect }, () => Math.floor(Math.random() * availableQuestions.length));
+          
+          selectedQuestions = [
+            ...selectedQuestions,
+            ...selectedIndices.map((index) => availableQuestions[index][0])
+          ];
+
+          console.log(availableQuestions);
+
+          console.log(selectedQuestions);
+
+          
+        }
+
+        // Save selected questions to user's test
+        if (selectedQuestions.length > 0) {
+          await set(ref(database, `Exam/${testid}/myquestions/${user.uid}`), selectedQuestions);
+          setQuestions(selectedQuestions);
+        } else {
+          console.error('No questions selected based on configuration');
+        }
+
+        }
+   
+
+
 
         await checkviolation();
 
