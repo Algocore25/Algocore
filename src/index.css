@@ -33,6 +33,24 @@
   .btn-secondary {
     @apply text-[#4285F4] hover:bg-[#4285F4]/10;
   }
+
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+      linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-attachment: fixed;
+    opacity: 0.8;
+  }
+
+  .dark .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, #334155 1px, transparent 1px),
+      linear-gradient(to bottom, #334155 1px, transparent 1px);
+    background-size: 50px 50px;
+    background-attachment: fixed;
+    opacity: 0.2;
+  }
 }
 
 @keyframes slideUp {

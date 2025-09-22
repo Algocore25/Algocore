@@ -36,7 +36,7 @@ const DynamicComponent = () => {
   // Fetch question data from Firebase
   useEffect(() => {
 
-    
+
 
     const fetchData = async () => {
       try {
@@ -45,9 +45,9 @@ const DynamicComponent = () => {
           database,
           `questions/${questionId}`);
 
-          const statusRef = ref(
-            database,
-            `AlgoCore/${course}/lessons/${subcourse}/status`);
+        const statusRef = ref(
+          database,
+          `AlgoCore/${course}/lessons/${subcourse}/status`);
 
         // Get both question data and all questions in parallel
         const [questionSnapshot, statusSnapshot] = await Promise.all([
@@ -87,7 +87,7 @@ const DynamicComponent = () => {
         if (questionSnapshot.exists()) {
           const questions = questionSnapshot.val();
           console.log('Raw questions data:', questions);
-          
+
           // Handle different data structures
           let questionsList;
           if (Array.isArray(questions)) {
@@ -100,7 +100,7 @@ const DynamicComponent = () => {
             console.error('Unexpected questions data structure:', questions);
             questionsList = [];
           }
-          
+
           console.log('Processed questions list:', questionsList);
           setAllQuestions(questionsList);
 
@@ -118,7 +118,7 @@ const DynamicComponent = () => {
     fetchData();
     fetchDataQuestions();
 
-    if( questionId === "CpuVisual" ) {
+    if (questionId === "CpuVisual") {
       setData({
         type: "CpuVisual"
       })
@@ -134,7 +134,7 @@ const DynamicComponent = () => {
     console.log('Previous button clicked');
     console.log('Current index:', currentQuestionIndex);
     console.log('All questions:', allQuestions);
-    
+
     if (currentQuestionIndex > 0) {
       const prevQuestion = allQuestions[currentQuestionIndex - 1];
       console.log('Navigating to previous question:', prevQuestion);
@@ -151,7 +151,7 @@ const DynamicComponent = () => {
     console.log('Next button clicked');
     console.log('Current index:', currentQuestionIndex);
     console.log('All questions:', allQuestions);
-    
+
     if (currentQuestionIndex < allQuestions.length - 1) {
       const nextQuestion = allQuestions[currentQuestionIndex + 1];
       console.log('Navigating to next question:', nextQuestion);
@@ -166,7 +166,7 @@ const DynamicComponent = () => {
 
   if (loading) return <LoadingPage />;
 
-  if (!data ) return <LoadingPage message="Slow internet, loading...." />;
+  if (!data) return <LoadingPage message="Slow internet, loading...." />;
 
   // Navigation props to pass to child components
   const navigationProps = {
@@ -178,7 +178,7 @@ const DynamicComponent = () => {
     NavigationIcons
   };
 
-  if(status === "blocked") {
+  if (status === "blocked") {
     return <LoadingPage message="This topic is blocked" />;
   }
 
@@ -186,43 +186,41 @@ const DynamicComponent = () => {
     <div className="relative">
       {data.type === "Programming" && <CodePage data={data} navigation={navigationProps} />}
       {data.type === "MCQ" && <MCQPage data={data} />}
-      { data.type === "CpuVisual" && <CpuApp />}
+      {data.type === "CpuVisual" && <CpuApp />}
       {/* Add more conditional components as needed */}
-      
+
       {/* Navigation Buttons - Only show for MCQ since CodePage handles its own */}
-      { (data.type === "MCQ"|| data.type === "CpuVisual") && allQuestions.length > 1 && (
+      {(data.type === "MCQ" || data.type === "CpuVisual") && allQuestions.length > 1 && (
         <div className="fixed bottom-6 right-6 flex gap-3 z-50">
           <button
             onClick={handlePreviousQuestion}
             // disabled={currentQuestionIndex === 0}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 shadow-lg ${
-              // currentQuestionIndex === 0
-              false
+              currentQuestionIndex === 0
                 ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl transform hover:scale-105'
-            }`}
+              }`}
           >
             <NavigationIcons.ChevronLeft />
-            Previous
+            {currentQuestionIndex === 0 ? 'Previous Chapter' : 'Previous'}
           </button>
-          
+
           <button
             onClick={handleNextQuestion}
             // disabled={currentQuestionIndex === allQuestions.length - 1}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 shadow-lg ${
-              // currentQuestionIndex === allQuestions.length - 1
-              false
+              currentQuestionIndex === allQuestions.length - 1
                 ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl transform hover:scale-105'
-            }`}
+              }`}
           >
-            Next
+            {currentQuestionIndex === allQuestions.length - 1 ? 'Next Chapter' : 'Next'}
             <NavigationIcons.ChevronRight />
           </button>
         </div>
       )}
-      
-    
+
+
     </div>
   );
 };

@@ -22,6 +22,64 @@ const CoursePage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // Local storage keys per course
+  const openTopicKey = `coursePageOpenTopic:${course}`;
+  const scrollKey = `coursePageScroll:${course}`;
+
+  // Restore open topic from localStorage (once on course change)
+  useEffect(() => {
+    const savedOpen = localStorage.getItem(openTopicKey);
+    if (savedOpen !== null) {
+      const idx = parseInt(savedOpen, 10);
+      if (!Number.isNaN(idx)) setOpenTopic(idx);
+    }
+  }, [course]);
+
+  // Persist open topic whenever it changes
+  useEffect(() => {
+    if (openTopic === null || openTopic === undefined) {
+      localStorage.removeItem(openTopicKey);
+    } else {
+      localStorage.setItem(openTopicKey, String(openTopic));
+    }
+  }, [openTopic, openTopicKey]);
+
+  // Restore scroll position after data loads
+  useEffect(() => {
+    if (!loading) {
+      const savedY = localStorage.getItem(scrollKey);
+      if (savedY !== null) {
+        const y = parseInt(savedY, 10);
+        if (!Number.isNaN(y)) {
+          // Defer to ensure layout is ready
+          requestAnimationFrame(() => window.scrollTo(0, y));
+        }
+      }
+    }
+  }, [loading, scrollKey]);
+
+  // Track and persist scroll position (throttled via rAF)
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(() => {
+          try {
+            localStorage.setItem(scrollKey, String(window.scrollY || window.pageYOffset || 0));
+          } catch (e) {
+            // ignore storage failures
+          } finally {
+            ticking = false;
+          }
+        });
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [scrollKey]);
+
 
   const fetchUserProgress = async () => {
 
@@ -144,6 +202,13 @@ const CoursePage = () => {
     return total > 0 ? Math.round((completed / total) * 100) : 0;
   };
 
+  const calculateTopicProgress = (topic) => {
+    const total = topic?.problems?.length || 0;
+    const completed = (topic?.problems || []).filter(p => p.status === 'Completed').length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, percent };
+  };
+
 
 
   useEffect(() => {
@@ -172,7 +237,7 @@ const CoursePage = () => {
         const updatedTopics = updateProblemStatusesWithProgress(topics, progress);
         setPracticeTopics(updatedTopics);
 
-        // 👇 Set the % value
+        // Set the % value
         const progressVal = calculateProgressPercent(updatedTopics);
         setProgressPercent(progressVal);
 
@@ -262,87 +327,90 @@ const CoursePage = () => {
 
             <h2 className="text-2xl font-bold mb-4">Problems</h2>
             <div className="space-y-4">
-              {practiceTopics.map((topic, index) => (
-                <div key={index} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
-                  <div
-                    className="p-4 flex justify-between items-center cursor-pointer"
-                    onClick={() => setOpenTopic(openTopic === index ? null : index)}
-                  >
-                    <div className="flex items-center">
-                      <div className="bg-gray-100 dark:bg-dark-tertiary rounded-full w-10 h-10 flex items-center justify-center mr-4 font-bold text-lg">{index + 1}</div>
-                      <div>
-                        <h3 className="font-semibold text-lg">{topic.title.replace(/^[^a-zA-Z]*([a-zA-Z].*)$/, '$1')}</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{topic.description}</p>
+              {practiceTopics.map((topic, index) => {
+                const { total, completed, percent } = calculateTopicProgress(topic);
+                return (
+                  <div key={index} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
+                    <div
+                      className="p-4 flex justify-between items-center cursor-pointer"
+                      onClick={() => setOpenTopic(openTopic === index ? null : index)}
+                    >
+                      <div className="flex items-center">
+                        <div className="bg-gray-100 dark:bg-dark-tertiary rounded-full w-10 h-10 flex items-center justify-center mr-4 font-bold text-lg">{index + 1}</div>
+                        <div>
+                          <h3 className="font-semibold text-lg">{topic.title.replace(/^[^a-zA-Z]*([a-zA-Z].*)$/, '$1')}</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{topic.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="hidden sm:block">
+                          <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div className="bg-blue-600 h-2 rounded-full transition-all duration-500" style={{ width: `${percent}%` }}></div>
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-right">{completed}/{total}</div>
+                        </div>
+                        <span className="text-sm text-gray-600 dark:text-gray-300 sm:hidden">{percent}%</span>
+                        <FaChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${openTopic === index ? 'rotate-180' : ''}`} />
                       </div>
                     </div>
-                    <FaChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${openTopic === index ? 'rotate-180' : ''}`} />
-                  </div>
-                  {openTopic === index && topic.problems.length > 0 && (
-                    <div className="border-t border-gray-200 dark:border-dark-tertiary">
-                      <table className="w-full text-left text-sm">
-                        <thead className="text-gray-500 dark:text-gray-400">
-                          <tr>
-                            <th className="p-4 font-medium">Problem Name</th>
-                            <th className="p-4 font-medium">Status</th>
-                            <th className="p-4 font-medium">Difficulty</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {topic.problems.map((problem, pIndex) => (
-                            <tr 
-                              key={pIndex} 
-                              className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked' ? 'opacity-60' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
-                            >
-                              <td
-                                className={`p-4 flex items-center ${topic.status === 'blocked' 
-                                  ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' 
-                                  : 'text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'}`}
-                                onClick={() => {
-                                  if (topic.status !== 'blocked') {
-                                    navigate(`/problem/${course}/${topic.title}/${problem.name}`);
-                                  }
-                                }}
-                              >
-                                {problem.status === 'Completed' && (
-                                  <FaCheck className="text-green-500 mr-2" />
-                                )}
-                                {problem.name}
-                                {topic.status === 'blocked' && (
-                                  <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded">
-                                    Locked
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-4">
-                                <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                  }`}>
-                                  {problem.status}
-                                </span>
-                              </td>
-                              <td className="p-4 text-green-600 dark:text-green-400">{problem.difficulty}</td>
+                    {openTopic === index && topic.problems.length > 0 && (
+                      <div className="border-t border-gray-200 dark:border-dark-tertiary">
+                        <table className="w-full text-left text-sm">
+                          <thead className="text-gray-500 dark:text-gray-400">
+                            <tr>
+                              <th className="p-4 font-medium">Problem Name</th>
+                              <th className="p-4 font-medium">Status</th>
+                              <th className="p-4 font-medium">Difficulty</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ))}
+                          </thead>
+                          <tbody>
+                            {topic.problems.map((problem, pIndex) => (
+                              <tr 
+                                key={pIndex} 
+                                className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked' ? 'opacity-60' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
+                              >
+                                <td
+                                  className={`p-4 flex items-center ${topic.status === 'blocked' 
+                                    ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' 
+                                    : 'text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'}`}
+                                  onClick={() => {
+                                    if (topic.status !== 'blocked') {
+                                      navigate(`/problem/${course}/${topic.title}/${problem.name}`);
+                                    }
+                                  }}
+                                >
+                                  {problem.status === 'Completed' && (
+                                    <FaCheck className="text-green-500 mr-2" />
+                                  )}
+                                  {problem.name}
+                                  {topic.status === 'blocked' && (
+                                    <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded">
+                                      Locked
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-4">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                    }`}>
+                                    {problem.status}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-green-600 dark:text-green-400">{problem.difficulty}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="space-y-8">
-            {/* <div className="bg-white dark:bg-dark-tertiary p-6 rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
-              <div className="flex items-start">
-                <FaAward className="w-10 h-10 text-yellow-500 mr-4" />
-                <div>
-                  <h3 className="font-bold">Earn certificate after completing all the problems.</h3>
-                </div>
-              </div>
-            </div> */}
-          </div>
+          
         </div>
       </div>
     </div>

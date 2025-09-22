@@ -62,7 +62,7 @@ function CodePage({ data, navigation }) {
         outputRef.current.style.height = outputRef.current.scrollHeight + 'px';
       }
     }, 10);
-    
+
     return () => clearTimeout(timer);
   }, [testCaseTab, testCasesrun, activeTab]);
 
@@ -70,7 +70,7 @@ function CodePage({ data, navigation }) {
   const [submissionTrigger, setSubmissionTrigger] = useState(0); // New state to trigger submission refresh
 
   const { course, subcourse, questionId } = useParams();
-  const {user} = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   // Refs for cleanup and debouncing
@@ -135,15 +135,15 @@ function CodePage({ data, navigation }) {
       const { input, expectedOutput } = testCases[i];
       const { run: result } = await executeCode(selectedLanguage, code, input);
 
-       // regex
+      // regex
 
-       if (questionData.testcases[2]?.input === "regex2") {
+      if (questionData.testcases[2]?.input === "regex2") {
         const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
         console.log(result.output);
         console.log(questionData.testcases[2]?.expectedOutput);
         const regex = new RegExp(
           // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-/^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/            );
+          /^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
         console.log(regex.test(result.output))
         updatedResults[i] = {
           input,
@@ -156,7 +156,7 @@ function CodePage({ data, navigation }) {
         await new Promise(res => setTimeout(res, 300));
         continue;
       }
-      if (questionData.testcases[2] ?.input === "regex") {
+      if (questionData.testcases[2]?.input === "regex") {
         const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
         console.log(result.output);
         console.log(questionData.testcases[2]?.expectedOutput);
@@ -248,8 +248,8 @@ function CodePage({ data, navigation }) {
         const { input: testInput, expectedOutput } = testCases[i];
         try {
           const { run: result } = await executeCode(selectedLanguage, code, testInput);
-          
-         
+
+
 
 
 
@@ -265,7 +265,7 @@ function CodePage({ data, navigation }) {
             console.log(result.output);
             console.log(questionData.testcases[2]?.expectedOutput);
             const regex = new RegExp(
-/^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/            );
+              /^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
             console.log(regex.test(result.output))
             updatedResults[i] = {
               input: testInput,
@@ -281,7 +281,7 @@ function CodePage({ data, navigation }) {
               setTestCaseTab(i);
             }
           }
-          else if (questionData.testcases[2] ?.input === "regex") {
+          else if (questionData.testcases[2]?.input === "regex") {
             const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
             console.log(result.output);
             console.log(questionData.testcases[2]?.expectedOutput);
@@ -365,17 +365,17 @@ function CodePage({ data, navigation }) {
             status: 'done',
             isFirstFailure: !firstFailureShown
           };
-          
+
           if (!firstFailureShown) {
             firstFailureShown = true;
             // Auto-expand the first failed test case
             setTestCaseTab(i);
           }
         }
-        
+
         // Update UI after each test case
         setTestResults([...updatedResults]);
-        
+
         // Small delay to show test cases running one by one
         await new Promise(resolve => setTimeout(resolve, 300));
       }
@@ -513,10 +513,15 @@ function CodePage({ data, navigation }) {
           const question = questionSnapshot.val();
           console.log('question', question.type)
 
-          setTestCases([
-            { input: question?.testcases[0].input, expectedOutput: question?.testcases[0].expectedOutput },
-            { input: question?.testcases[1].input, expectedOutput: question?.testcases[1].expectedOutput }
-          ]);
+          const testCases = [
+            { input: question?.testcases[0]?.input, expectedOutput: question?.testcases[0]?.expectedOutput },
+            ...(question?.testcases[1]?.expectedOutput
+              ? [{ input: question?.testcases[1]?.input, expectedOutput: question?.testcases[1]?.expectedOutput }]
+              : [])
+          ];
+
+          setTestCases(testCases);
+
 
           console.log(question);
           setQuestionData(question);
@@ -540,55 +545,55 @@ function CodePage({ data, navigation }) {
       resizeObserverRef.current.disconnect();
     }
 
-       // Disable Copy (Ctrl + C)
-       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-        const copyDisabled = getItemWithExpiry("copyDisabled");
-        console.log(copyDisabled)
-        if (copyDisabled === null) {
-          toast.error("Copy disabled!", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-          setItemWithExpiry("copyDisabled", true, 5000);
+    // Disable Copy (Ctrl + C)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+      const copyDisabled = getItemWithExpiry("copyDisabled");
+      console.log(copyDisabled)
+      if (copyDisabled === null) {
+        toast.error("Copy disabled!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setItemWithExpiry("copyDisabled", true, 5000);
 
-          return;
-        }
-
-        
-      });
-  
-      // Disable Paste (Ctrl + V)
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-        const pasteDisabled = getItemWithExpiry("pasteDisabled");
-        if (pasteDisabled === null) {
-          toast.error("Paste disabled!", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-          setItemWithExpiry("pasteDisabled", true, 5000);
-          return;
-        }
-
-        
-      });
-  
-      editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
-        const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
-        if (shiftInsertDisabled === null) {
-          toast.error("Shift insert disabled!😭", {
-            position: "top-right",
-            autoClose: 3000,
-          });
-          setItemWithExpiry("shiftInsertDisabled", true, 5000);
-
-          return;
-        }
-
-        
-      });
+        return;
+      }
 
 
-       // 🚫 2. Remove Paste from Right-Click Menu
+    });
+
+    // Disable Paste (Ctrl + V)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+      const pasteDisabled = getItemWithExpiry("pasteDisabled");
+      if (pasteDisabled === null) {
+        toast.error("Paste disabled!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setItemWithExpiry("pasteDisabled", true, 5000);
+        return;
+      }
+
+
+    });
+
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
+      const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
+      if (shiftInsertDisabled === null) {
+        toast.error("Shift insert disabled!😭", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setItemWithExpiry("shiftInsertDisabled", true, 5000);
+
+        return;
+      }
+
+
+    });
+
+
+    // 🚫 2. Remove Paste from Right-Click Menu
     editor.updateOptions({
       contextmenu: false, // Disables right-click menu
     });
@@ -599,7 +604,7 @@ function CodePage({ data, navigation }) {
       alert("Pasting is completely disabled!");
     };
 
-  
+
 
     // Create new ResizeObserver with proper error handling
     resizeObserverRef.current = new ResizeObserver((entries) => {
@@ -807,12 +812,16 @@ function CodePage({ data, navigation }) {
                   </pre>
                 </div>
 
-                <div className="mt-6">
-                  <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
-                  <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                    {questionData?.Example[1]}
-                  </pre>
-                </div>
+                {questionData?.Example[1] && (
+                  <div className="mt-6">
+                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
+                    <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
+                      {questionData?.Example[1]}
+                    </pre>
+                  </div>
+                )}
+
+
 
                 <div className="mt-6">
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
@@ -1011,6 +1020,14 @@ function CodePage({ data, navigation }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-auto">
         <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-end gap-6">
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setCode(languageTemplates[selectedLanguage] || '')}
+              title="Reset to initial code"
+              className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
+            >
+              <Icons.History className="w-3 h-3" />
+              Reset
+            </button>
             <select
               className="bg-white dark:bg-dark-secondary text-gray-900 dark:text-white border border-gray-300 dark:border-dark-tertiary rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#4285F4] focus:border-transparent"
               value={selectedLanguage}
@@ -1023,17 +1040,18 @@ function CodePage({ data, navigation }) {
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <button
               onClick={runCode}
-              className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors duration-150"
+              className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
             >
               <Icons.Play />
               Run Code
             </button>
+
             <button
               onClick={handleSubmit2}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors duration-150"
+              className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
             >
               <Icons.ChevronRight />
               Submit
@@ -1045,7 +1063,7 @@ function CodePage({ data, navigation }) {
                 <button
                   onClick={navigation.onPrevious}
                   // disabled={navigation.currentQuestionIndex === 0}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === 0 || false
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium text-[11px] transition-all duration-200 ${navigation.currentQuestionIndex === 0 || false
                     ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
                     }`}
@@ -1057,12 +1075,12 @@ function CodePage({ data, navigation }) {
                 <button
                   onClick={navigation.onNext}
                   // disabled={navigation.currentQuestionIndex === navigation.totalQuestions - 1}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${navigation.currentQuestionIndex === navigation.totalQuestions - 1 || false
-                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium text-[11px] transition-all duration-200 ${navigation.currentQuestionIndex === navigation.totalQuestions - 1 || false
+                    ? 'bg-red-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
                     }`}
                 >
-                  Next
+                  {navigation.currentQuestionIndex === navigation.totalQuestions - 1 ? 'Next Chapter' : 'Next'}
                   <navigation.NavigationIcons.ChevronRight />
                 </button>
               </>

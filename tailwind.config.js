@@ -8,6 +8,7 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      
       colors: {
         gray: {
           900: '#1D1E23', // dark primary

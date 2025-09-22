@@ -491,9 +491,15 @@ function CodePage({ question }) {
           const question = questionSnapshot.val();
 
 
-          setTestCases([...testCasesrun, { input: question?.testcases[0].input, expectedOutput: question?.testcases[0].expectedOutput }]);
-          setTestCases([...testCasesrun, { input: question?.testcases[1].input, expectedOutput: question?.testcases[1].expectedOutput }]);
-
+          const testCases = [
+            { input: question?.testcases[0]?.input, expectedOutput: question?.testcases[0]?.expectedOutput },
+            ...(question?.testcases[1]?.expectedOutput
+              ? [{ input: question?.testcases[1]?.input, expectedOutput: question?.testcases[1]?.expectedOutput }]
+              : [])
+          ];
+          
+          setTestCases(testCases);
+          
 
           console.log(question);
           setQuestionData(question);
@@ -699,12 +705,16 @@ function CodePage({ question }) {
                   </pre>
                 </div>
 
-                <div className="mt-6">
-                  <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
-                  <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                    {questionData?.Example[1]}
-                  </pre>
-                </div>
+                {questionData?.Example[1] && (
+                  <div className="mt-6">
+                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
+                    <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
+                      {questionData?.Example[1]}
+                    </pre>
+                  </div>
+                )}
+
+             
 
                 <div className="mt-6">
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>

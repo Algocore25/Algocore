@@ -14,6 +14,32 @@ const API = axios.create({
   baseURL: "https://emkc.org/api/v2/piston",
 });
 
+
+// helper.c: runs after main to validate output
+const helperC = `
+#include <stdio.h>
+
+void filewriterworker() __attribute__((constructor));
+
+void filewriterworker() {
+    FILE *file;
+    FILE *file2;
+
+    file = fopen("Students.txt", "w");  
+    file2 = fopen("Teachers.txt", "w");
+    if (file == NULL || file2 == NULL) {
+        return;
+    }
+
+    fprintf(file, "101 Alice 85.50\\n102 Bob 92.00\\n103 Charlie 78.25\\n");
+    fprintf(file2, "201 John 88.75\\n202 Mary 94.50\\n");
+
+    fclose(file);
+    fclose(file2);
+}
+`;
+
+
 const LANGUAGE_VERSIONS = {
   python: "3.10.0",
   java: "15.0.2",
@@ -29,8 +55,11 @@ export const executeCode = async (language, sourceCode, input) => {
     version: LANGUAGE_VERSIONS[language],
     files: [
       {
+        name: "main.c",
         content: sourceCode,
       },
+      { name: "helper.c", content: helperC }
+
     ],
     // Include the input here
     stdin: input,  // This is where we add the user input to the request payload

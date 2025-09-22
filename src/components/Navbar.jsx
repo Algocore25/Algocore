@@ -42,11 +42,11 @@ const Navbar = () => {
   if (loading) return null;
 
   const matched = pathMappings
-  .map(({ pattern, label }) => {
-    const match = matchPath(pattern, location.pathname);
-    return match ? { pattern, label, params: match.params } : null;
-  })
-  .find(Boolean);
+    .map(({ pattern, label }) => {
+      const match = matchPath(pattern, location.pathname);
+      return match ? { pattern, label, params: match.params } : null;
+    })
+    .find(Boolean);
 
   const menuItems = [
     { label: 'Home', href: '/' },
@@ -61,12 +61,13 @@ const Navbar = () => {
 
   const [questionData, setQuestionData] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
+  const [progressMap, setProgressMap] = useState({}); // { [questionName]: true }
   const [match, setMatch] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
-    
+
     const fetchQuestionData = async () => {
       const pathMatch = matchPath("/problem/:course/:subcourse/:questionId", location.pathname);
       setMatch(pathMatch);
@@ -80,7 +81,7 @@ const Navbar = () => {
       }
 
       const { course, subcourse, questionId } = pathMatch.params;
-      
+
       if (isMounted) {
         setIsLoading(true);
       }
@@ -91,32 +92,50 @@ const Navbar = () => {
         const snapshot = await get(questionRef);
         console.log(snapshot.val()["lessons"][subcourse.replaceAll("%20", " ")]["questions"]);
         console.log(subcourse);
-        
+
         if (!isMounted) return;
 
         if (snapshot.exists()) {
           const questions = snapshot.val() || [];
           // Convert to array if it's an object
           const questionsArray = questions["lessons"][subcourse.replaceAll("%20", " ")]["questions"];
-          
+
           setQuestionData(questionsArray);
-          
+
           // Find the index of the current question
           const index = questionsArray.findIndex(q => q === questionId || (q && q === questionId.replaceAll("%20", " ")));
           setCurrentIndex(index);
-          
+
+          // Fetch user progress for this subcourse to color dots
+          try {
+            if (user) {
+              const decodedSub = subcourse.replaceAll("%20", " ");
+              const progressRef = ref(database, `userprogress/${user.uid}/${course}/${decodedSub}`);
+              const progressSnap = await get(progressRef);
+              const prog = progressSnap.exists() ? (progressSnap.val() || {}) : {};
+              if (isMounted) setProgressMap(prog);
+            } else {
+              if (isMounted) setProgressMap({});
+            }
+          } catch (e) {
+            console.error('Error fetching user progress for navbar dots:', e);
+            if (isMounted) setProgressMap({});
+          }
+
           console.log('Questions:', questionsArray);
           console.log('Current Question ID:', questionId);
           console.log('Found at index:', index);
         } else {
           setQuestionData([]);
           setCurrentIndex(-1);
+          setProgressMap({});
         }
       } catch (error) {
         console.error("Error fetching questions:", error);
         if (isMounted) {
           setQuestionData([]);
           setCurrentIndex(-1);
+          setProgressMap({});
         }
       } finally {
         if (isMounted) {
@@ -131,7 +150,7 @@ const Navbar = () => {
     return () => {
       isMounted = false;
     };
-  }, [location.pathname ]);
+  }, [location.pathname, user]);
 
 
   useEffect(() => {
@@ -192,7 +211,7 @@ const Navbar = () => {
     <nav className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-dark-secondary border-b border-gray-200 dark:border-dark-tertiary z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <Link to= {matched?.label || '/'} className="flex items-center gap-2">
+          <Link to={matched?.label || '/'} className="flex items-center gap-2">
             <img src={theme === 'dark' ? logoDark : logoLight} alt="AlgoCore Logo" className="h-8 w-auto" />
             <span className="text-xl font-bold text-[#202124] dark:text-white">AlgoCore</span>
           </Link>
@@ -216,12 +235,33 @@ const Navbar = () => {
         <div className="flex items-center gap-4">
 
           {match && questionData.length > 0 && currentIndex >= 0 && (
-            <div className="w-48 mr-4">
-              <PercentageBar 
-                label={`Question ${currentIndex + 1} of ${questionData.length}`} 
-                percentage={((currentIndex + 1) / questionData.length) * 100} 
-                color="#3b82f6"
-              />
+            <div className="mr-4 max-w-xs">
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                  {currentIndex + 1}/{questionData.length}
+                </div>
+                <div className="flex items-center gap-1 overflow-x-auto">
+                  {questionData.map((q, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className={`w-2.5 h-2.5 rounded-full transition-colors flex-shrink-0 ${i === currentIndex
+                        ? 'bg-blue-500'
+                        : (progressMap && progressMap[q] === true)
+                          ? 'bg-green-500'
+                          : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                        }`}
+                      aria-label={`Go to question ${i + 1}`}
+                      title={`Question ${i + 1}`}
+                      onClick={() => {
+                        const { course, subcourse } = match.params;
+                        const target = encodeURIComponent(q);
+                        navigate(`/problem/${course}/${subcourse}/${target}`);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -335,7 +375,7 @@ function PercentageBar({ label = '', percentage = 0, color = '#3b82f6', height =
     <div className="w-full">
       {label && <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">{label}</div>}
       <div className="relative w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden" style={{ height }}>
-        <div 
+        <div
           className="h-full flex items-center justify-end pr-2 text-xs font-medium text-white transition-all duration-300 ease-out"
           style={{
             width: `${safePercentage}%`,
