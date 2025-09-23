@@ -5,7 +5,7 @@ import { languageTemplates } from '../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { database } from "../../firebase";
-import { ref, get, set, child } from "firebase/database";
+import { ref, get, set, child, onValue, off } from "firebase/database";
 
 
 
@@ -29,11 +29,21 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 
-const Exam2 = ({ Questions, startTime, onExamComplete, duration }) => {
+const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName }) => {
 
     const { testid } = useParams();
-
+    const [answeredQuestions, setAnsweredQuestions] = useState({});
     const [activeTab, setActiveTab] = useState('description');
+
+
+    
+
+
+
+
+
+
+
     const [timeLeft, setTimeLeft] = useState(() => {
 
         console.log(startTime);
@@ -61,6 +71,33 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration }) => {
     const { user } = useAuth();
 
 
+
+
+    useEffect(() => {
+        if (!user || !testid) return;
+
+        const answersRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/`);
+
+        // Set up the real-time listener
+        const unsubscribe = onValue(answersRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const answers = snapshot.val();
+                setAnsweredQuestions(answers || {});
+            }
+        }, (error) => {
+            console.error("Error in real-time listener:", error);
+        });
+
+        // Clean up the listener when the component unmounts or dependencies change
+        return () => {
+            off(answersRef, 'value');
+        };
+    }, [testid, user]);
+
+
+
+
+    
     // Handle question change
     const handleQuestionChange = useCallback((index) => {
 
@@ -211,7 +248,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration }) => {
                             </svg>
                         </button>
                         <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-                            {'Coding Exam'}
+                            {examName}
                         </h1>
                         <span className="text-sm text-gray-500 dark:text-gray-400">
                             Question {activeQuestion + 1} of {Questions.length}
@@ -289,9 +326,12 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration }) => {
                                                     }`}>
                                                     {index + 1}
                                                 </span>
-                                                <span className="truncate">
-                                                    {question.title || `Question ${index + 1}`}
+                                                <span className="truncate flex-1">
+                                                    {question}
                                                 </span>
+                                                {answeredQuestions[question] && (
+                                                    <FiCheckCircle className="ml-2 flex-shrink-0 text-green-500" />
+                                                )}
                                             </div>
                                         </button>
                                     ))}

@@ -101,7 +101,7 @@ function CodePage({ question }) {
 
       // regex
 
-      if (questionData.testcases[2].input === "regex2") {
+      if (questionData?.testcases[2]?.input === "regex2") {
         const passed = result.output.match(questionData.testcases[2].expectedOutput);
         console.log(result.output);
         console.log(questionData.testcases[2].expectedOutput);
@@ -121,7 +121,7 @@ function CodePage({ question }) {
         await new Promise(res => setTimeout(res, 300));
         continue;
       }
-      if (questionData.testcases[2].input === "regex") {
+      if (questionData?.testcases[2]?.input === "regex") {
         const passed = result.output.match(questionData.testcases[2].expectedOutput);
         console.log(result.output);
         console.log(questionData.testcases[2].expectedOutput);
@@ -213,21 +213,8 @@ function CodePage({ question }) {
         try {
           const { run: result } = await executeCode(selectedLanguage, code, testInput);
 
-
-
-
-
-
-
-
-
-
-
-
-
           // regex
-
-          if (questionData.testcases[2].input === "regex2") {
+          if (questionData?.testcases[2]?.input === "regex2") {
             const passed = result.output.match(questionData.testcases[2].expectedOutput);
             console.log(result.output);
             console.log(questionData.testcases[2].expectedOutput);
@@ -250,10 +237,10 @@ function CodePage({ question }) {
               setTestCaseTab(i);
             }
           }
-          else if (questionData.testcases[2].input === "regex") {
-            const passed = result.output.match(questionData.testcases[2].expectedOutput);
+          else if (questionData?.testcases[2]?.input === "regex") {
+            const passed = result.output.match(questionData?.testcases[2]?.expectedOutput);
             console.log(result.output);
-            console.log(questionData.testcases[2].expectedOutput);
+            console.log(questionData?.testcases[2]?.expectedOutput);
             const regex = new RegExp(
               /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
             console.log(regex.test(result.output))

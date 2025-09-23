@@ -37,6 +37,21 @@ function MCQPage({ data }) {
 
   const { course, subcourse, questionId } = useParams();
 
+  const convertDriveUrl = (url) => {
+    if (!url) return url;
+
+    // Check if it's a Google Drive URL
+    const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch) {
+      const fileId = driveMatch[1];
+      // Convert to direct image URL format
+      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+
+    // Return original URL if it's not a Drive URL
+    return url;
+  };
+
   useEffect(() => {
     // Reset state when question changes
     setSelectedOption(null);
@@ -50,7 +65,7 @@ function MCQPage({ data }) {
           if (snapshot.exists()) {
             const userAnswer = snapshot.val();
             // Set the actual user's selected option, not the correct answer
-            setSelectedOption(data.correctAnswer-1);
+            setSelectedOption(data.correctAnswer - 1);
             // console.log(userAnswer.selectedOption);
             setIsSubmitted(true);
           }
@@ -67,7 +82,7 @@ function MCQPage({ data }) {
       setSelectedOption(null);
       setIsSubmitted(false);
     };
-  }, [user, course, subcourse, questionId , data]);
+  }, [user, course, subcourse, questionId, data]);
 
   const handleSubmit2 = async () => {
     if (selectedOption === null || !user || !course || !subcourse || !questionId || !data) return;
@@ -140,6 +155,19 @@ function MCQPage({ data }) {
                     <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
                       {data.question}
                     </p>
+                    {data?.darkimageurl&& (
+                      <div className="mb-4">
+                        <img
+                          src={  theme === 'dark' ? data.darkimageurl : data.lightimageurl}
+                          alt="Question diagram"
+                          className="max-w-full h-auto rounded-lg border border-gray-200 dark:border-gray-700"
+                          onError={(e) => {
+                            console.error('Failed to load image. Original URL:', data.imageurl);
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {isSubmitted && (

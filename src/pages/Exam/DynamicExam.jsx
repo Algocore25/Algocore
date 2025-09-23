@@ -23,6 +23,8 @@ const DynamicExam = () => {
 
   const { user } = useAuth();
 
+  const [examName, setExamName] = useState(null);
+
   // Function to check exam status
   const checkExamStatus = async () => {
     try {
@@ -156,6 +158,10 @@ const DynamicExam = () => {
         // Check exam status first
         const isCompleted = await checkExamStatus();
         if (isCompleted) return;
+
+        const examname = await get(ref(database, `Exam/${testid}/name`));
+
+        setExamName(examname.val());
 
 
         const myquestions = await get(ref(database, `Exam/${testid}/myquestions/${user.uid}`));
@@ -417,6 +423,7 @@ const DynamicExam = () => {
             onExamComplete={markExamCompleted} // Pass the completion handler
             startTime={startTime}
             duration={duration}
+            examName={examName}
           />
         </>
       )}

@@ -62,6 +62,9 @@ export default function AdminResult() {
           const answersSnapshot = await get(answersRef);
           const answers = answersSnapshot.val() || {};
 
+
+          console.log(answers);
+
           // Get student info
           const userRef = ref(database, `users/${studentId}`);
           const userSnapshot = await get(userRef);
@@ -76,7 +79,7 @@ export default function AdminResult() {
           for (const questionId of questionIds) {
             const questionKey = studentQuestions[questionId];
             const questionType = ExamQuestions[questionKey] || 'mcq';
-            const isCorrect = answers[questionId]?.isCorrect === true;
+            const isCorrect = answers[questionKey] === "true";
             if (isCorrect) correctCount++;
 
             let codeData = null;
