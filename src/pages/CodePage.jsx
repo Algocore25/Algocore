@@ -545,52 +545,52 @@ function CodePage({ data, navigation }) {
       resizeObserverRef.current.disconnect();
     }
 
-    // Disable Copy (Ctrl + C)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-      const copyDisabled = getItemWithExpiry("copyDisabled");
-      console.log(copyDisabled)
-      if (copyDisabled === null) {
-        toast.error("Copy disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("copyDisabled", true, 5000);
+    // // Disable Copy (Ctrl + C)
+    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+    //   const copyDisabled = getItemWithExpiry("copyDisabled");
+    //   console.log(copyDisabled)
+    //   if (copyDisabled === null) {
+    //     toast.error("Copy disabled!", {
+    //       position: "top-right",
+    //       autoClose: 3000,
+    //     });
+    //     setItemWithExpiry("copyDisabled", true, 5000);
 
-        return;
-      }
-
-
-    });
-
-    // Disable Paste (Ctrl + V)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-      const pasteDisabled = getItemWithExpiry("pasteDisabled");
-      if (pasteDisabled === null) {
-        toast.error("Paste disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("pasteDisabled", true, 5000);
-        return;
-      }
+    //     return;
+    //   }
 
 
-    });
+    // });
 
-    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
-      const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
-      if (shiftInsertDisabled === null) {
-        toast.error("Shift insert disabled!😭", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("shiftInsertDisabled", true, 5000);
+    // // Disable Paste (Ctrl + V)
+    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+    //   const pasteDisabled = getItemWithExpiry("pasteDisabled");
+    //   if (pasteDisabled === null) {
+    //     toast.error("Paste disabled!", {
+    //       position: "top-right",
+    //       autoClose: 3000,
+    //     });
+    //     setItemWithExpiry("pasteDisabled", true, 5000);
+    //     return;
+    //   }
 
-        return;
-      }
+
+    // });
+
+    // editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
+    //   const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
+    //   if (shiftInsertDisabled === null) {
+    //     toast.error("Shift insert disabled!😭", {
+    //       position: "top-right",
+    //       autoClose: 3000,
+    //     });
+    //     setItemWithExpiry("shiftInsertDisabled", true, 5000);
+
+    //     return;
+    //   }
 
 
-    });
+    // });
 
 
     // 🚫 2. Remove Paste from Right-Click Menu
