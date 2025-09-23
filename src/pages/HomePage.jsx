@@ -242,9 +242,9 @@ function HomePage() {
         )}
       </main>
 
-      {/* <div className="relative z-10 w-full">
+      <div className="relative z-10 w-full">
         <Footer />
-      </div> */}
+      </div>
     </div>
   );
 }
