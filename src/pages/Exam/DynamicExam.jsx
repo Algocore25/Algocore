@@ -112,8 +112,11 @@ const DynamicExam = () => {
         await set(violationRef, violation);
       }
 
+      const currstage = ref(database, `Exam/${testid}/Properties2/Progress/${user.uid}/stage`);
+      const currstageSnapshot = await get(currstage);
+
       // Check if the exam should be blocked
-      if (violation >= 2) {
+      if (violation >= 2 &&  currstageSnapshot.val() != "completed" ) {
         markExamBlocked();
       }
     };
@@ -184,23 +187,64 @@ const DynamicExam = () => {
         let selectedQuestions = [];
         const questionList = Object.entries(allQuestions);
         
-        // Select questions by type based on config
+        // Create a map to track used question IDs
+        const usedQuestionIds = new Set();
+        let hasInsufficientQuestions = false;
+        
+        // First, validate we have enough questions for each type
         for (const [type, count] of Object.entries(config)) {
-          const availableQuestions = questionList.filter(([id, qType]) => qType.toLowerCase() === type.toLowerCase());
+          const availableQuestions = questionList
+            .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+            .filter(([id]) => !usedQuestionIds.has(id));
+            
+          if (availableQuestions.length < count) {
+            console.warn(`Warning: Not enough questions of type ${type}. Requested: ${count}, Available: ${availableQuestions.length}`);
+            hasInsufficientQuestions = true;
+          }
+        }
+        
+        // If we don't have enough questions, adjust the config to use what's available
+        const effectiveConfig = hasInsufficientQuestions 
+          ? Object.fromEntries(
+              Object.entries(config).map(([type, count]) => {
+                const availableQuestions = questionList
+                  .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+                  .filter(([id]) => !usedQuestionIds.has(id));
+                return [type, Math.min(count, availableQuestions.length)];
+              })
+            )
+          : config;
+        
+        // Now select questions based on the effective config
+        for (const [type, count] of Object.entries(effectiveConfig)) {
+          if (count <= 0) continue;
           
-          const questionsToSelect = Math.min(count, availableQuestions.length);
-          const selectedIndices = Array.from({ length: questionsToSelect }, () => Math.floor(Math.random() * availableQuestions.length));
+          // Get available questions of this type that haven't been selected yet
+          const availableQuestions = questionList
+            .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+            .filter(([id]) => !usedQuestionIds.has(id));
+            
+          if (availableQuestions.length === 0) {
+            console.warn(`No available questions of type ${type} after filtering`);
+            continue;
+          }
           
+          // Shuffle and select the required number of questions
+          const shuffled = [...availableQuestions]
+            .sort(() => Math.random() - 0.5);
+          
+          const selected = shuffled.slice(0, count);
+          
+          // Add selected questions to our results
           selectedQuestions = [
             ...selectedQuestions,
-            ...selectedIndices.map((index) => availableQuestions[index][0])
+            ...selected.map(([id]) => id)
           ];
-
-          console.log(availableQuestions);
-
-          console.log(selectedQuestions);
-
           
+          // Mark these questions as used
+          selected.forEach(([id]) => usedQuestionIds.add(id));
+          
+          console.log(`Selected ${selected.length} questions of type ${type}`);
         }
 
         // Save selected questions to user's test

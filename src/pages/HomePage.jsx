@@ -114,8 +114,8 @@ function HomePage() {
     <div className="min-h-screen flex flex-col bg-white dark:bg-gray-900">
       {/* Grid Background */}
       <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern dark:bg-dark-grid-pattern bg-20"></div>
-        {/* Animated Background Elements */}
-        <div className="absolute inset-0 overflow-hidden">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-20 left-10 w-20 h-20 bg-blue-200 rounded-full opacity-20 animate-pulse"></div>
         <div className="absolute top-40 right-20 w-16 h-16 bg-purple-200 rounded-full opacity-30 animate-pulse"></div>
         <div className="absolute bottom-40 left-20 w-12 h-12 bg-green-200 rounded-full opacity-25 animate-pulse"></div>
@@ -211,13 +211,18 @@ function HomePage() {
                       </button>
                     </div>
                   ))}
+
               </div>
+
             )}
+
+
           </section>
         )}
 
         {/* Languages Section - Only show when user is not logged in */}
         {!user && (
+
           <section className="w-full max-w-5xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
             <h2 className="text-3xl font-bold text-center text-gray-800 dark:text-white mb-12">
               Learn in Your Favorite Language
@@ -237,9 +242,9 @@ function HomePage() {
         )}
       </main>
 
-      <div className="relative z-10 w-full">
+      {/* <div className="relative z-10 w-full">
         <Footer />
-      </div>
+      </div> */}
     </div>
   );
 }
