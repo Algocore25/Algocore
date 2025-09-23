@@ -2,14 +2,6 @@ import React from 'react';
 import { FaCode, FaGraduationCap, FaChartLine, FaUsers, FaLightbulb, FaShieldAlt } from 'react-icons/fa';
 
 const AboutPage = () => {
-  // Background elements
-  const backgroundElements = [
-    { top: '20%', left: '10%', size: 'w-20 h-20', color: 'bg-blue-200' },
-    { top: '40%', right: '10%', size: 'w-16 h-16', color: 'bg-purple-200' },
-    { bottom: '40%', left: '15%', size: 'w-12 h-12', color: 'bg-green-200' },
-    { bottom: '60%', right: '20%', size: 'w-24 h-24', color: 'bg-yellow-200' },
-  ];
-
   const features = [
     {
       icon: <FaCode className="w-8 h-8 text-indigo-600" />,
@@ -36,24 +28,7 @@ const AboutPage = () => {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 relative overflow-hidden">
-      {/* Grid Pattern Background */}
-      <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern dark:bg-dark-grid-pattern bg-20"></div>
-      
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {backgroundElements.map((element, index) => (
-          <div 
-            key={index}
-            className={`absolute ${element.top} ${element.left || ''} ${element.right || ''} 
-                       ${element.size} ${element.color} rounded-full opacity-20 animate-pulse`}
-            style={{
-              animationDelay: `${index * 2}s`,
-              animationDuration: '8s'
-            }}
-          ></div>
-        ))}
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-indigo-800 to-purple-700 text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -98,7 +73,7 @@ const AboutPage = () => {
             </h2>
             <div className="w-20 h-1 bg-indigo-600 mx-auto"></div>
           </div>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
               <div key={index} className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300">
@@ -117,7 +92,7 @@ const AboutPage = () => {
         </div>
       </div>
 
-    
+
     </div>
   );
 };
