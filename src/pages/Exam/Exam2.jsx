@@ -29,7 +29,7 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 
-const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName }) => {
+const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName,setviolation ,setIsViolationReady }) => {
 
     const { testid } = useParams();
     const [answeredQuestions, setAnsweredQuestions] = useState({});
@@ -128,18 +128,26 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName }) => 
     }, [handleQuestionChange]);
 
 
-    const submitExam = () => {
-
-        const examRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
-
-        set(examRef, "completed")
-            .then(() => {
-                alert("Exam submitted successfully!");
-            })
-            .catch((error) => {
-                console.error("Error submitting exam:", error);
-                alert("There was an error submitting the exam.");
-            });
+    const submitExam = async () => {
+        try {
+            // First, mark the exam as completed in Firebase
+            const examRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
+            await set(examRef, "completed");
+            
+            // Then update the local violation state
+            setviolation(0);
+            setIsViolationReady(false);
+            
+            // Also update the stage to prevent blocking
+            const stageRef = ref(database, `Exam/${testid}/Properties2/Progress/${user.uid}/`);
+            await set(stageRef, 0);
+            
+            alert("Exam submitted successfully!");
+            onExamComplete && onExamComplete();
+        } catch (error) {
+            console.error("Error submitting exam:", error);
+            alert("There was an error submitting the exam. Please try again.");
+        }
     };
 
 

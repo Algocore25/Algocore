@@ -124,6 +124,7 @@ const DynamicExam = () => {
 
       // Check if the exam should be blocked
       if (violation >= 2 && currstageSnapshot.val() != "completed") {
+        console.log(currstageSnapshot.val());
         markExamBlocked();
       }
     };
@@ -588,8 +589,10 @@ const DynamicExam = () => {
 
       {stage === "exam" && (
         <>
-          <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} />
+          <FullscreenTracker violation={violation} setviolation={setviolation} setIsViolationReady={setIsViolationReady} isViolationReady={isViolationReady} testid={testid} />
           <Exam2
+            setviolation={setviolation}
+            setIsViolationReady={setIsViolationReady}
             Questions={Questions}
             onExamComplete={markExamCompleted} // Pass the completion handler
             startTime={startTime}

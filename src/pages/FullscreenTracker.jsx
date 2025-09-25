@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import screenfull from "screenfull";
 
-const FullscreenTracker = ( { violation , setviolation, testid} ) => {
+const FullscreenTracker = ( { violation , setviolation, isViolationReady ,testid} ) => {
   const containerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [exitCount, setExitCount] = useState(0);
@@ -28,8 +28,9 @@ const FullscreenTracker = ( { violation , setviolation, testid} ) => {
     const onChange = () => {
       const fs = screenfull.isFullscreen;
       setIsFullscreen(fs);
-      if (!fs) 
+      if (!fs || !isViolationReady) 
       {
+        console.log("violation updated");
         setviolation(violation + 1);
         setExitCount((prev) => prev + 1);
       }
@@ -44,8 +45,11 @@ const FullscreenTracker = ( { violation , setviolation, testid} ) => {
   useEffect(() => {
     const handleBlur = () => {
       blurStartRef.current = Date.now();
-      setviolation(violation + 1);
-      setSwitchCount((prev) => prev + 1);
+      if (!isViolationReady) 
+      {
+        setviolation(violation + 1);
+        setSwitchCount((prev) => prev + 1);
+      }
     };
 
     const handleFocus = () => {
@@ -73,8 +77,12 @@ const FullscreenTracker = ( { violation , setviolation, testid} ) => {
         e.clientX >= window.innerWidth ||
         e.clientY >= window.innerHeight
       ) {
-        setHoverLeaveCount((prev) => prev + 1);
-        hoverLeaveStartRef.current = Date.now();
+        if (!isViolationReady) 
+        {
+          setviolation(violation + 1);
+          setHoverLeaveCount((prev) => prev + 1);
+          hoverLeaveStartRef.current = Date.now();
+        }
       }
     };
 
