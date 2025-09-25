@@ -36,7 +36,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName }) => 
     const [activeTab, setActiveTab] = useState('description');
 
 
-    
+
 
 
 
@@ -51,12 +51,12 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName }) => 
 
         if (!startTime) return null;
 
-    
-
-        const examDuration = 60*duration;
 
 
-        
+        const examDuration = 60 * duration;
+
+
+
         const start = new Date(startTime);
         const now = new Date();
         console.log('Start Time:', start);
@@ -97,7 +97,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName }) => 
 
 
 
-    
+
     // Handle question change
     const handleQuestionChange = useCallback((index) => {
 

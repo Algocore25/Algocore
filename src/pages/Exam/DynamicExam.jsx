@@ -37,6 +37,11 @@ const DynamicExam = () => {
 
       if (statusSnapshot.exists()) {
         const statusData = statusSnapshot.val();
+        // If exam is completed
+        if (statusData.status === "completed" || statusData.completed === true) {
+          setStage("completed");
+          return true;
+        }
 
         // If exam is blocked
         if (statusData.status === "blocked") {
@@ -44,11 +49,7 @@ const DynamicExam = () => {
           return true;
         }
 
-        // If exam is completed
-        if (statusData.status === "completed" || statusData.completed === true) {
-          setStage("completed");
-          return true;
-        }
+
 
         console.log(statusData);
 
@@ -326,6 +327,7 @@ const DynamicExam = () => {
     if (stage === "exam") {
       checkDuration();
     }
+
   }, [stage]);
 
   const startExam = async () => {
@@ -382,7 +384,7 @@ const DynamicExam = () => {
   // Function to fetch exam results
   const fetchResults = async () => {
     if (!user?.uid) return;
-    
+
     setLoadingResults(true);
     try {
       // Get student's assigned questions
@@ -421,8 +423,8 @@ const DynamicExam = () => {
       }
 
       // Calculate score percentage
-      const score = questionIds.length > 0 
-        ? Math.round((correctCount / questionIds.length) * 100) 
+      const score = questionIds.length > 0
+        ? Math.round((correctCount / questionIds.length) * 100)
         : 0;
 
       setResults({
@@ -456,7 +458,20 @@ const DynamicExam = () => {
     try {
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
       await set(statusRef, "blocked");
+      const examstatus = ref(database, `Exam/${testid}/Properties/status`);
+      const examstatusSnapshot = await get(examstatus);
+      if (examstatusSnapshot.val() === "Completed") {
+
+        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
+        await set(statusRef, "completed");
+
+        setStage("completed");
+        fetchResults();
+        return;
+      }
+      console.log("2 my block")
       setStage("blocked");
+
     } catch (error) {
       console.error("Error marking exam as blocked:", error);
     }
@@ -715,7 +730,7 @@ const DynamicExam = () => {
                 <span className="font-medium">{user?.name || 'User'}</span>, you have completed <span className="font-semibold">{examName}</span>.
               </p>
             </div>
-            
+
             {loadingResults ? (
               <div className="py-8 text-center">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-green-500 border-r-transparent"></div>
@@ -726,7 +741,7 @@ const DynamicExam = () => {
                 {/* Results Summary */}
                 <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-6 space-y-4">
                   <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 text-center">Your Results</h3>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                     <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow">
                       <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Score</p>
@@ -747,7 +762,7 @@ const DynamicExam = () => {
                       </p>
                     </div>
                   </div>
-                  
+
                   {results.questions && (
                     <div className="mt-4">
                       <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">Question Breakdown</h4>
@@ -755,11 +770,10 @@ const DynamicExam = () => {
                         {results.questions.map((q, index) => (
                           <span
                             key={index}
-                            className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-medium ${
-                              q.correct
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
-                            }`}
+                            className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-medium ${q.correct
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                              : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                              }`}
                             title={`Question ${index + 1}: ${q.type} (${q.correct ? 'Correct' : 'Incorrect'})`}
                           >
                             {index + 1}
@@ -769,7 +783,7 @@ const DynamicExam = () => {
                     </div>
                   )}
                 </div>
-                
+
                 {/* Test Summary */}
                 {configdata && (
                   <div className="space-y-3">
@@ -794,17 +808,11 @@ const DynamicExam = () => {
                 <p className="text-gray-500 dark:text-gray-400">Unable to load results. Please check your dashboard later.</p>
               </div>
             )}
-            
+
             <div className="pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                 You can view these results in your dashboard at any time.
               </p>
-              <button
-                onClick={() => window.location.href = '/dashboard'}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200"
-              >
-                Go to Dashboard
-              </button>
             </div>
           </div>
         </div>

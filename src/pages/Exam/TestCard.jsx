@@ -33,8 +33,9 @@ const TestCard = ({ test, onStart }) => {
 
         {status === "Completed" && (
                     <button
+                    onClick={() => onStart(test.id)}
+
             className="w-full bg-green-500 dark:bg-green-600 text-white py-2 px-4 rounded-md cursor-not-allowed"
-            disabled
           >
             Completed
           </button>
