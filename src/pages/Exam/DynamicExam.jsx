@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 
 import FullscreenTracker from "../FullscreenTracker";
 import LoadingPage from "../LoadingPage";
+import { User } from "lucide-react";
 
 const DynamicExam = () => {
   const [stage, setStage] = useState("loading"); // 'loading', 'instructions', 'exam', 'warning', 'completed', 'resume', 'blocked'
@@ -16,7 +17,8 @@ const DynamicExam = () => {
   const [violation, setviolation] = useState(null);
   const [isViolationReady, setIsViolationReady] = useState(false); // New state
 
-  const [ duration, setDuration] = useState(60*30); // New state
+  const [configdata, setConfigdata] = useState({});
+  const [duration, setDuration] = useState(60 * 30); // New state
   const containerRef = useRef(null);
 
   const { testid } = useParams();
@@ -24,6 +26,8 @@ const DynamicExam = () => {
   const { user } = useAuth();
 
   const [examName, setExamName] = useState(null);
+  const [results, setResults] = useState(null);
+  const [loadingResults, setLoadingResults] = useState(false);
 
   // Function to check exam status
   const checkExamStatus = async () => {
@@ -118,7 +122,7 @@ const DynamicExam = () => {
       const currstageSnapshot = await get(currstage);
 
       // Check if the exam should be blocked
-      if (violation >= 2 &&  currstageSnapshot.val() != "completed" ) {
+      if (violation >= 2 && currstageSnapshot.val() != "completed") {
         markExamBlocked();
       }
     };
@@ -157,11 +161,17 @@ const DynamicExam = () => {
       try {
         // Check exam status first
         const isCompleted = await checkExamStatus();
-        if (isCompleted) return;
+        // if (isCompleted) return;
+
+        fetchResults();
 
         const examname = await get(ref(database, `Exam/${testid}/name`));
 
         setExamName(examname.val());
+
+        const configdata = await get(ref(database, `Exam/${testid}/configure/questionsPerType`));
+        setConfigdata(configdata.val());
+        console.log(configdata.val());
 
 
         const myquestions = await get(ref(database, `Exam/${testid}/myquestions/${user.uid}`));
@@ -169,49 +179,48 @@ const DynamicExam = () => {
         if (myquestions.exists()) {
           setQuestions(myquestions.val());
         }
-        else
-        {
+        else {
 
-               // Load questions
-        const questionRef = ref(database, `Exam/${testid}/questions`);
-        const questionSnapshot = await get(questionRef);
-        
-        if (!questionSnapshot.exists()) {
-          console.error('No questions found for this test');
-          return;
-        }
+          // Load questions
+          const questionRef = ref(database, `Exam/${testid}/questions`);
+          const questionSnapshot = await get(questionRef);
 
-        const allQuestions = questionSnapshot.val();
-        const questionConfig = await get(ref(database, `Exam/${testid}/configure/questionsPerType`));
-        
-        if (!questionConfig.exists()) {
-          console.error('No question configuration found');
-          return;
-        }
-
-        const config = questionConfig.val();
-        let selectedQuestions = [];
-        const questionList = Object.entries(allQuestions);
-        
-        // Create a map to track used question IDs
-        const usedQuestionIds = new Set();
-        let hasInsufficientQuestions = false;
-        
-        // First, validate we have enough questions for each type
-        for (const [type, count] of Object.entries(config)) {
-          const availableQuestions = questionList
-            .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
-            .filter(([id]) => !usedQuestionIds.has(id));
-            
-          if (availableQuestions.length < count) {
-            console.warn(`Warning: Not enough questions of type ${type}. Requested: ${count}, Available: ${availableQuestions.length}`);
-            hasInsufficientQuestions = true;
+          if (!questionSnapshot.exists()) {
+            console.error('No questions found for this test');
+            return;
           }
-        }
-        
-        // If we don't have enough questions, adjust the config to use what's available
-        const effectiveConfig = hasInsufficientQuestions 
-          ? Object.fromEntries(
+
+          const allQuestions = questionSnapshot.val();
+          const questionConfig = await get(ref(database, `Exam/${testid}/configure/questionsPerType`));
+
+          if (!questionConfig.exists()) {
+            console.error('No question configuration found');
+            return;
+          }
+
+          const config = questionConfig.val();
+          let selectedQuestions = [];
+          const questionList = Object.entries(allQuestions);
+
+          // Create a map to track used question IDs
+          const usedQuestionIds = new Set();
+          let hasInsufficientQuestions = false;
+
+          // First, validate we have enough questions for each type
+          for (const [type, count] of Object.entries(config)) {
+            const availableQuestions = questionList
+              .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+              .filter(([id]) => !usedQuestionIds.has(id));
+
+            if (availableQuestions.length < count) {
+              console.warn(`Warning: Not enough questions of type ${type}. Requested: ${count}, Available: ${availableQuestions.length}`);
+              hasInsufficientQuestions = true;
+            }
+          }
+
+          // If we don't have enough questions, adjust the config to use what's available
+          const effectiveConfig = hasInsufficientQuestions
+            ? Object.fromEntries(
               Object.entries(config).map(([type, count]) => {
                 const availableQuestions = questionList
                   .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
@@ -219,50 +228,50 @@ const DynamicExam = () => {
                 return [type, Math.min(count, availableQuestions.length)];
               })
             )
-          : config;
-        
-        // Now select questions based on the effective config
-        for (const [type, count] of Object.entries(effectiveConfig)) {
-          if (count <= 0) continue;
-          
-          // Get available questions of this type that haven't been selected yet
-          const availableQuestions = questionList
-            .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
-            .filter(([id]) => !usedQuestionIds.has(id));
-            
-          if (availableQuestions.length === 0) {
-            console.warn(`No available questions of type ${type} after filtering`);
-            continue;
+            : config;
+
+          // Now select questions based on the effective config
+          for (const [type, count] of Object.entries(effectiveConfig)) {
+            if (count <= 0) continue;
+
+            // Get available questions of this type that haven't been selected yet
+            const availableQuestions = questionList
+              .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+              .filter(([id]) => !usedQuestionIds.has(id));
+
+            if (availableQuestions.length === 0) {
+              console.warn(`No available questions of type ${type} after filtering`);
+              continue;
+            }
+
+            // Shuffle and select the required number of questions
+            const shuffled = [...availableQuestions]
+              .sort(() => Math.random() - 0.5);
+
+            const selected = shuffled.slice(0, count);
+
+            // Add selected questions to our results
+            selectedQuestions = [
+              ...selectedQuestions,
+              ...selected.map(([id]) => id)
+            ];
+
+            // Mark these questions as used
+            selected.forEach(([id]) => usedQuestionIds.add(id));
+
+            console.log(`Selected ${selected.length} questions of type ${type}`);
           }
-          
-          // Shuffle and select the required number of questions
-          const shuffled = [...availableQuestions]
-            .sort(() => Math.random() - 0.5);
-          
-          const selected = shuffled.slice(0, count);
-          
-          // Add selected questions to our results
-          selectedQuestions = [
-            ...selectedQuestions,
-            ...selected.map(([id]) => id)
-          ];
-          
-          // Mark these questions as used
-          selected.forEach(([id]) => usedQuestionIds.add(id));
-          
-          console.log(`Selected ${selected.length} questions of type ${type}`);
-        }
 
-        // Save selected questions to user's test
-        if (selectedQuestions.length > 0) {
-          await set(ref(database, `Exam/${testid}/myquestions/${user.uid}`), selectedQuestions);
-          setQuestions(selectedQuestions);
-        } else {
-          console.error('No questions selected based on configuration');
-        }
+          // Save selected questions to user's test
+          if (selectedQuestions.length > 0) {
+            await set(ref(database, `Exam/${testid}/myquestions/${user.uid}`), selectedQuestions);
+            setQuestions(selectedQuestions);
+          } else {
+            console.error('No questions selected based on configuration');
+          }
 
         }
-   
+
 
 
 
@@ -279,7 +288,7 @@ const DynamicExam = () => {
     if (testid) fetchData();
 
     fetchDuration();
-    
+
   }, [testid]);
 
   useEffect(() => {
@@ -310,6 +319,7 @@ const DynamicExam = () => {
       const isExpired = await checkExamDuration();
       if (isExpired) {
         setStage("completed");
+        fetchResults();
       }
     };
 
@@ -369,6 +379,65 @@ const DynamicExam = () => {
     }
   };
 
+  // Function to fetch exam results
+  const fetchResults = async () => {
+    if (!user?.uid) return;
+    
+    setLoadingResults(true);
+    try {
+      // Get student's assigned questions
+      const studentQuestionsRef = ref(database, `Exam/${testid}/myquestions/${user.uid}`);
+      const studentQuestionsSnapshot = await get(studentQuestionsRef);
+      // const studentQuestions = studentQuestionsSnapshot.val() || {};
+      const questionIds = studentQuestionsSnapshot.val() || [];
+
+      // Get student's answers
+      const answersRef = ref(database, `ExamSubmissions/${testid}/${user.uid}`);
+      const answersSnapshot = await get(answersRef);
+      const answers = answersSnapshot.val() || {};
+
+
+      console.log(questionIds);
+      console.log(answers);
+
+      // Calculate score
+      let correctCount = 0;
+      const questionDetails = [];
+
+      for (const questionId of questionIds) {
+        const isCorrect = answers[questionId] === "true";
+        if (isCorrect) correctCount++;
+
+        // Get question type
+        const questionTypeRef = ref(database, `questions/${questionId}/type`);
+        const questionTypeSnapshot = await get(questionTypeRef);
+        const questionType = questionTypeSnapshot.val() || 'mcq';
+
+        questionDetails.push({
+          id: questionId,
+          correct: isCorrect,
+          type: questionType
+        });
+      }
+
+      // Calculate score percentage
+      const score = questionIds.length > 0 
+        ? Math.round((correctCount / questionIds.length) * 100) 
+        : 0;
+
+      setResults({
+        score,
+        correctCount,
+        totalQuestions: questionIds.length,
+        questions: questionDetails
+      });
+    } catch (error) {
+      console.error("Error fetching results:", error);
+    } finally {
+      setLoadingResults(false);
+    }
+  };
+
   // Function to mark exam as completed (call this from Exam2 component when exam is finished)
   const markExamCompleted = async () => {
     try {
@@ -376,6 +445,7 @@ const DynamicExam = () => {
       await set(statusRef, "completed");
       setExamStatus("completed");
       setStage("completed");
+      fetchResults();
     } catch (error) {
       console.error("Error marking exam as completed:", error);
     }
@@ -395,23 +465,109 @@ const DynamicExam = () => {
   return (
     <div ref={containerRef} className="h-screen bg-gray-100 dark:bg-gray-900">
       {stage === "loading" && (
-        <LoadingPage message="Loading exam, please wait..."/>
+        <LoadingPage message="Loading exam, please wait..." />
       )}
 
       {stage === "instructions" && (
-        <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-          <h1 className="text-3xl font-bold mb-6">Exam Instructions</h1>
-          <ul className="mb-6 text-left list-disc list-inside max-w-xl">
-            <li>This exam must be taken in full-screen mode.</li>
-            <li>Exiting full screen will show a warning.</li>
-            <li>Do not refresh or switch tabs.</li>
-          </ul>
-          <button
-            onClick={startExam}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            I Agree, Start Exam
-          </button>
+        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50 dark:bg-gray-900">
+          <div className="w-full max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+            {/* Header */}
+            <div className="bg-blue-600 dark:bg-blue-700 px-6 py-4">
+              <h1 className="text-2xl font-bold text-white">Exam Instructions</h1>
+              <p className="text-blue-100">Please read the instructions carefully before starting</p>
+            </div>
+
+            <div className="p-6 md:p-8">
+              {/* Exam Overview */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 mb-8">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{examName || 'Loading Exam...'}</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center">
+                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">Duration:</span> {duration ? `${Math.floor(duration / 60)} minutes` : 'Loading...'}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      <span className="text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">Questions:</span> {Questions?.length || 0} total
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Question Types:</h4>
+                    {configdata && (
+                      <div className="space-y-1">
+                        {Object.entries(configdata).map(([type, count]) => (
+                          count > 0 && (
+                            <div key={type} className="flex justify-between items-center">
+                              <span className="text-gray-700 dark:text-gray-300">{type}</span>
+                              <span className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-full">
+                                {count} {count === 1 ? 'question' : 'questions'}
+                              </span>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Important Instructions</h3>
+                <ul className="space-y-3 text-gray-700 dark:text-gray-300">
+                  <li className="flex items-start">
+                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span>This exam must be taken in full-screen mode. The test will automatically start in full-screen.</span>
+                  </li>
+                  <li className="flex items-start">
+                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>Exiting full screen will show a warning. Multiple violations may result in exam termination.</span>
+                  </li>
+                  <li className="flex items-start">
+                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                    </svg>
+                    <span>Do not refresh the page or switch tabs during the exam, as this may be flagged as suspicious activity.</span>
+                  </li>
+                  <li className="flex items-start">
+                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Your progress is automatically saved. You can resume the exam if you get disconnected.</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
+                <button
+                  onClick={startExam}
+                  className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                >
+                  <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Start Exam Now
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -433,9 +589,9 @@ const DynamicExam = () => {
           <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} />
           <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
             <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Fullscreen Exit Detected</h1>
-              <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
-              <p className="text-sm text-gray-500">Exiting fullscreen repeatedly may lead to blocking.</p>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{examName}</h1>
+              <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p>
+              <p className="text-sm text-gray-500">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
               <button
                 onClick={returnToFullScreen}
                 className="px-6 py-3 rounded-md font-semibold text-white transition-colors bg-red-600 hover:bg-red-700"
@@ -448,56 +604,208 @@ const DynamicExam = () => {
       )}
 
       {stage === "resume" && (
-        <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
-          <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Resume Your Test</h1>
-            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">Looks like you got interrupted. You can continue your test where you left off.</p>
-            <p className="text-sm text-gray-500">Your progress has been saved. Please enter fullscreen again to continue.</p>
+        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4">
+          <div className="w-full max-w-md mx-auto p-8 rounded-2xl shadow-xl bg-white dark:bg-gray-800 text-center space-y-8 transform transition-all duration-300 hover:shadow-2xl">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-yellow-100 dark:bg-yellow-900/30 mb-6">
+              <svg className="w-10 h-10 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+              </svg>
+            </div>
+
+            <div className="space-y-4">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Continue Your Test</h1>
+              <p className="text-gray-600 dark:text-gray-300">Your progress has been saved. You can continue from where you left off.</p>
+
+              {configdata && (
+                <div className="mt-6 space-y-3">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Test Summary</h3>
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 space-y-2">
+                    {Object.entries(configdata).map(([type, count]) => (
+                      count > 0 && (
+                        <div key={type} className="flex justify-between items-center py-2 px-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors">
+                          <span className="text-gray-700 dark:text-gray-200 capitalize">{type.toLowerCase()}</span>
+                          <span className="px-3 py-1 text-sm font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-full">
+                            {count} {count === 1 ? 'question' : 'questions'}
+                          </span>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={returnToFullScreen}
-              className="px-6 py-3 rounded-md font-semibold text-white transition-colors bg-yellow-500 hover:bg-yellow-600"
+              className="w-full mt-6 px-6 py-3.5 rounded-lg font-semibold text-white bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all duration-200 transform hover:scale-[1.02]"
             >
-              Resume Test
+              <div className="flex items-center justify-center space-x-2">
+                <span>Resume Test</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                </svg>
+              </div>
             </button>
+
+            <p className="text-xs text-gray-400 mt-4">Please ensure you're in a quiet environment before resuming.</p>
           </div>
         </div>
       )}
 
       {stage === "blocked" && (
-        <div className="flex flex-col items-center justify-center h-full bg-red-100 text-center p-6">
-          <h2 className="text-3xl font-bold text-red-800 mb-4">Exam Blocked</h2>
-          <p className="text-red-700 mb-6 text-lg">
-            You have exceeded the maximum number of violations. Your exam has been blocked.
-          </p>
-          <div className="text-sm text-red-600">
-            <p>Please contact the administrator.</p>
+        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 p-4">
+          <div className="w-full max-w-md mx-auto p-8 rounded-2xl shadow-xl bg-white dark:bg-gray-800 text-center space-y-6">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+              </svg>
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-2xl font-bold text-red-700 dark:text-red-400">Exam Blocked</h2>
+              <p className="text-gray-600 dark:text-gray-300">
+                <span className="font-medium">{user?.name || 'User'}</span>, your access to <span className="font-semibold">{examName}</span> has been restricted.
+              </p>
+
+              <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 mt-4 text-left">
+                <p className="text-red-700 dark:text-red-300 text-sm">
+                  You have exceeded the maximum number of allowed violations. For further assistance, please contact the administrator.
+                </p>
+              </div>
+
+              {configdata && (
+                <div className="mt-6 space-y-3">
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Exam Details</h3>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 space-y-2">
+                    {Object.entries(configdata).map(([type, count]) => (
+                      count > 0 && (
+                        <div key={type} className="flex justify-between items-center py-2 px-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors">
+                          <span className="text-gray-700 dark:text-gray-200 capitalize">{type.toLowerCase()}</span>
+                          <span className="px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 rounded-full">
+                            {count} {count === 1 ? 'question' : 'questions'}
+                          </span>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Need help? Contact support at <span className="font-medium">support@algocore.com</span>
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {stage === "completed" && (
-        <div className="flex flex-col items-center justify-center h-full bg-green-100 text-center p-6">
-          <div className="mb-6">
-            <svg
-              className="w-16 h-16 text-green-600 mx-auto mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h2 className="text-3xl font-bold text-green-800 mb-4">Exam Completed!</h2>
-          <p className="text-green-700 mb-6 text-lg">
-            Thank you for completing the exam. Your responses have been submitted successfully.
-          </p>
-          <div className="text-sm text-green-600">
-            <p>You can now safely close this window.</p>
+        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/10 dark:to-green-900/5 p-4">
+          <div className="w-full max-w-2xl mx-auto p-8 rounded-2xl shadow-xl bg-white dark:bg-gray-800 space-y-6">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+                <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-green-700 dark:text-green-400">Test Completed Successfully!</h2>
+              <p className="text-gray-600 dark:text-gray-300 mt-2">
+                <span className="font-medium">{user?.name || 'User'}</span>, you have completed <span className="font-semibold">{examName}</span>.
+              </p>
+            </div>
+            
+            {loadingResults ? (
+              <div className="py-8 text-center">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-green-500 border-r-transparent"></div>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Calculating your results...</p>
+              </div>
+            ) : results ? (
+              <>
+                {/* Results Summary */}
+                <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-6 space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 text-center">Your Results</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Score</p>
+                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {results.score}%
+                      </p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Correct Answers</p>
+                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        {results.correctCount}/{results.totalQuestions}
+                      </p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Total Questions</p>
+                      <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">
+                        {results.totalQuestions}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {results.questions && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">Question Breakdown</h4>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {results.questions.map((q, index) => (
+                          <span
+                            key={index}
+                            className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-medium ${
+                              q.correct
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                            }`}
+                            title={`Question ${index + 1}: ${q.type} (${q.correct ? 'Correct' : 'Incorrect'})`}
+                          >
+                            {index + 1}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Test Summary */}
+                {configdata && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Test Summary</h3>
+                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 space-y-2">
+                      {Object.entries(configdata).map(([type, count]) => (
+                        count > 0 && (
+                          <div key={type} className="flex justify-between items-center py-2 px-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors">
+                            <span className="text-gray-700 dark:text-gray-200 capitalize">{type.toLowerCase()}</span>
+                            <span className="px-3 py-1 text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 rounded-full">
+                              {count} {count === 1 ? 'question' : 'questions'}
+                            </span>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-gray-500 dark:text-gray-400">Unable to load results. Please check your dashboard later.</p>
+              </div>
+            )}
+            
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                You can view these results in your dashboard at any time.
+              </p>
+              <button
+                onClick={() => window.location.href = '/dashboard'}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200"
+              >
+                Go to Dashboard
+              </button>
+            </div>
           </div>
         </div>
       )}

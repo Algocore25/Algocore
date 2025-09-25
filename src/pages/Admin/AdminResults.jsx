@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { database } from '../../firebase';
-import { ref, get } from 'firebase/database';
+import { ref, get , query , orderByChild , equalTo } from 'firebase/database';
 import LoadingPage from '../LoadingPage';
 import { useAuth } from '../../context/AuthContext';
 import jsPDF from 'jspdf';
@@ -24,7 +24,45 @@ export default function AdminResult() {
   useEffect(() => {
     const fetchreultdata = async () => {
       try {
-        // Get all student submissions
+
+        const studentRef = ref(database, `Exam/${testid}/Eligible`);
+        const studentSnapshot = await get(studentRef);
+        const studentData = Object.values(studentSnapshot.val());
+        console.log(studentData);
+
+        const userdata = await get(ref(database, `users/`));
+        const userData = userdata.val();
+
+        const studentDetails = [];
+
+
+
+        // Get all users first
+        const usersRef = ref(database, 'users');
+        const usersSnapshot = await get(usersRef);
+        const usersData = usersSnapshot.val() || {};
+        
+        // Find matching users by email
+        for (const emailToFind of studentData) {
+          console.log(emailToFind);
+          const userEntry = Object.entries(usersData).find(([_, user]) => user.email === emailToFind);
+          if (userEntry) {
+            const [uid, userData] = userEntry;
+            studentDetails.push(uid);
+          } else {
+            console.log('No user found with email:', emailToFind);
+          }
+        }
+
+        console.log(studentDetails);
+
+
+
+
+
+
+
+        // // Get all student submissions
         const resultsRef = ref(database, `ExamSubmissions/${testid}`);
         const resultsSnapshot = await get(resultsRef);
         const resultsData = resultsSnapshot.val() || {};
@@ -46,7 +84,7 @@ export default function AdminResult() {
         console.log(ExamQuestions);
 
 
-        const studentIds = Object.keys(resultsData);
+        const studentIds = studentDetails;
         const studentResults = [];
 
         // Process each student's results
@@ -93,9 +131,9 @@ export default function AdminResult() {
                 console.log(`Fetching code from: ExamCode/${testid}/${studentId}/${questionId}/cpp`);
                 const codeSnapshot = await get(codeRef);
                 const codeValue = codeSnapshot.val();
-                
+
                 console.log('Code snapshot:', codeValue);
-                
+
                 if (codeValue) {
                   codeData = {
                     code: codeValue,
@@ -173,7 +211,7 @@ export default function AdminResult() {
   const fetchQuestionDetails = async (questionId, studentId, studentuid, isCorrect, questionType = 'mcq', originalId = null, codeData = null) => {
     // Use originalId if available (for programming questions)
     const effectiveQuestionId = originalId || questionId;
-    
+
     console.log('Fetching question details:', {
       questionId,
       studentId,
@@ -215,7 +253,7 @@ export default function AdminResult() {
             const fallbackRef = ref(database, `ExamCode/${testid}/${studentId}/${questionId}/cpp`);
             console.log(`Code not found with UID, trying with studentId: ExamCode/${testid}/${studentId}/${questionId}/cpp`);
             const fallbackSnapshot = await get(fallbackRef);
-            
+
             if (fallbackSnapshot.exists()) {
               const codeValue = fallbackSnapshot.val();
               console.log('Found code with studentId:', codeValue);
@@ -319,7 +357,7 @@ export default function AdminResult() {
                           {result.questions.map((q, i) => (
                             <button
                               key={i}
-                              onClick={() => fetchQuestionDetails(q.id, result.studentId , result.uid, q.correct, q.type)}
+                              onClick={() => fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type)}
                               className={`px-2 py-1 rounded text-xs ${q.correct ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}`}
                               title={`Click to view ${q.correct ? 'correct' : 'incorrect'} answer`}
                             >
