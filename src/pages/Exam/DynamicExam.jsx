@@ -399,13 +399,19 @@ const DynamicExam = () => {
       const answersSnapshot = await get(answersRef);
       const answers = answersSnapshot.val() || {};
 
+      const marksRef = ref(database, `Marks/${testid}/${user.uid}`);
+      const marksSnapshot = await get(marksRef);
+      const marks = marksSnapshot.val() || {};
+
 
       console.log(questionIds);
       console.log(answers);
+      console.log(marks);
 
       // Calculate score
       let correctCount = 0;
       const questionDetails = [];
+      let totalMarks = 0;
 
       for (const questionId of questionIds) {
         const isCorrect = answers[questionId] === "true";
@@ -416,23 +422,32 @@ const DynamicExam = () => {
         const questionTypeSnapshot = await get(questionTypeRef);
         const questionType = questionTypeSnapshot.val() || 'mcq';
 
+        console.log( marks[questionId]||0 )
+
         questionDetails.push({
           id: questionId,
           correct: isCorrect,
-          type: questionType
+          type: questionType,
+          mark: marks[questionId] || 0
         });
-      }
+          totalMarks += marks[questionId] || 0;
+        }
+
+      
 
       // Calculate score percentage
       const score = questionIds.length > 0
-        ? Math.round((correctCount / questionIds.length) * 100)
+        ? Math.round(( totalMarks / questionIds.length) )
         : 0;
+      
+      
 
       setResults({
         score,
         correctCount,
         totalQuestions: questionIds.length,
-        questions: questionDetails
+        questions: questionDetails,
+        totalMarks
       });
     } catch (error) {
       console.error("Error fetching results:", error);

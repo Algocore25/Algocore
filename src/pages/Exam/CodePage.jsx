@@ -164,14 +164,18 @@ function CodePage({ question }) {
     }
 
     const allPassed = updatedResults.every(tc => tc.passed);
+    const mark = updatedResults.filter(tc => tc.passed).length;
+
     const finalResult = allPassed ? 'true' : 'false';
 
     // setOutput(finalResult);
 
     // ✅ Save final result to Firebase Realtime Database
     const resultRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/${question}/`); // 'submissions' node, new entry
+    const markRef = ref(database, `Marks/${testid}/${user.uid}/${question}/`); // 'submissions' node, new entry
 
     await set(resultRef, finalResult);
+    await set(markRef, (mark/updatedResults.length)*100);
 
     setSubmissionStatus(allPassed ? 'correct' : 'wrong');
 

@@ -86,8 +86,10 @@ function MCQPage({ data }) {
     try {
       const answerRef = ref(database, `ExamCode/${testid}/${user.uid}/${data.questionname}/`);
       const answerRef2 = ref(database, `ExamSubmissions/${testid}/${user.uid}/${data.questionname}/`);
+      const answerRef3 = ref(database, `Marks/${testid}/${user.uid}/${data.questionname}/`);
       await set(answerRef, selectedOption);
       await set(answerRef2, selectedOption + 1 === data.correctAnswer ? 'true' : 'false');
+      await set(answerRef3, selectedOption + 1 === data.correctAnswer ? 100 : 0);
       setInitialOption(selectedOption); // Update initial option to the new submission
     } catch (error) {
       console.error("Error saving answer: ", error);
