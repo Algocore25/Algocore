@@ -25,7 +25,7 @@ function HomePage() {
   const handleGoogleSignIn = async () => {
     try {
       await googleSignIn();
-      navigate('/profile'); // Redirect to profile after successful sign-in
+      // navigate('/profile'); // Redirect to profile after successful sign-in
     } catch (error) {
       console.error("Google Sign-In failed", error);
       // Optionally, show an error to the user

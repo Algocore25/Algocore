@@ -14,11 +14,11 @@ const LoginPage = () => {
     const [error, setError] = useState('');
     const [showWelcome, setShowWelcome] = useState(false);
 
-    useEffect(() => {
-        if (user) {
-            navigate('/profile');
-        }
-    }, [user, navigate]);
+    // useEffect(() => {
+    //     if (user) {
+    //         navigate('/profile');
+    //     }
+    // }, [user, navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -26,7 +26,7 @@ const LoginPage = () => {
         try {
             await login({ email, password });
             setShowWelcome(true);
-            setTimeout(() => navigate('/profile'), 2000);
+            // setTimeout(() => navigate('/profile'), 2000);
         } catch (err) {
             setError('Failed to sign in. Please check your credentials.');
             console.error(err);
@@ -38,7 +38,7 @@ const LoginPage = () => {
         try {
             await googleSignIn();
             setShowWelcome(true);
-            setTimeout(() => navigate('/profile'), 2000);
+            // setTimeout(() => navigate('/profile'), 2000);
         } catch (err) {
             setError('Failed to sign in with Google. Please try again.');
             console.error(err);
