@@ -29,7 +29,7 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 
-const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName,setviolation ,setIsViolationReady }) => {
+const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setviolation, setIsViolationReady }) => {
 
     const { testid } = useParams();
     const [answeredQuestions, setAnsweredQuestions] = useState({});
@@ -128,26 +128,33 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName,setvio
     }, [handleQuestionChange]);
 
 
-    const submitExam = async () => {
+    const handleSubmitExam = async () => {
+        setIsSubmitting(true);
         try {
             // First, mark the exam as completed in Firebase
             const examRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
             await set(examRef, "completed");
-            
+
             // Then update the local violation state
             setviolation(0);
             setIsViolationReady(false);
-            
+
             // Also update the stage to prevent blocking
             const stageRef = ref(database, `Exam/${testid}/Properties2/Progress/${user.uid}/`);
             await set(stageRef, 0);
-            
-            alert("Exam submitted successfully!");
+
+            setShowSubmitModal(false);
             onExamComplete && onExamComplete();
         } catch (error) {
             console.error("Error submitting exam:", error);
             alert("There was an error submitting the exam. Please try again.");
+        } finally {
+            setIsSubmitting(false);
         }
+    };
+
+    const submitExam = () => {
+        setShowSubmitModal(true);
     };
 
 
@@ -190,6 +197,8 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName,setvio
     const menuRef = useRef(null);
 
     const [activeQuestion, setActiveQuestion] = useState(0);
+    const [showSubmitModal, setShowSubmitModal] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
 
     useEffect(() => {
@@ -284,10 +293,23 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName,setvio
                             </button>
                             <button
                                 onClick={submitExam}
-                                className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md flex items-center gap-2"
+                                className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md flex items-center gap-2 transition-colors disabled:opacity-50"
+                                disabled={isSubmitting}
                             >
-                                {/* <FiCheck size={16} /> */}
-                                Submit Exam
+                                {isSubmitting ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Submitting...
+                                    </>
+                                ) : (
+                                    <>
+                                        <FiCheck size={16} />
+                                        Submit Exam
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -360,7 +382,58 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName,setvio
 
             </div>
 
-
+            {/* Submit Confirmation Modal */}
+            <AnimatePresence>
+                {showSubmitModal && (
+                    <motion.div 
+                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <motion.div 
+                            className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.9 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <div className="flex items-center mb-4">
+                                <FiAlertTriangle className="w-6 h-6 text-yellow-500 mr-2" />
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm Submission</h3>
+                            </div>
+                            <p className="text-gray-700 dark:text-gray-300 mb-6">
+                                Are you sure you want to submit your exam? Once submitted, you won't be able to make any changes.
+                            </p>
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    onClick={() => setShowSubmitModal(false)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                    disabled={isSubmitting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSubmitExam}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors flex items-center justify-center min-w-[100px]"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Submitting...
+                                        </>
+                                    ) : 'Submit'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </>
     );
 };

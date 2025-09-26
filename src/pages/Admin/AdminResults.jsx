@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { database } from '../../firebase';
-import { ref, get , query , orderByChild , equalTo } from 'firebase/database';
+import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
 import LoadingPage from '../LoadingPage';
 import { useAuth } from '../../context/AuthContext';
 import jsPDF from 'jspdf';
@@ -18,155 +18,127 @@ export default function AdminResult() {
   const [userCode, setUserCode] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
   const user = useAuth();
   const pdfRef = useRef();
 
   useEffect(() => {
     const fetchreultdata = async () => {
       try {
+        // Batch all database reads at once
+        const [
+          studentSnapshot,
+          usersSnapshot,
+          resultsSnapshot,
+          testInfoSnapshot,
+          examQuestionsSnapshot,
+          marksSnapshot
+        ] = await Promise.all([
+          get(ref(database, `Exam/${testid}/Eligible`)),
+          get(ref(database, 'users')),
+          get(ref(database, `ExamSubmissions/${testid}`)),
+          get(ref(database, `Exam/${testid}/name`)),
+          get(ref(database, `Exam/${testid}/questions`)),
+          get(ref(database, `Marks/${testid}`)),
+        ]);
 
-        const studentRef = ref(database, `Exam/${testid}/Eligible`);
-        const studentSnapshot = await get(studentRef);
-        const studentData = Object.values(studentSnapshot.val());
-        console.log(studentData);
-
-        const userdata = await get(ref(database, `users/`));
-        const userData = userdata.val();
-
-        const studentDetails = [];
-
-
-
-        // Get all users first
-        const usersRef = ref(database, 'users');
-        const usersSnapshot = await get(usersRef);
+        // Process basic data
+        const studentEmails = Object.values(studentSnapshot.val() || {});
         const usersData = usersSnapshot.val() || {};
-        
-        // Find matching users by email
-        for (const emailToFind of studentData) {
-          console.log(emailToFind);
-          const userEntry = Object.entries(usersData).find(([_, user]) => user.email === emailToFind);
-          if (userEntry) {
-            const [uid, userData] = userEntry;
-            studentDetails.push(uid);
-          } else {
-            console.log('No user found with email:', emailToFind);
-          }
-        }
-
-        console.log(studentDetails);
-
-
-
-
-
-
-
-        // // Get all student submissions
-        const resultsRef = ref(database, `ExamSubmissions/${testid}`);
-        const resultsSnapshot = await get(resultsRef);
         const resultsData = resultsSnapshot.val() || {};
+        const examQuestions = examQuestionsSnapshot.val() || {};
+        const marksData = marksSnapshot.val() || {};
 
-        // Get test name
-        const testInfoRef = ref(database, `Exam/${testid}/name`);
-        const testInfoSnapshot = await get(testInfoRef);
         setTestName(testInfoSnapshot.val() || '');
 
-        if (!resultsData) {
+        if (!studentEmails.length) {
           setLoading(false);
           return;
         }
 
-        const ExamQuestionsRef = ref(database, `Exam/${testid}/questions`);
-        const ExamQuestionsSnapshot = await get(ExamQuestionsRef);
-        const ExamQuestions = ExamQuestionsSnapshot.val() || {};
+        // Create email to UID mapping efficiently
+        const emailToUidMap = Object.fromEntries(
+          Object.entries(usersData).map(([uid, userData]) => [userData.email, uid])
+        );
 
-        console.log(ExamQuestions);
+        // Get student UIDs from emails
+        const studentIds = studentEmails
+          .map(email => emailToUidMap[email])
+          .filter(Boolean); // Remove undefined values
+
+        if (!studentIds.length) {
+          console.log('No matching users found for the provided emails');
+          setLoading(false);
+          return;
+        }
+
+        // Batch fetch all student questions and code submissions
+        const studentQuestionsPromises = studentIds.map(studentId =>
+          get(ref(database, `Exam/${testid}/myquestions/${studentId}`))
+        );
+
+        const codeSubmissionsPromises = studentIds.map(studentId =>
+          get(ref(database, `ExamCode/${testid}/${studentId}`))
+        );
+
+        const [studentQuestionsSnapshots, codeSubmissionsSnapshots] = await Promise.all([
+          Promise.all(studentQuestionsPromises),
+          Promise.all(codeSubmissionsPromises)
+        ]);
+
+        // Process results for each student
+        const studentResults = studentIds.map((studentId, index) => {
+          const userData = usersData[studentId] || {};
+          const studentQuestions = studentQuestionsSnapshots[index].val() || {};
+          const answers = resultsData[studentId] || {};
+          const codeSubmissions = codeSubmissionsSnapshots[index].val() || {};
+          const marks = marksData[studentId] || {};
 
 
-        const studentIds = studentDetails;
-        const studentResults = [];
-
-        // Process each student's results
-        for (const studentId of studentIds) {
-          // Get student's assigned questions
-          const studentQuestionsRef = ref(database, `Exam/${testid}/myquestions/${studentId}`);
-          const studentQuestionsSnapshot = await get(studentQuestionsRef);
-          const studentQuestions = studentQuestionsSnapshot.val() || {};
           const questionIds = Object.keys(studentQuestions);
-
-          // Get student's answers
-          const answersRef = ref(database, `ExamSubmissions/${testid}/${studentId}/`);
-          const answersSnapshot = await get(answersRef);
-          const answers = answersSnapshot.val() || {};
-
-
-          console.log(answers);
-
-          // Get student info
-          const userRef = ref(database, `users/${studentId}`);
-          const userSnapshot = await get(userRef);
-          const userData = userSnapshot.val() || {};
-
-          // Calculate score and process question details
           let correctCount = 0;
           const questionDetails = [];
 
-          console.log(studentQuestions);
+          const totalMarks = Object.values(marks).reduce((acc, mark) => acc + mark, 0) / questionIds.length;
+
 
           for (const questionId of questionIds) {
             const questionKey = studentQuestions[questionId];
-            const questionType = ExamQuestions[questionKey] || 'mcq';
+            const questionType = examQuestions[questionKey] || 'mcq';
+
+            console.log(answers);
+
             const isCorrect = answers[questionKey] === "true";
+
             if (isCorrect) correctCount++;
 
+            // Handle code data for programming questions
             let codeData = null;
-
-            console.log(studentQuestions[questionId]);
-
-            // If it's a programming question, fetch the code
-            if (questionType === 'Programming') {
-              try {
-                const codeRef = ref(database, `ExamCode/${testid}/${studentId}/${questionId}/cpp`);
-                console.log(`Fetching code from: ExamCode/${testid}/${studentId}/${questionId}/cpp`);
-                const codeSnapshot = await get(codeRef);
-                const codeValue = codeSnapshot.val();
-
-                console.log('Code snapshot:', codeValue);
-
-                if (codeValue) {
-                  codeData = {
-                    code: codeValue,
-                    language: 'cpp'
-                  };
-                  console.log('Code data set:', codeData);
-                } else {
-                  console.log('No code found at the specified path');
-                }
-              } catch (error) {
-                console.error('Error fetching code:', error);
-              }
+            if (questionType === 'Programming' && codeSubmissions[questionId]?.cpp) {
+              codeData = {
+                code: codeSubmissions[questionId].cpp,
+                language: 'cpp'
+              };
             }
+
+            console.log(marks);
 
             questionDetails.push({
               id: questionKey || "No name",
               originalId: questionId,
               correct: isCorrect,
               type: questionType,
-              code: codeData
+              code: codeData,
+              marks: marks[questionKey] || 0,
             });
-
-            console.log(questionDetails);
           }
 
-
-
-          // Calculate score based on assigned questions
+          // Calculate score
           const score = questionIds.length > 0
             ? Math.round((correctCount / questionIds.length) * 100)
             : 0;
 
-          studentResults.push({
+          return {
             studentId: userData.name || studentId,
             mail: userData.email || 'No email',
             uid: studentId,
@@ -174,12 +146,13 @@ export default function AdminResult() {
             totalQuestions: questionIds.length,
             score,
             questions: questionDetails,
-          });
-        }
+            totalMarks
+          };
+        });
 
-        console.log(studentResults);
-
+        console.log('Processed student results:', studentResults);
         setResults(studentResults);
+
       } catch (error) {
         console.error('Error fetching results:', error);
       } finally {
@@ -316,57 +289,144 @@ export default function AdminResult() {
   if (loading) return <LoadingPage message="Loading results..." />;
 
   return (
-    <div className="container mx-auto p-6">
-      <div ref={pdfRef}>
-        <h1 className="text-2xl font-bold mb-6">Exam Results: {testName || `Test ${testid}`}</h1>
+    <div className="container mx-auto p-4 md:p-6">
+      <div ref={pdfRef} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h1 className="text-2xl font-bold text-gray-800">
+            <span className="text-indigo-600">Exam:</span> {testName || `Test ${testid}`}
+          </h1>
+          <p className="text-gray-500 mt-1">Detailed performance analysis of all students</p>
+        </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Correct</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Correct</th>
+                  {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th> */}
+
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {results.length > 0 ? (
                   results.map((result) => (
-                    <tr key={result.studentId}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {result.studentId}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {result.mail}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {result.score}%
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {result.correctCount}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {result.totalQuestions}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <React.Fragment key={result.studentId}>
+                      <tr
+                        onClick={() => setSelectedRow(selectedRow === result.studentId ? null : result.studentId)}
+                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
+                              {result.studentId.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">{result.studentId}</div>
+                              <div className="text-xs text-gray-500">ID: {result.uid.substring(0, 6)}...</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {result.mail}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${result.totalMarks >= 70 ? 'bg-green-100 text-green-800' : result.totalMarks >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                            {result.totalMarks}%
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <span className="text-sm text-gray-900 font-medium">{result.correctCount}</span>
+                            <span className="text-xs text-gray-500 ml-1">/ {result.totalQuestions}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                            <div
+                              className="bg-indigo-600 h-1.5 rounded-full"
+                              style={{ width: `${(result.correctCount / result.totalQuestions) * 100}%` }}
+                            ></div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex flex-wrap gap-1.5">
+                            {result.questions.map((q, i) => (
+                              <button
+                                key={i}
+                                className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-medium transition-all hover:scale-105 ${q.correct
+                                  ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                                  : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                  }`}
+                                title={`Q${i + 1}: ${q.correct ? 'Correct' : 'Incorrect'}`}
+                              >
+                                {i + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                        {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <div className="flex flex-wrap gap-1">
                           {result.questions.map((q, i) => (
-                            <button
-                              key={i}
-                              onClick={() => fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type)}
-                              className={`px-2 py-1 rounded text-xs ${q.correct ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}`}
-                              title={`Click to view ${q.correct ? 'correct' : 'incorrect'} answer`}
+                            <div 
+                              key={`marks-${i}`}
+                              className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs font-medium ${
+                                q.correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}
+                              title={`${q.correct ? 'Correct' : 'Incorrect'} (${q.marks} marks)`}
                             >
-                              Q{i + 1}
-                            </button>
+                              {q.marks}
+                            </div>
                           ))}
                         </div>
-                      </td>
-                    </tr>
+                      </td> */}
+                      </tr>
+                      {selectedRow === result.studentId && (
+                        <tr className="bg-gray-50">
+                          <td colSpan="5" className="px-6 py-4">
+                            <div className="space-y-3">
+                              <h3 className="text-sm font-medium text-gray-700 mb-2">Question Details:</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {result.questions.map((q, i) => (
+                                  <div key={i} onClick={() => fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type)} className="bg-white p-4 rounded-lg border border-gray-200 shadow-xs hover:shadow-sm transition-shadow">
+                                    <div className="flex justify-between items-start">
+                                      <div>
+                                        <h4 className="font-medium text-gray-900">
+                                          {q.id || `Question ${i + 1}`}
+                                        </h4>
+                                        <div className="mt-2 flex items-center space-x-2">
+                                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${q.correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                            }`}>
+                                            {q.marks || 0} points
+                                          </span>
+                                          {q.code && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type);
+                                              }}
+                                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200"
+                                            >
+                                              <CodeIcon className="h-3 w-3 mr-1" />
+                                              View Code
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <span className={`text-xs px-2 py-1 rounded-full ${q.correct ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                        }`}>
+                                        {q.correct ? 'Correct' : 'Incorrect'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))
                 ) : (
                   <tr>

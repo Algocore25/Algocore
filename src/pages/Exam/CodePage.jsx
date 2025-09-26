@@ -33,16 +33,44 @@ function CodePage({ question }) {
   const [leftPanelWidth, setLeftPanelWidth] = useState(45);
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
   const { theme } = useTheme();
-  const [questionData, setQuestionData] = useState(null);
-  const [testCasesrun, setTestCases] = useState([]); // Added missing state
+  const [testCasesrun, setTestCases] = useState([]);
   const [allowlanguages, setallowlanguages] = useState([]);
-  // Added missing state
+  const [questionData, setQuestionData] = useState(null); // Initialize questionData state
 
   const { testid } = useParams();
   const { user } = useAuth();
-  const [submissionStatus, setSubmissionStatus] = useState('not_attended'); // Added state for status
+  const [submissionStatus, setSubmissionStatus] = useState('not_attended');
 
-  // Function to fetch submission status from Firebase
+  // Refs
+  const inputRef = useRef(null);
+  const outputRef = useRef(null);
+  const saveTimeoutRef = useRef(null);
+  const editorRef = useRef(null);
+  const resizeObserverRef = useRef(null);
+
+  // Function to adjust textarea height based on content
+  const adjustTextareaHeight = (element) => {
+    if (!element) return;
+    element.style.height = 'auto';
+    element.style.height = `${Math.min(element.scrollHeight, 200)}px`;
+  };
+
+  // Update textarea heights when test case tab changes or when test cases are loaded
+  useEffect(() => {
+    // Use a small timeout to ensure the DOM is updated before adjusting heights
+    const timer = setTimeout(() => {
+      if (inputRef.current) {
+        adjustTextareaHeight(inputRef.current);
+      }
+      if (outputRef.current) {
+        adjustTextareaHeight(outputRef.current);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [testCaseTab, testCasesrun, activeTab]);
+
+  // Fetch submission status from Firebase
   const fetchSubmissionStatus = useCallback(async () => {
     try {
       const resultRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/${question}/`);
@@ -69,6 +97,10 @@ function CodePage({ question }) {
   }, [question]);
 
   const handleSubmit2 = async () => {
+    if (!questionData || !questionData.testcases) {
+      console.error('Question data not loaded');
+      return;
+    }
     const testCases = questionData.testcases;
     const initialResults = testCases.map(tc => ({
       input: tc.input,
@@ -175,7 +207,7 @@ function CodePage({ question }) {
     const markRef = ref(database, `Marks/${testid}/${user.uid}/${question}/`); // 'submissions' node, new entry
 
     await set(resultRef, finalResult);
-    await set(markRef, (mark/updatedResults.length)*100);
+    await set(markRef, (mark / updatedResults.length) * 100);
 
     setSubmissionStatus(allPassed ? 'correct' : 'wrong');
 
@@ -189,7 +221,10 @@ function CodePage({ question }) {
 
 
   const runCode = async () => {
-
+    if (!testCasesrun || testCasesrun.length === 0) {
+      console.error('No test cases available');
+      return;
+    }
     const testCases = testCasesrun;
     console.log('Running test cases:', testCases);
 
@@ -488,9 +523,9 @@ function CodePage({ question }) {
               ? [{ input: question?.testcases[1]?.input, expectedOutput: question?.testcases[1]?.expectedOutput }]
               : [])
           ];
-          
+
           setTestCases(testCases);
-          
+
 
           console.log(question);
           setQuestionData(question);
@@ -503,17 +538,8 @@ function CodePage({ question }) {
     fetchData();
 
     console.log(question);
-    // loadCode();
-    //  getAllowedLanguageTemplates();
-
 
   }, [question]); // Dependencies adjusted
-
-
-
-  const saveTimeoutRef = useRef(null); // Reference to track the debounce timer
-  const editorRef = useRef(null);
-  const resizeObserverRef = useRef(null);
 
   // Clean up on unmount
   useEffect(() => {
@@ -661,7 +687,7 @@ function CodePage({ question }) {
           </button>
         </div>
 
-        <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
+        <div className="p-6 flex-1 min-h-0 overflow-auto" style={{ height: '100%' }}>
           {activeTab === 'description' && (
             <div className="text-gray-700 dark:text-gray-400">
               <div className="mb-6">
@@ -705,7 +731,7 @@ function CodePage({ question }) {
                   </div>
                 )}
 
-             
+
 
                 <div className="mt-6">
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
@@ -714,86 +740,136 @@ function CodePage({ question }) {
                     <li>{questionData?.constraints[1]}</li>
                   </ul>
                 </div>
+
+                {/* empty div for spacing */}
+                <div className="h-10"></div>
+
               </div>
             </div>
           )}
 
-          {activeTab === 'testcases' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Manual Test Cases</h3>
-                {/* Tab bar */}
-                <div className="flex items-center gap-2 mb-4">
-                  {testCasesrun.map((_, idx) => (
-                    <button
-                      key={idx}
-                      className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
-                        }`}
-                      onClick={() => setTestCaseTab(idx)}
-                    >
-                      Case {idx + 1}
-                    </button>
-                  ))}
-                  <button
-                    className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
-                    onClick={() => {
-                      setTestCases([...testCasesrun, { inpyt: '', expectedOutput: '', expectedOutput: '' }]);
-                      setTestCaseTab(testCasesrun.length);
-                    }}
-                  >
-                    +
-                  </button>
-                </div>
-                {/* Editable fields for active tab */}
-                <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">input</label>
-                      <input
-                        className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
-                        type="text"
-                        value={testCasesrun[testCaseTab]?.input || ''}
-                        onChange={e => {
-                          const updated = [...testCasesrun];
-                          updated[testCaseTab].input = e.target.value;
-                          setTestCases(updated);
-                        }}
-                        placeholder="e.g., aabbccdd"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">expectedOutput</label>
-                      <input
-                        className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base"
-                        type="text"
-                        value={testCasesrun[testCaseTab]?.expectedOutput || ''}
-                        onChange={e => {
-                          const updated = [...testCasesrun];
-                          updated[testCaseTab].expectedOutput = e.target.value;
-                          setTestCases(updated);
-                        }}
-                        placeholder="e.g., 7"
-                      />
-                    </div>
 
-                  </div>
-                  <div className="flex justify-end mt-4">
-                    <button
-                      className="text-red-500 hover:text-red-700 font-medium"
-                      onClick={() => {
-                        const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
-                        setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
-                        setTestCaseTab(prev => Math.max(0, prev - 1));
-                      }}
-                      disabled={testCasesrun.length <= 1}
-                      title="Delete this test case"
-                    >
-                      Delete Case
-                    </button>
-                  </div>
-                </div>
-                {/* Test Result Section - Removed from Test Cases tab */}
-              </div>
+          {activeTab === 'testcases' && (
+
+            <div className="space-y-6">
+
+              {
+                (questionData?.testcases?.length >= 3 && questionData?.testcases?.[2].input === "regex") ?
+                  (
+                    <h1>No input</h1>
+                  )
+                  :
+                  (
+
+
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white"> Manual Test Cases </h3>
+                      <div className="flex items-center gap-2 mb-4">
+                        {testCasesrun.map((_, idx) => (
+                          <button
+                            key={idx}
+                            className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
+                              }`}
+                            onClick={() => setTestCaseTab(idx)}
+                          >
+                            Case {idx + 1}
+                          </button>
+                        ))}
+                        <button
+                          className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
+                          onClick={() => {
+                            setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
+                            setTestCaseTab(testCasesrun.length);
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex-1 min-w-0">
+                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
+                            <div className="relative">
+                              <textarea
+                                ref={inputRef}
+                                className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y whitespace-pre overflow-x-auto"
+                                value={testCasesrun[testCaseTab]?.input || ''}
+                                onChange={e => {
+                                  const updated = [...testCasesrun];
+                                  updated[testCaseTab].input = e.target.value;
+                                  setTestCases(updated);
+                                  requestAnimationFrame(() => {
+                                    adjustTextareaHeight(e.target);
+                                  });
+                                }}
+                                onInput={e => adjustTextareaHeight(e.target)}
+                                placeholder="Enter input (supports multiple lines)"
+                                rows={1}
+                                style={{
+                                  minHeight: '40px',
+                                  maxHeight: '200px',
+                                  overflowY: 'auto',
+                                  overflowX: 'auto',
+                                  whiteSpace: 'pre',
+                                  width: '100%',
+                                  boxSizing: 'border-box',
+                                  minWidth: '100%',
+                                  maxWidth: '100%'
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
+                            <div className="relative">
+                              <textarea
+                                ref={outputRef}
+                                className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y whitespace-pre overflow-x-auto"
+                                value={testCasesrun[testCaseTab]?.expectedOutput || ''}
+                                onChange={e => {
+                                  const updated = [...testCasesrun];
+                                  updated[testCaseTab].expectedOutput = e.target.value;
+                                  setTestCases(updated);
+                                  requestAnimationFrame(() => {
+                                    adjustTextareaHeight(e.target);
+                                  });
+                                }}
+                                onInput={e => adjustTextareaHeight(e.target)}
+                                placeholder="Enter expected output (supports multiple lines)"
+                                rows={1}
+                                style={{
+                                  minHeight: '40px',
+                                  maxHeight: '200px',
+                                  overflowY: 'auto',
+                                  overflowX: 'auto',
+                                  whiteSpace: 'pre',
+                                  width: '100%',
+                                  boxSizing: 'border-box',
+                                  minWidth: '100%',
+                                  maxWidth: '100%'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex justify-end mt-4">
+                          <button
+                            className="text-red-500 hover:text-red-700 font-medium"
+                            onClick={() => {
+                              const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
+                              setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
+                              setTestCaseTab(prev => Math.max(0, prev - 1));
+                            }}
+                            disabled={testCasesrun.length <= 1}
+                            title="Delete this test case"
+                          >
+                            Delete Case
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+              }
             </div>
           )}
 
