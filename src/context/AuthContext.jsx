@@ -9,9 +9,7 @@ import {
 
 import { auth } from '../firebase'; // This now points to the second firebase config
 
-
-
-import { ref, set, onValue, onDisconnect, remove, update } from 'firebase/database';
+import { ref, set, onValue, onDisconnect, remove, update, get } from 'firebase/database';
 import { database } from '../firebase'; // Firebase configuration
 
 const AuthContext = createContext(null);
@@ -26,6 +24,7 @@ export const AuthProvider = ({ children }) => {
   const sessionUnsubRef = React.useRef(null);
   const heartbeatRef = React.useRef(null);
   const sessionPathRef = React.useRef(null);
+  const isManualLogoutRef = React.useRef(false); // Add this to track manual logouts
 
   useEffect(() => {
     console.log('Setting up auth state listener');
@@ -67,18 +66,37 @@ export const AuthProvider = ({ children }) => {
 
   const initSingleSession = async (uid) => {
     try {
-      // Create or reuse a client session id
+      // Create a new session ID
       const newSessionId = window.crypto?.randomUUID ? window.crypto.randomUUID() : Math.random().toString(36).slice(2);
       sessionIdRef.current = newSessionId;
+
+      // Store session path
       sessionPathRef.current = `sessions/${uid}`;
       const sRef = ref(database, sessionPathRef.current);
 
-      // Claim the session (this will override any previous session and cause other clients to logout)
-      await set(sRef, {
+      // Create session data with timestamp
+      const sessionData = {
         sessionId: newSessionId,
         updatedAt: Date.now(),
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
-      });
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        lastActive: Date.now()
+      };
+
+      // Get current session if it exists
+      const snapshot = await get(ref(database, sessionPathRef.current));
+      const currentSession = snapshot.val();
+
+      // Only update session if this is a new login or the session is expired (older than 5 minutes)
+      const isNewLogin = !currentSession ||
+        (currentSession.updatedAt && (Date.now() - currentSession.updatedAt > 5 * 60 * 1000));
+
+      if (isNewLogin) {
+        // This is a new login, update the session
+        await set(sRef, sessionData);
+      } else {
+        // Use existing session if it's still valid
+        sessionIdRef.current = currentSession.sessionId;
+      }
 
       // Remove this session on disconnect
       try {
@@ -87,20 +105,43 @@ export const AuthProvider = ({ children }) => {
         console.warn('onDisconnect setup failed (non-fatal):', e);
       }
 
-      // Listen for changes to the session; if it no longer matches, logout
+      // Listen for session changes
       sessionUnsubRef.current = onValue(sRef, (snap) => {
         const val = snap.val();
-        if (!val) return; // path removed: ignore, likely disconnect cleanup
+        if (!val) {
+          // Session was removed (likely by another login)
+          // Only show modal if this wasn't a manual logout
+          if (!isManualLogoutRef.current) {
+            console.log('Session was terminated by another login.');
+            logout(true);
+          }
+          return;
+        }
+
+        // Check if this session was replaced by a new login
         if (val.sessionId && val.sessionId !== sessionIdRef.current) {
-          // Another session took over
-          console.warn('Another session detected. Logging out this client.');
-          logout(true);
+          // Check if this is a new login (not just a page refresh)
+          const isNewLogin = val.updatedAt && (val.updatedAt - (val.lastActive || 0) > 5000);
+
+          if (isNewLogin && !isManualLogoutRef.current) {
+            console.log('New login detected. Terminating this session.');
+            logout(true);
+          } else if (!isManualLogoutRef.current) {
+            // Just an update from another tab, update our session ID
+            sessionIdRef.current = val.sessionId;
+          }
         }
       });
 
-      // Heartbeat to keep updatedAt fresh
+      // Heartbeat to keep session active
       heartbeatRef.current = window.setInterval(() => {
-        update(sRef, { updatedAt: Date.now() }).catch(() => { });
+        // Don't send heartbeat if manually logging out
+        if (!isManualLogoutRef.current) {
+          update(sRef, {
+            updatedAt: Date.now(),
+            lastActive: Date.now()
+          }).catch(() => { });
+        }
       }, 20_000); // every 20s
     } catch (e) {
       console.error('Failed to initialize single-session enforcement:', e);
@@ -118,6 +159,7 @@ export const AuthProvider = ({ children }) => {
     }
     sessionIdRef.current = null;
     sessionPathRef.current = null;
+    isManualLogoutRef.current = false; // Reset manual logout flag
   };
 
   const googleSignIn = async () => {
@@ -138,6 +180,11 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async (isAuto = false) => {
     try {
+      // Set manual logout flag if this is not an automatic logout
+      if (!isAuto) {
+        isManualLogoutRef.current = true;
+      }
+
       // Try to remove the session record
       const uid = auth.currentUser?.uid || user?.uid;
       if (uid) {
@@ -149,11 +196,13 @@ export const AuthProvider = ({ children }) => {
       cleanupSessionListeners();
       await firebaseSignOut(auth);
       setUser(null);
+      
+      // Only show modal for automatic logouts
       if (isAuto) {
         // Show a centered modal dialog
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
-        
+
         modal.innerHTML = `
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 relative">
             <div class="flex items-center gap-3 mb-4">
@@ -173,16 +222,16 @@ export const AuthProvider = ({ children }) => {
             </div>
           </div>
         `;
-        
+
         document.body.appendChild(modal);
-        
+
         // Handle OK button click
         const okBtn = modal.querySelector('#modal-ok-btn');
         const removeModal = () => {
           document.body.removeChild(modal);
         };
         okBtn.addEventListener('click', removeModal);
-        
+
         // Cleanup
         return () => {
           okBtn.removeEventListener('click', removeModal);
