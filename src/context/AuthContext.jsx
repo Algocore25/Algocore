@@ -86,16 +86,13 @@ export const AuthProvider = ({ children }) => {
       const snapshot = await get(ref(database, sessionPathRef.current));
       const currentSession = snapshot.val();
 
-      // Only update session if this is a new login or the session is expired (older than 5 minutes)
-      const isNewLogin = !currentSession ||
-        (currentSession.updatedAt && (Date.now() - currentSession.updatedAt > 5 * 60 * 1000));
-
-      if (isNewLogin) {
-        // This is a new login, update the session
-        await set(sRef, sessionData);
-      } else {
-        // Use existing session if it's still valid
-        sessionIdRef.current = currentSession.sessionId;
+      // Always create a new session on login
+      // This ensures fresh logins don't conflict with existing sessions
+      await set(sRef, sessionData);
+      
+      // Clean up any existing session data
+      if (currentSession) {
+        console.log('New session created, previous session was', currentSession.sessionId);
       }
 
       // Remove this session on disconnect
@@ -134,15 +131,22 @@ export const AuthProvider = ({ children }) => {
       });
 
       // Heartbeat to keep session active
-      heartbeatRef.current = window.setInterval(() => {
-        // Don't send heartbeat if manually logging out
-        if (!isManualLogoutRef.current) {
-          update(sRef, {
+      const sendHeartbeat = () => {
+        if (!isManualLogoutRef.current && sessionPathRef.current) {
+          update(ref(database, sessionPathRef.current), {
             updatedAt: Date.now(),
             lastActive: Date.now()
-          }).catch(() => { });
+          }).catch((e) => {
+            console.warn('Failed to send heartbeat:', e);
+          });
         }
-      }, 20_000); // every 20s
+      };
+      
+      // Send initial heartbeat immediately
+      sendHeartbeat();
+      
+      // Then set up the interval
+      heartbeatRef.current = window.setInterval(sendHeartbeat, 30_000); // every 30s
     } catch (e) {
       console.error('Failed to initialize single-session enforcement:', e);
     }
