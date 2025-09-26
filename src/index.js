@@ -5,6 +5,15 @@ import App from './App';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
+
+window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+  isDisabled: true,
+  supportsFiber: true,
+  inject: () => {},
+  onCommitFiberRoot: () => {},
+  onCommitFiberUnmount: () => {},
+};
+
 const AuthLoadingWrapper = ({ children }) => {
   const { loading } = useAuth();
 

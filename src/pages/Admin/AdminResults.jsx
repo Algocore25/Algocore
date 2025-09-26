@@ -357,9 +357,9 @@ export default function AdminResult() {
                                 key={i}
                                 className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-medium transition-all hover:scale-105 ${q.correct
                                   ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                                  : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                  : q.marks > 0 ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
                                   }`}
-                                title={`Q${i + 1}: ${q.correct ? 'Correct' : 'Incorrect'}`}
+                                title={`Q${i + 1}: ${q.correct ? 'Correct' : q.marks > 0 ? 'Partially Correct' : 'Incorrect'}`}
                               >
                                 {i + 1}
                               </button>
@@ -396,7 +396,7 @@ export default function AdminResult() {
                                           {q.id || `Question ${i + 1}`}
                                         </h4>
                                         <div className="mt-2 flex items-center space-x-2">
-                                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${q.correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${q.correct ? 'bg-green-100 text-green-800' :  q.marks > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
                                             }`}>
                                             {q.marks || 0} points
                                           </span>
@@ -414,9 +414,9 @@ export default function AdminResult() {
                                           )}
                                         </div>
                                       </div>
-                                      <span className={`text-xs px-2 py-1 rounded-full ${q.correct ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                      <span className={`text-xs px-2 py-1 rounded-full ${q.correct ? 'bg-green-50 text-green-700' :  q.marks > 0 ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
                                         }`}>
-                                        {q.correct ? 'Correct' : 'Incorrect'}
+                                        {q.correct ? 'Correct' :  q.marks > 0 ? 'Partially Correct' : 'Incorrect'}
                                       </span>
                                     </div>
                                   </div>

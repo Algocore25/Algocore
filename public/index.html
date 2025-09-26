@@ -27,6 +27,10 @@
         }
       }(window.location))
     </script>
+        <!-- TensorFlow.js core (explicit version chosen for coco-ssd compatibility) -->
+        <script src="https://unpkg.com/@tensorflow/tfjs@3.21.0/dist/tf.min.js" defer></script>
+        <!-- COCO-SSD model (must load after tfjs) -->
+        <script src="https://unpkg.com/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js" defer></script>
     <link rel="icon" href="LOGO.ico" />
   </head>
   <body>

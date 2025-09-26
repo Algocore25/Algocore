@@ -17,7 +17,6 @@ import CompilerPage from './pages/CompilerPage';
 import LoadingPage from './pages/LoadingPage';
 import AdminMonitor from './pages/Admin/AdminMonitor';
 import CpuApp from './pages/Visual/Cpu/CpuApp';
-
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
@@ -26,6 +25,8 @@ const CoursePage = lazy(() => import('./pages/CoursePage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+
+import { VideoProctor } from './LiveProctoring/components/VideoProctor';
 
 function App() {
   return (
@@ -49,6 +50,8 @@ function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="*" element={<NotFoundPage />} />
+
+              <Route path="/proctoring" element={<VideoProctor />} />
 
               <Route path="/test" element={<ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>} />
               <Route path="/examwindow/:testid" element={<ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute>} />

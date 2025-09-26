@@ -25,6 +25,114 @@ import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry
 
 function CodePage({ data, navigation }) {
   const [code, setCode] = useState("");
+  
+  // Prevent copy, cut, and paste
+  useEffect(() => {
+    const preventDefault = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+    
+    // Disable right-click context menu
+    const preventContextMenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    // More aggressive paste prevention
+    const blockPaste = (e) => {
+      // Block all paste events
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Clear clipboard data if possible
+      if (e.clipboardData) {
+        e.clipboardData.setData('text/plain', '');
+        e.clipboardData.clearData();
+      }
+      
+      // Show a message to the user
+      toast.error('Copy-paste is disabled in this environment');
+      return false;
+    };
+
+    // Block drag and drop
+    const blockDragDrop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+    
+    // Add event listeners with capture phase
+    const options = { capture: true, passive: false };
+    
+    // Block copy/paste events
+    document.addEventListener('copy', preventDefault, options);
+    document.addEventListener('cut', preventDefault, options);
+    document.addEventListener('paste', blockPaste, options);
+    document.addEventListener('contextmenu', preventContextMenu, options);
+    
+    // Block drag and drop
+    document.addEventListener('drop', blockDragDrop, options);
+    document.addEventListener('dragover', blockDragDrop, options);
+    
+    // Disable keyboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+X, etc.)
+    const preventShortcuts = (e) => {
+      const isPaste = (e.ctrlKey || e.metaKey) && ['v', 'V', 'Insert'].includes(e.key);
+      const isCopy = (e.ctrlKey || e.metaKey) && ['c', 'C', 'c', 'C', 'Insert', 'F3', 'F16', 'F24'].includes(e.key);
+      const isCut = (e.ctrlKey || e.metaKey) && ['x', 'X', 'Delete'].includes(e.key);
+      
+      if (isPaste || isCopy || isCut) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Clear any selected text
+        window.getSelection().removeAllRanges();
+        
+        // Show feedback
+        if (isPaste) {
+          toast.error('Pasting is disabled in this environment');
+        }
+        
+        return false;
+      }
+    };
+    
+    document.addEventListener('keydown', preventShortcuts, { capture: true });
+    
+    // Block contentEditable elements
+    const blockEditable = (e) => {
+      if (e.target.isContentEditable) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+    
+    document.addEventListener('paste', blockEditable, { capture: true });
+    
+    // Block iframe events
+    window.addEventListener('blur', () => {
+      if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+        document.activeElement.blur();
+      }
+    });
+    
+    // Cleanup function
+    return () => {
+      document.removeEventListener('copy', preventDefault, options);
+      document.removeEventListener('cut', preventDefault, options);
+      document.removeEventListener('paste', blockPaste, options);
+      document.removeEventListener('contextmenu', preventContextMenu, options);
+      document.removeEventListener('drop', blockDragDrop, options);
+      document.removeEventListener('dragover', blockDragDrop, options);
+      document.removeEventListener('keydown', preventShortcuts, { capture: true });
+      document.removeEventListener('paste', blockEditable, { capture: true });
+      window.removeEventListener('blur', () => {});
+    };
+  }, []);
   const [activeTab, setActiveTab] = useState('description');
   const [output, setOutput] = useState(null);
   const [testResults, setTestResults] = useState([]);
@@ -1121,3 +1229,14 @@ function CodePage({ data, navigation }) {
 };
 
 export default CodePage;
+
+
+
+
+
+
+
+
+
+
+

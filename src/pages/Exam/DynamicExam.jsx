@@ -35,6 +35,14 @@ const DynamicExam = () => {
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
       const statusSnapshot = await get(statusRef);
 
+      const examstatus = await get(ref(database, `Exam/${testid}/Properties/status`));
+      console.log(examstatus.val());
+
+      if (examstatus.val() === "Completed") {
+        setStage("completed");
+        return true;
+      }
+
       if (statusSnapshot.exists()) {
         const statusData = statusSnapshot.val();
         // If exam is completed
@@ -422,7 +430,7 @@ const DynamicExam = () => {
         const questionTypeSnapshot = await get(questionTypeRef);
         const questionType = questionTypeSnapshot.val() || 'mcq';
 
-        console.log( marks[questionId]||0 )
+        console.log( marks[questionId]||0 );
 
         questionDetails.push({
           id: questionId,
@@ -782,23 +790,41 @@ const DynamicExam = () => {
                   </div>
 
                   {results.questions && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">Question Breakdown</h4>
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {results.questions.map((q, index) => (
-                          <span
-                            key={index}
-                            className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-medium ${q.correct
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                    <div className="mt-4 space-y-3">
+                    <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">Question Breakdown</h4>
+                    <div className="space-y-2">
+                      {results.questions.map((q, index) => (
+                        <div 
+                          key={index}
+                          className={`p-3 rounded-lg border ${
+                            q.correct 
+                              ? 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-800/50' 
+                              : q.mark > 0 ? 'bg-yellow-50 border-yellow-100 dark:bg-yellow-900/20 dark:border-yellow-800/50' : 'bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-800/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                Q{index + 1}: {q.id || `Question ${index + 1}`}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {q.type} • {q.mark || 0} {q.mark === 1 ? 'point' : 'points'}
+                              </p>
+                            </div>
+                            <span 
+                              className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${
+                                q.correct
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                  : q.mark > 0 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200' : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
                               }`}
-                            title={`Question ${index + 1}: ${q.type} (${q.correct ? 'Correct' : 'Incorrect'})`}
-                          >
-                            {index + 1}
-                          </span>
-                        ))}
-                      </div>
+                            >
+                              {q.correct ? 'Correct' : q.mark > 0 ? 'Partial' : 'Incorrect'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
+                  </div>
                   )}
                 </div>
 
