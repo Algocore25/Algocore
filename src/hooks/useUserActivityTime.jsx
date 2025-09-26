@@ -10,7 +10,7 @@ const useUserActivityTime = () => {
   useEffect(() => {
     if (auth.currentUser) {
       const userId = auth.currentUser.uid;
-      const timeRef = ref(db, `users/${userId}/activetime/time`);
+      const timeRef = ref(db, `Activitytime/${userId}/`);
       
       const unsubscribe = onValue(timeRef, (snapshot) => {
         if (snapshot.exists()) {

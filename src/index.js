@@ -53,7 +53,7 @@ root.render(
     <ThemeProvider>
       <AuthProvider>
         <AuthLoadingWrapper>
-          <App />
+            <App />
         </AuthLoadingWrapper>
       </AuthProvider>
     </ThemeProvider>

@@ -47,7 +47,7 @@ const useActivityTracker = () => {
     if (!auth.currentUser) return;
     
     const userId = auth.currentUser.uid;
-    const timeRef = ref(db, `users/${userId}/activetime/time`);
+    const timeRef = ref(db, `Activitytime/${userId}/`);
     
     try {
       // Get current total time
