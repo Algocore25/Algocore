@@ -84,20 +84,20 @@ function CodePage({ data, navigation }) {
       const isCopy = (e.ctrlKey || e.metaKey) && ['c', 'C', 'c', 'C', 'Insert', 'F3', 'F16', 'F24'].includes(e.key);
       const isCut = (e.ctrlKey || e.metaKey) && ['x', 'X', 'Delete'].includes(e.key);
       
-      if (isPaste || isCopy || isCut) {
-        e.preventDefault();
-        e.stopPropagation();
+      // if (isPaste || isCopy || isCut) {
+      //   e.preventDefault();
+      //   e.stopPropagation();
         
-        // Clear any selected text
-        window.getSelection().removeAllRanges();
+      //   // Clear any selected text
+      //   window.getSelection().removeAllRanges();
         
-        // Show feedback
-        if (isPaste) {
-          toast.error('Pasting is disabled in this environment');
-        }
+      //   // Show feedback
+      //   if (isPaste) {
+      //     toast.error('Pasting is disabled in this environment');
+      //   }
         
-        return false;
-      }
+      //   return false;
+      // }
     };
     
     document.addEventListener('keydown', preventShortcuts, { capture: true });
@@ -653,37 +653,37 @@ function CodePage({ data, navigation }) {
       resizeObserverRef.current.disconnect();
     }
 
-    // Disable Copy (Ctrl + C)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-      const copyDisabled = getItemWithExpiry("copyDisabled");
-      console.log(copyDisabled)
-      if (copyDisabled === null) {
-        toast.error("Copy disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("copyDisabled", true, 5000);
+    // // Disable Copy (Ctrl + C)
+    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+    //   const copyDisabled = getItemWithExpiry("copyDisabled");
+    //   console.log(copyDisabled)
+    //   if (copyDisabled === null) {
+    //     toast.error("Copy disabled!", {
+    //       position: "top-right",
+    //       autoClose: 3000,
+    //     });
+    //     setItemWithExpiry("copyDisabled", true, 5000);
 
-        return;
-      }
-
-
-    });
-
-    // Disable Paste (Ctrl + V)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-      const pasteDisabled = getItemWithExpiry("pasteDisabled");
-      if (pasteDisabled === null) {
-        toast.error("Paste disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("pasteDisabled", true, 5000);
-        return;
-      }
+    //     return;
+    //   }
 
 
-    });
+    // });
+
+    // // Disable Paste (Ctrl + V)
+    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+    //   const pasteDisabled = getItemWithExpiry("pasteDisabled");
+    //   if (pasteDisabled === null) {
+    //     toast.error("Paste disabled!", {
+    //       position: "top-right",
+    //       autoClose: 3000,
+    //     });
+    //     setItemWithExpiry("pasteDisabled", true, 5000);
+    //     return;
+    //   }
+
+
+    // });
 
     editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
       const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
