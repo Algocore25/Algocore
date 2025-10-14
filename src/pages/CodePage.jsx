@@ -43,18 +43,18 @@ function CodePage({ data, navigation }) {
 
     // More aggressive paste prevention
     const blockPaste = (e) => {
-      // Block all paste events
-      e.preventDefault();
-      e.stopPropagation();
+      // // Block all paste events
+      // e.preventDefault();
+      // e.stopPropagation();
       
-      // Clear clipboard data if possible
-      if (e.clipboardData) {
-        e.clipboardData.setData('text/plain', '');
-        e.clipboardData.clearData();
-      }
+      // // Clear clipboard data if possible
+      // if (e.clipboardData) {
+      //   e.clipboardData.setData('text/plain', '');
+      //   e.clipboardData.clearData();
+      // }
       
-      // Show a message to the user
-      toast.error('Copy-paste is disabled in this environment');
+      // // Show a message to the user
+      // toast.error('Copy-paste is disabled in this environment');
       return false;
     };
 
@@ -69,10 +69,10 @@ function CodePage({ data, navigation }) {
     const options = { capture: true, passive: false };
     
     // Block copy/paste events
-    document.addEventListener('copy', preventDefault, options);
-    document.addEventListener('cut', preventDefault, options);
-    document.addEventListener('paste', blockPaste, options);
-    document.addEventListener('contextmenu', preventContextMenu, options);
+    // document.addEventListener('copy', preventDefault, options);
+    // document.addEventListener('cut', preventDefault, options);
+    // document.addEventListener('paste', blockPaste, options);
+    // document.addEventListener('contextmenu', preventContextMenu, options);
     
     // Block drag and drop
     document.addEventListener('drop', blockDragDrop, options);
@@ -122,15 +122,15 @@ function CodePage({ data, navigation }) {
     
     // Cleanup function
     return () => {
-      document.removeEventListener('copy', preventDefault, options);
-      document.removeEventListener('cut', preventDefault, options);
-      document.removeEventListener('paste', blockPaste, options);
-      document.removeEventListener('contextmenu', preventContextMenu, options);
-      document.removeEventListener('drop', blockDragDrop, options);
-      document.removeEventListener('dragover', blockDragDrop, options);
-      document.removeEventListener('keydown', preventShortcuts, { capture: true });
-      document.removeEventListener('paste', blockEditable, { capture: true });
-      window.removeEventListener('blur', () => {});
+      // document.removeEventListener('copy', preventDefault, options);
+      // document.removeEventListener('cut', preventDefault, options);
+      // document.removeEventListener('paste', blockPaste, options);
+      // document.removeEventListener('contextmenu', preventContextMenu, options);
+      // document.removeEventListener('drop', blockDragDrop, options);
+      // document.removeEventListener('dragover', blockDragDrop, options);
+      // document.removeEventListener('keydown', preventShortcuts, { capture: true });
+      // document.removeEventListener('paste', blockEditable, { capture: true });
+      // window.removeEventListener('blur', () => {});
     };
   }, []);
   const [activeTab, setActiveTab] = useState('description');
