@@ -43,18 +43,18 @@ function CodePage({ data, navigation }) {
 
     // More aggressive paste prevention
     const blockPaste = (e) => {
-      // // Block all paste events
-      // e.preventDefault();
-      // e.stopPropagation();
+      // Block all paste events
+      e.preventDefault();
+      e.stopPropagation();
       
-      // // Clear clipboard data if possible
-      // if (e.clipboardData) {
-      //   e.clipboardData.setData('text/plain', '');
-      //   e.clipboardData.clearData();
-      // }
+      // Clear clipboard data if possible
+      if (e.clipboardData) {
+        e.clipboardData.setData('text/plain', '');
+        e.clipboardData.clearData();
+      }
       
-      // // Show a message to the user
-      // toast.error('Copy-paste is disabled in this environment');
+      // Show a message to the user
+      toast.error('Copy-paste is disabled in this environment');
       return false;
     };
 
@@ -69,10 +69,10 @@ function CodePage({ data, navigation }) {
     const options = { capture: true, passive: false };
     
     // Block copy/paste events
-    // document.addEventListener('copy', preventDefault, options);
-    // document.addEventListener('cut', preventDefault, options);
-    // document.addEventListener('paste', blockPaste, options);
-    // document.addEventListener('contextmenu', preventContextMenu, options);
+    document.addEventListener('copy', preventDefault, options);
+    document.addEventListener('cut', preventDefault, options);
+    document.addEventListener('paste', blockPaste, options);
+    document.addEventListener('contextmenu', preventContextMenu, options);
     
     // Block drag and drop
     document.addEventListener('drop', blockDragDrop, options);
@@ -84,20 +84,20 @@ function CodePage({ data, navigation }) {
       const isCopy = (e.ctrlKey || e.metaKey) && ['c', 'C', 'c', 'C', 'Insert', 'F3', 'F16', 'F24'].includes(e.key);
       const isCut = (e.ctrlKey || e.metaKey) && ['x', 'X', 'Delete'].includes(e.key);
       
-      // if (isPaste || isCopy || isCut) {
-      //   e.preventDefault();
-      //   e.stopPropagation();
+      if (isPaste || isCopy || isCut) {
+        e.preventDefault();
+        e.stopPropagation();
         
-      //   // Clear any selected text
-      //   window.getSelection().removeAllRanges();
+        // Clear any selected text
+        window.getSelection().removeAllRanges();
         
-      //   // Show feedback
-      //   if (isPaste) {
-      //     toast.error('Pasting is disabled in this environment');
-      //   }
+        // Show feedback
+        if (isPaste) {
+          toast.error('Pasting is disabled in this environment');
+        }
         
-      //   return false;
-      // }
+        return false;
+      }
     };
     
     document.addEventListener('keydown', preventShortcuts, { capture: true });
@@ -122,15 +122,15 @@ function CodePage({ data, navigation }) {
     
     // Cleanup function
     return () => {
-      // document.removeEventListener('copy', preventDefault, options);
-      // document.removeEventListener('cut', preventDefault, options);
-      // document.removeEventListener('paste', blockPaste, options);
-      // document.removeEventListener('contextmenu', preventContextMenu, options);
-      // document.removeEventListener('drop', blockDragDrop, options);
-      // document.removeEventListener('dragover', blockDragDrop, options);
-      // document.removeEventListener('keydown', preventShortcuts, { capture: true });
-      // document.removeEventListener('paste', blockEditable, { capture: true });
-      // window.removeEventListener('blur', () => {});
+      document.removeEventListener('copy', preventDefault, options);
+      document.removeEventListener('cut', preventDefault, options);
+      document.removeEventListener('paste', blockPaste, options);
+      document.removeEventListener('contextmenu', preventContextMenu, options);
+      document.removeEventListener('drop', blockDragDrop, options);
+      document.removeEventListener('dragover', blockDragDrop, options);
+      document.removeEventListener('keydown', preventShortcuts, { capture: true });
+      document.removeEventListener('paste', blockEditable, { capture: true });
+      window.removeEventListener('blur', () => {});
     };
   }, []);
   const [activeTab, setActiveTab] = useState('description');
@@ -653,37 +653,37 @@ function CodePage({ data, navigation }) {
       resizeObserverRef.current.disconnect();
     }
 
-    // // Disable Copy (Ctrl + C)
-    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-    //   const copyDisabled = getItemWithExpiry("copyDisabled");
-    //   console.log(copyDisabled)
-    //   if (copyDisabled === null) {
-    //     toast.error("Copy disabled!", {
-    //       position: "top-right",
-    //       autoClose: 3000,
-    //     });
-    //     setItemWithExpiry("copyDisabled", true, 5000);
+    // Disable Copy (Ctrl + C)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+      const copyDisabled = getItemWithExpiry("copyDisabled");
+      console.log(copyDisabled)
+      if (copyDisabled === null) {
+        toast.error("Copy disabled!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setItemWithExpiry("copyDisabled", true, 5000);
 
-    //     return;
-    //   }
-
-
-    // });
-
-    // // Disable Paste (Ctrl + V)
-    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-    //   const pasteDisabled = getItemWithExpiry("pasteDisabled");
-    //   if (pasteDisabled === null) {
-    //     toast.error("Paste disabled!", {
-    //       position: "top-right",
-    //       autoClose: 3000,
-    //     });
-    //     setItemWithExpiry("pasteDisabled", true, 5000);
-    //     return;
-    //   }
+        return;
+      }
 
 
-    // });
+    });
+
+    // Disable Paste (Ctrl + V)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+      const pasteDisabled = getItemWithExpiry("pasteDisabled");
+      if (pasteDisabled === null) {
+        toast.error("Paste disabled!", {
+          position: "top-right",
+          autoClose: 3000,
+        });
+        setItemWithExpiry("pasteDisabled", true, 5000);
+        return;
+      }
+
+
+    });
 
     editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
       const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
