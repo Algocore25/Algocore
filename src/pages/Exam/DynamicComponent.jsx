@@ -43,16 +43,15 @@ const DynamicComponent = ({ question }) => {
         }
       } catch (error) {
         console.error("Error fetching data from Firebase:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
 
     console.log(data?.type);
 
-
-
     fetchData();
-    setLoading(false);
 
   }, [question]); // Dependencies adjusted
 

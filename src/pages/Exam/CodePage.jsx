@@ -18,6 +18,11 @@ import AnimatedTestResults from '../AnimatedTestResults';
 import { executeCode } from '../api';
 import { useAuth } from '../../context/AuthContext';
 
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+import { setItemWithExpiry, getItemWithExpiry } from "../../utils/storageWithExpiry";
+
 
 
 
@@ -550,7 +555,7 @@ function CodePage({ question }) {
     };
   }, []);
 
-  function handleEditorDidMount(editor) {
+  function handleEditorDidMount(editor, monaco) {
     editorRef.current = editor;
 
     // Clean up previous observer
@@ -649,6 +654,7 @@ function CodePage({ question }) {
 
   return (
     <div className="min-h-screen h-screen w-full flex bg-white dark:bg-dark-primary select-none">
+      <ToastContainer />
       {/* Left Panel */}
       <div
         className="bg-white dark:bg-dark-secondary border-r border-gray-200 dark:border-dark-tertiary flex flex-col overflow-hidden h-full"
