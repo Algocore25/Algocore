@@ -33,6 +33,7 @@ export const AuthProvider = ({ children }) => {
   const isManualLogoutRef = React.useRef(false);
   const isInitializingSessionRef = React.useRef(false);
   const cleanupTimeoutRef = React.useRef(null);
+  const isOnlineRef = React.useRef(navigator.onLine);
 
   // Generate a more robust session ID
   const generateSessionId = () => {
@@ -216,13 +217,9 @@ export const AuthProvider = ({ children }) => {
       await set(sessionRef, sessionData);
       console.log('New session created:', newSessionId);
 
-      // Set up disconnect handler
-      try {
-        await onDisconnect(sessionRef).remove();
-        console.log('Disconnect handler set up');
-      } catch (error) {
-        console.warn('Failed to set up disconnect handler:', error);
-      }
+      // Don't set up onDisconnect handler to avoid logout on network issues
+      // Sessions will be cleaned up by new logins instead
+      console.log('Session will persist through network disconnections');
 
       // Set up session listener
       sessionUnsubRef.current = onValue(sessionRef, (snapshot) => {
@@ -230,8 +227,12 @@ export const AuthProvider = ({ children }) => {
         
         if (!sessionValue) {
           console.log('Session removed from database');
-          if (!isManualLogoutRef.current) {
+          // Only logout if we're online (to avoid false logout on network issues)
+          if (!isManualLogoutRef.current && isOnlineRef.current) {
+            console.log('Session genuinely removed while online - logging out');
             logout(true, 'session-removed');
+          } else if (!isOnlineRef.current) {
+            console.log('Session removed but offline - keeping user logged in');
           }
           return;
         }
@@ -311,6 +312,27 @@ export const AuthProvider = ({ children }) => {
       isInitializingSessionRef.current = false;
     }
   }, [logout]);
+
+  // Network status tracking
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('Network: ONLINE');
+      isOnlineRef.current = true;
+    };
+    
+    const handleOffline = () => {
+      console.log('Network: OFFLINE');
+      isOnlineRef.current = false;
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Auth state listener
   useEffect(() => {

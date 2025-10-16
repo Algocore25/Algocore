@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { database } from "../../firebase";
 import { ref, get, set, child, onValue, off } from "firebase/database";
+import { Wifi, WifiOff } from "lucide-react";
 
 
 
@@ -157,6 +158,130 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
         setShowSubmitModal(true);
     };
 
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [networkSpeed, setNetworkSpeed] = useState(null);
+    const [connectionType, setConnectionType] = useState('4g');
+
+    // Measure actual network speed with a small test
+    const measureActualSpeed = useCallback(async () => {
+        if (!navigator.onLine) return null;
+        
+        try {
+            // Use a small image for speed test
+            const imageSize = 100000; // 100KB
+            const testUrl = `https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png?t=${Date.now()}`;
+            
+            const startTime = performance.now();
+            const response = await fetch(testUrl, { 
+                cache: 'no-store'
+            });
+            await response.blob(); // Actually download the content
+            const endTime = performance.now();
+            
+            const durationSeconds = (endTime - startTime) / 1000;
+            if (durationSeconds > 0) {
+                const speedBps = (imageSize * 8) / durationSeconds;
+                const speedMbps = speedBps / (1024 * 1024);
+                console.log('Measured speed:', speedMbps.toFixed(2), 'Mbps');
+                return Math.max(0.1, Math.min(speedMbps, 100)); // Clamp between 0.1 and 100
+            }
+            return null;
+        } catch (error) {
+            console.log('Speed test failed:', error.message);
+            return null;
+        }
+    }, []);
+
+    // Get network speed from browser API or measure
+    const getNetworkSpeed = useCallback(async () => {
+        if (!navigator.onLine) {
+            setNetworkSpeed(null);
+            setConnectionType('offline');
+            return;
+        }
+
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        
+        // Update connection type for display
+        if (connection && connection.effectiveType) {
+            setConnectionType(connection.effectiveType);
+        }
+
+        // Try actual measurement first
+        const measuredSpeed = await measureActualSpeed();
+        
+        if (measuredSpeed !== null) {
+            console.log('Using measured speed:', measuredSpeed);
+            setNetworkSpeed(measuredSpeed);
+        } else if (connection && connection.downlink) {
+            // Add some variance to make it more realistic (±10%)
+            const variance = (Math.random() - 0.5) * 0.2;
+            const adjustedSpeed = connection.downlink * (1 + variance);
+            console.log('Using connection.downlink:', adjustedSpeed);
+            setNetworkSpeed(Math.max(0.1, adjustedSpeed));
+        } else if (connection && connection.effectiveType) {
+            // Estimate based on effective type with variance
+            const speedEstimates = {
+                'slow-2g': 0.05,
+                '2g': 0.25,
+                '3g': 1.5,
+                '4g': 10
+            };
+            const baseSpeed = speedEstimates[connection.effectiveType] || 1;
+            const variance = (Math.random() - 0.5) * 0.3;
+            const estimatedSpeed = Math.max(0.1, baseSpeed * (1 + variance));
+            console.log('Using effectiveType estimate:', connection.effectiveType, estimatedSpeed);
+            setNetworkSpeed(estimatedSpeed);
+        } else {
+            // Fallback: set a default speed if no method works
+            console.log('No connection API, using default 5 Mbps');
+            setNetworkSpeed(5);
+        }
+    }, [measureActualSpeed]);
+
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+            getNetworkSpeed();
+        };
+        const handleOffline = () => {
+            setIsOnline(false);
+            setNetworkSpeed(null);
+        };
+
+        const handleConnectionChange = () => {
+            getNetworkSpeed();
+        };
+
+        window.addEventListener("online", handleOnline);
+        window.addEventListener("offline", handleOffline);
+
+        // Listen for connection changes
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (connection) {
+            connection.addEventListener('change', handleConnectionChange);
+        }
+
+        // Initial speed check
+        getNetworkSpeed();
+
+        // Update speed every 10 seconds
+        const speedInterval = setInterval(() => {
+            if (navigator.onLine) {
+                getNetworkSpeed();
+            }
+        }, 10000);
+
+        return () => {
+            window.removeEventListener("online", handleOnline);
+            window.removeEventListener("offline", handleOffline);
+            if (connection) {
+                connection.removeEventListener('change', handleConnectionChange);
+            }
+            clearInterval(speedInterval);
+        };
+    }, [getNetworkSpeed]);
+
 
 
     useEffect(() => {
@@ -267,47 +392,118 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                         <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
                             {examName}
                         </h1>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                            Question {activeQuestion + 1} of {Questions.length}
+                       
+                    </div>
+                    
+                    {/* User Info */}
+                    <div className="flex items-center space-x-3 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full text-white font-bold text-sm shadow-md">
+                            {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                            {user?.name || 'User'}
                         </span>
                     </div>
+
                     <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {/* <BsLightningCharge className="text-yellow-500" /> */}
-                            <span>Time Left: {timeLeft !== null ? formatTime(timeLeft) : 'Loading...'}</span>
+                        {/* Network Status */}
+                        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                            {isOnline ? (
+                                <>
+                                    <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                    <div className="flex flex-col">
+                                        {networkSpeed !== null ? (
+                                            <>
+                                                <span className="text-xs font-semibold">
+                                                    {networkSpeed >= 1 ? (
+                                                        <span className="text-green-600 dark:text-green-400">
+                                                            {networkSpeed.toFixed(1)} Mbps
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-yellow-600 dark:text-yellow-400">
+                                                            {(networkSpeed * 1024).toFixed(0)} Kbps
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span className="text-xs font-medium text-green-600 dark:text-green-400">Online</span>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                    <span className="text-xs font-medium text-red-600 dark:text-red-400">Offline</span>
+                                </>
+                            )}
                         </div>
-                        <div className="flex space-x-2">
+                        {/* Timer with better styling */}
+                        <div className="flex items-center space-x-2 px-3 py-1.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                            <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="text-sm font-semibold text-yellow-700 dark:text-yellow-300">
+                                {timeLeft !== null ? formatTime(timeLeft) : 'Loading...'}
+                            </span>
+                        </div>
+
+                        {/* Progress indicator */}
+                        <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                                {activeQuestion + 1} / {Questions.length}
+                            </span>
+                            <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300"
+                                    style={{ width: `${((activeQuestion + 1) / Questions.length) * 100}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Navigation buttons */}
+                        <div className="flex items-center space-x-2">
                             <button
                                 onClick={goToPreviousQuestion}
                                 disabled={activeQuestion === 0}
-                                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="group flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-300 dark:disabled:hover:border-gray-600 disabled:hover:text-gray-700 dark:disabled:hover:text-gray-300 shadow-sm"
+                                title="Previous Question"
                             >
-                                Previous
+                                <FiChevronLeft className="w-4 h-4" />
+                                <span className="hidden md:inline">Previous</span>
                             </button>
                             <button
                                 onClick={goToNextQuestion}
                                 disabled={activeQuestion === Questions.length - 1}
-                                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="group flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-300 dark:disabled:hover:border-gray-600 disabled:hover:text-gray-700 dark:disabled:hover:text-gray-300 shadow-sm"
+                                title="Next Question"
                             >
-                                Next
+                                <span className="hidden md:inline">Next</span>
+                                <FiChevronRight className="w-4 h-4" />
                             </button>
+                            
+                            {/* Divider */}
+                            <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1" />
+                            
+                            {/* Submit button */}
                             <button
                                 onClick={submitExam}
-                                className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md flex items-center gap-2 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-sm font-semibold rounded-lg shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md"
                                 disabled={isSubmitting}
+                                title="Submit Exam"
                             >
                                 {isSubmitting ? (
                                     <>
-                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        Submitting...
+                                        <span>Submitting...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <FiCheck size={16} />
-                                        Submit Exam
+                                        <FiCheck className="w-4 h-4" />
+                                        <span>Submit</span>
                                     </>
                                 )}
                             </button>
@@ -372,14 +568,9 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
 
                     {/* Main Content */}
                     <div className="flex-1 flex flex-col overflow-hidden">
-
-                        <DynamicComponent question={Questions[activeQuestion]}
-                        />
+                        <DynamicComponent question={Questions[activeQuestion]} />
                     </div>
                 </div>
-
-
-
             </div>
 
             {/* Submit Confirmation Modal */}

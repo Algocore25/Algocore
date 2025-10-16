@@ -6,6 +6,7 @@ import { database } from '../firebase';
 import { ref, get } from 'firebase/database';
 import { matchPath } from 'react-router-dom';
 
+import { Wifi, WifiOff } from "lucide-react";
 
 
 
@@ -38,6 +39,21 @@ const Navbar = () => {
 
   const authDropdownRef = useRef(null);
   const authButtonRef = useRef(null);
+
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   if (loading) return null;
 
@@ -266,6 +282,17 @@ const Navbar = () => {
             </div>
           )}
 
+         <div className="flex items-center space-x-2">
+      {isOnline ? (
+        <div className="flex items-center text-green-600">
+          <Wifi className="w-5 h-5 mr-1" />
+        </div>
+      ) : (
+        <div className="flex items-center text-red-600">
+          <WifiOff className="w-5 h-5 mr-1" />
+        </div>
+      )}
+    </div>
 
           <button
             onClick={toggleTheme}

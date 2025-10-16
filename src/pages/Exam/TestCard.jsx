@@ -10,7 +10,7 @@ const TestCard = ({ test, onStart }) => {
         <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200 border border-gray-200 dark:border-dark-tertiary">
             <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{test.name}</h3>
             <p className="text-gray-600 dark:text-gray-400 mt-2">Duration: {test.duration} minutes</p>
-            <p className="text-gray-600 dark:text-gray-400">Questions: {test.questions?.length || 0}</p>
+            <p className="text-gray-600 dark:text-gray-400">Questions: {test?.configure?.questionsPerType ? Object.values(test.configure.questionsPerType).reduce((a, b) => a + b, 0) : 0}</p>
 
       <div className="mt-4">
         {status === "NotStarted" && (

@@ -28,10 +28,10 @@ const FullscreenTracker = ( { violation , setviolation, isViolationReady ,testid
     const onChange = () => {
       const fs = screenfull.isFullscreen;
       setIsFullscreen(fs);
-      if (!fs || !isViolationReady) 
+      if (!fs && isViolationReady) 
       {
-        console.log("violation updated");
-        setviolation(violation + 1);
+        console.log("Fullscreen exit violation detected");
+        setviolation(prev => prev + 1);
         setExitCount((prev) => prev + 1);
       }
         
@@ -39,20 +39,23 @@ const FullscreenTracker = ( { violation , setviolation, isViolationReady ,testid
 
     screenfull.on("change", onChange);
     return () => screenfull.off("change", onChange);
-  }, []);
+  }, [isViolationReady, setviolation]);
 
-  // Tab switch / blur time tracking
+  // Tab switch / blur time tracking + visibility change
   useEffect(() => {
     const handleBlur = () => {
+      console.log("Window blur detected - app switched");
       blurStartRef.current = Date.now();
-      if (!isViolationReady) 
+      if (isViolationReady) 
       {
-        setviolation(violation + 1);
+        console.log("Adding violation for window blur");
+        setviolation(prev => prev + 1);
         setSwitchCount((prev) => prev + 1);
       }
     };
 
     const handleFocus = () => {
+      console.log("Window focus restored");
       if (blurStartRef.current) {
         const duration = Date.now() - blurStartRef.current;
         setTotalBlurTime((prev) => prev + duration);
@@ -60,13 +63,35 @@ const FullscreenTracker = ( { violation , setviolation, isViolationReady ,testid
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log("Page hidden - tab/app switched");
+        blurStartRef.current = Date.now();
+        if (isViolationReady) {
+          console.log("Adding violation for visibility change");
+          setviolation(prev => prev + 1);
+          setSwitchCount((prev) => prev + 1);
+        }
+      } else {
+        console.log("Page visible again");
+        if (blurStartRef.current) {
+          const duration = Date.now() - blurStartRef.current;
+          setTotalBlurTime((prev) => prev + duration);
+          blurStartRef.current = null;
+        }
+      }
+    };
+
     window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
     return () => {
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [isViolationReady, setviolation]);
 
   // Mouse leave/enter time tracking
   useEffect(() => {
@@ -77,9 +102,10 @@ const FullscreenTracker = ( { violation , setviolation, isViolationReady ,testid
         e.clientX >= window.innerWidth ||
         e.clientY >= window.innerHeight
       ) {
-        if (!isViolationReady) 
+        if (isViolationReady) 
         {
-          setviolation(violation + 1);
+          console.log("Mouse left screen - violation");
+          setviolation(prev => prev + 1);
           setHoverLeaveCount((prev) => prev + 1);
           hoverLeaveStartRef.current = Date.now();
         }
@@ -100,7 +126,7 @@ const FullscreenTracker = ( { violation , setviolation, isViolationReady ,testid
       document.removeEventListener("mouseleave", handleMouseLeave);
       document.removeEventListener("mouseenter", handleMouseEnter);
     };
-  }, []);
+  }, [isViolationReady, setviolation]);
 
   // Key press detection while not focused
   useEffect(() => {

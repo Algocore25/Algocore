@@ -645,50 +645,71 @@ const DynamicExam = () => {
       )}
 
       {stage === "resume" && (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4">
-          <div className="w-full max-w-md mx-auto p-8 rounded-2xl shadow-xl bg-white dark:bg-gray-800 text-center space-y-8 transform transition-all duration-300 hover:shadow-2xl">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-yellow-100 dark:bg-yellow-900/30 mb-6">
-              <svg className="w-10 h-10 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-              </svg>
-            </div>
+        <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 overflow-hidden">
+          <div className="w-full max-w-lg max-h-[95vh] flex flex-col">
+            <div className="h-4 sm:h-6 md:h-8 lg:h-12"></div>
 
-            <div className="space-y-4">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Continue Your Test</h1>
-              <p className="text-gray-600 dark:text-gray-300">Your progress has been saved. You can continue from where you left off.</p>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-full">
+              {/* Header Section */}
+              <div className="bg-gradient-to-r from-yellow-500 to-orange-500 px-6 py-6 text-center flex-shrink-0">
+                <h1 className="text-2xl font-bold text-white mb-1">Test Paused</h1>
+                <p className="text-sm text-yellow-50">Ready to continue?</p>
+              </div>
 
-              {configdata && (
-                <div className="mt-6 space-y-3">
-                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Test Summary</h3>
-                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 space-y-2">
-                    {Object.entries(configdata).map(([type, count]) => (
-                      count > 0 && (
-                        <div key={type} className="flex justify-between items-center py-2 px-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors">
-                          <span className="text-gray-700 dark:text-gray-200 capitalize">{type.toLowerCase()}</span>
-                          <span className="px-3 py-1 text-sm font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-full">
-                            {count} {count === 1 ? 'question' : 'questions'}
-                          </span>
-                        </div>
-                      )
-                    ))}
+              {/* Content Section - Scrollable if needed */}
+              <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+                {/* User Info Card */}
+                <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+                  <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full text-white font-bold text-lg shadow-lg">
+                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Student</p>
+                    <p className="text-base font-semibold text-gray-800 dark:text-gray-200">{user?.name || 'User'}</p>
                   </div>
                 </div>
-              )}
-            </div>
 
-            <button
-              onClick={returnToFullScreen}
-              className="w-full mt-6 px-6 py-3.5 rounded-lg font-semibold text-white bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-all duration-200 transform hover:scale-[1.02]"
-            >
-              <div className="flex items-center justify-center space-x-2">
-                <span>Resume Test</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                </svg>
+                {/* Exam Info Card */}
+                <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Exam</p>
+                  <p className="text-base font-semibold text-gray-800 dark:text-gray-200">{examName || 'Test'}</p>
+                </div>
+
+                {/* Test Summary */}
+                {configdata && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-1">Questions</h3>
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 space-y-1.5 max-h-32 overflow-y-auto">
+                      {Object.entries(configdata).map(([type, count]) => (
+                        count > 0 && (
+                          <div key={type} className="flex justify-between items-center py-2 px-3 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+                            <span className="text-sm text-gray-700 dark:text-gray-200 capitalize font-medium">{type.toLowerCase()}</span>
+                            <span className="px-2.5 py-0.5 text-xs font-semibold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full">
+                              {count}
+                            </span>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </button>
 
-            <p className="text-xs text-gray-400 mt-4">Please ensure you're in a quiet environment before resuming.</p>
+              {/* Footer with Button */}
+              <div className="px-6 pb-6 flex-shrink-0">
+                <button
+                  onClick={returnToFullScreen}
+                  className="w-full px-6 py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:focus:ring-yellow-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <div className="flex items-center justify-center space-x-2">
+                    <span>Resume Test</span>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
