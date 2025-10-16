@@ -6,7 +6,7 @@ import LoadingPage from '../LoadingPage';
 import { useAuth } from '../../context/AuthContext';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { X, Code as CodeIcon, List } from 'lucide-react';
+import { X, Code as CodeIcon, List, Download } from 'lucide-react';
 
 export default function AdminResult() {
   const { testid } = useParams();
@@ -48,7 +48,6 @@ export default function AdminResult() {
         const resultsData = resultsSnapshot.val() || {};
         const examQuestions = examQuestionsSnapshot.val() || {};
         const marksData = marksSnapshot.val() || {};
-
         setTestName(testInfoSnapshot.val() || '');
 
         if (!studentEmails.length) {
@@ -94,20 +93,16 @@ export default function AdminResult() {
           const codeSubmissions = codeSubmissionsSnapshots[index].val() || {};
           const marks = marksData[studentId] || {};
 
-
           const questionIds = Object.keys(studentQuestions);
           let correctCount = 0;
           const questionDetails = [];
 
           const totalMarks = Object.values(marks).reduce((acc, mark) => acc + mark, 0) / questionIds.length;
 
-
           for (const questionId of questionIds) {
             const questionKey = studentQuestions[questionId];
             const questionType = examQuestions[questionKey] || 'mcq';
-
             console.log(answers);
-
             const isCorrect = answers[questionKey] === "true";
 
             if (isCorrect) correctCount++;
@@ -122,13 +117,13 @@ export default function AdminResult() {
             }
 
             console.log(marks);
-
             questionDetails.push({
               id: questionKey || "No name",
               originalId: questionId,
               correct: isCorrect,
               type: questionType,
               code: codeData,
+              mcqanswer: codeSubmissions[questionKey] || null,
               marks: marks[questionKey] || 0,
             });
           }
@@ -152,7 +147,6 @@ export default function AdminResult() {
 
         console.log('Processed student results:', studentResults);
         setResults(studentResults);
-
       } catch (error) {
         console.error('Error fetching results:', error);
       } finally {
@@ -163,22 +157,484 @@ export default function AdminResult() {
     fetchreultdata();
   }, [testid]);
 
-  const downloadPDF = () => {
-    const input = pdfRef.current;
-    html2canvas(input).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4', true);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 30;
+  const downloadAllResultsPDF = async () => {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    let yPosition = margin;
 
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
-      pdf.save(`results_${testName || testid}.pdf`);
+    // Helper function to check if we need a new page
+    const checkNewPage = (requiredSpace) => {
+      if (yPosition + requiredSpace > pageHeight - margin) {
+        pdf.addPage();
+        yPosition = margin;
+        return true;
+      }
+      return false;
+    };
+
+    // Title Page
+    pdf.setFontSize(20);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Test Results Summary', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Test: ${testName || testid}`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 6;
+
+    pdf.setFontSize(10);
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 6;
+
+    pdf.text(`Total Students: ${results.length}`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 15;
+
+    // Summary Table
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Overall Performance Summary', margin, yPosition);
+    yPosition += 8;
+
+    // Table Headers
+    pdf.setFillColor(70, 130, 180);
+    pdf.setTextColor(255, 255, 255);
+    pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
+    
+    pdf.setFontSize(9);
+    pdf.text('#', margin + 2, yPosition);
+    pdf.text('Student Name', margin + 8, yPosition);
+    pdf.text('Email', margin + 60, yPosition);
+    pdf.text('Score', margin + 120, yPosition);
+    pdf.text('Correct', margin + 140, yPosition);
+    pdf.text('Total', margin + 165, yPosition);
+    
+    pdf.setTextColor(0, 0, 0);
+    yPosition += 8;
+
+    // Table Rows
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    
+    results.forEach((result, index) => {
+      if (checkNewPage(8)) {
+        // Redraw header on new page
+        pdf.setFillColor(70, 130, 180);
+        pdf.setTextColor(255, 255, 255);
+        pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
+        pdf.setFontSize(9);
+        pdf.text('#', margin + 2, yPosition);
+        pdf.text('Student Name', margin + 8, yPosition);
+        pdf.text('Email', margin + 60, yPosition);
+        pdf.text('Score', margin + 120, yPosition);
+        pdf.text('Correct', margin + 140, yPosition);
+        pdf.text('Total', margin + 165, yPosition);
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFontSize(8);
+        yPosition += 8;
+      }
+
+      // Alternate row colors
+      if (index % 2 === 0) {
+        pdf.setFillColor(245, 245, 245);
+        pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 7, 'F');
+      }
+
+      pdf.text(`${index + 1}`, margin + 2, yPosition);
+      
+      const studentName = result.studentId.length > 20 ? result.studentId.substring(0, 20) + '...' : result.studentId;
+      pdf.text(studentName, margin + 8, yPosition);
+      
+      const email = result.mail.length > 25 ? result.mail.substring(0, 25) + '...' : result.mail;
+      pdf.text(email, margin + 60, yPosition);
+      
+      const scoreText = isNaN(result.totalMarks) ? 'N/A' : `${result.totalMarks.toFixed(1)}%`;
+      pdf.text(scoreText, margin + 120, yPosition);
+      
+      pdf.text(`${result.correctCount}`, margin + 145, yPosition);
+      pdf.text(`${result.totalQuestions}`, margin + 168, yPosition);
+      
+      yPosition += 7;
     });
+
+    yPosition += 10;
+
+    // Statistics
+    checkNewPage(40);
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Test Statistics', margin, yPosition);
+    yPosition += 8;
+
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+
+    const validScores = results.filter(r => !isNaN(r.totalMarks)).map(r => r.totalMarks);
+    const avgScore = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(2) : 'N/A';
+    const maxScore = validScores.length > 0 ? Math.max(...validScores).toFixed(2) : 'N/A';
+    const minScore = validScores.length > 0 ? Math.min(...validScores).toFixed(2) : 'N/A';
+
+    pdf.text(`Average Score: ${avgScore}%`, margin + 5, yPosition);
+    yPosition += 6;
+    pdf.text(`Highest Score: ${maxScore}%`, margin + 5, yPosition);
+    yPosition += 6;
+    pdf.text(`Lowest Score: ${minScore}%`, margin + 5, yPosition);
+    yPosition += 6;
+    pdf.text(`Students Attended: ${validScores.length} / ${results.length}`, margin + 5, yPosition);
+
+    // Footer on all pages
+    const totalPages = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'italic');
+      pdf.setTextColor(128, 128, 128);
+      pdf.text(
+        `Page ${i} of ${totalPages} - ${testName || testid}`,
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+    }
+
+    pdf.save(`${testName || testid}_all_results.pdf`);
+  };
+
+  const downloadStudentPDF = async (result) => {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    let yPosition = margin;
+
+    // Fetch all question details for this student
+    const questionDetailsMap = {};
+    
+    try {
+      for (const q of result.questions) {
+        try {
+          // Fetch question details from database
+          const questionRef = ref(database, `questions/${q.id}`);
+          const questionSnapshot = await get(questionRef);
+          const questionData = questionSnapshot.val() || {};
+
+          // Fetch student's answer for MCQ
+          const submissionRef = ref(database, `ExamSubmissions/${testid}/${result.uid}/${q.id}`);
+          const submissionSnapshot = await get(submissionRef);
+          const studentAnswer = submissionSnapshot.val();
+
+          // Fetch code for programming questions
+          let codeSubmission = null;
+          if (q.type === 'Programming') {
+            const codeRef = ref(database, `ExamCode/${testid}/${result.uid}/${q.originalId}/cpp`);
+            const codeSnapshot = await get(codeRef);
+            if (codeSnapshot.exists()) {
+              codeSubmission = codeSnapshot.val();
+            }
+          }
+
+          questionDetailsMap[q.id] = {
+            ...questionData,
+            studentAnswer: studentAnswer || null,
+            isCorrect: q.correct,
+            marks: q.marks,
+            type: q.type,
+            codeSubmission: codeSubmission
+          };
+        } catch (error) {
+          console.error(`Error fetching details for question ${q.id}:`, error);
+          questionDetailsMap[q.id] = {
+            questionname: q.id,
+            studentAnswer: null,
+            isCorrect: q.correct,
+            marks: q.marks,
+            type: q.type
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching question details:', error);
+    }
+
+    // Helper function to check if we need a new page
+    const checkNewPage = (requiredSpace) => {
+      if (yPosition + requiredSpace > pageHeight - margin) {
+        pdf.addPage();
+        yPosition = margin;
+        return true;
+      }
+      return false;
+    };
+
+    // Helper function to add text with word wrap
+    const addText = (text, x, y, maxWidth, fontSize = 10) => {
+      pdf.setFontSize(fontSize);
+      const lines = pdf.splitTextToSize(text, maxWidth);
+      pdf.text(lines, x, y);
+      return lines.length * (fontSize * 0.35); // Return height used
+    };
+
+    // Convert option key (0,1,2,3) to display format (1,2,3,4)
+    const convertOptionKey = (key) => {
+      const numKey = parseInt(key);
+      return isNaN(numKey) ? key : (numKey + 1).toString();
+    };
+
+    // Title
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Student Performance Report', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+
+    // Test Name
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Test: ${testName || testid}`, margin, yPosition);
+    yPosition += 8;
+
+    // Horizontal line
+    pdf.setDrawColor(200, 200, 200);
+    pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+    yPosition += 8;
+
+    // Student Information
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Student Information', margin, yPosition);
+    yPosition += 7;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Name: ${result.studentId}`, margin, yPosition);
+    yPosition += 6;
+    pdf.text(`Email: ${result.mail}`, margin, yPosition);
+    yPosition += 6;
+    pdf.text(`Student ID: ${result.uid.substring(0, 10)}...`, margin, yPosition);
+    yPosition += 10;
+
+    // Performance Summary
+    checkNewPage(40);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Performance Summary', margin, yPosition);
+    yPosition += 7;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Total Score: ${isNaN(result.totalMarks) ? 'Not Attended' : result.totalMarks.toFixed(2) + '%'}`, margin, yPosition);
+    yPosition += 6;
+    pdf.text(`Questions Attempted: ${result.totalQuestions}`, margin, yPosition);
+    yPosition += 6;
+    pdf.text(`Correct Answers: ${result.correctCount}`, margin, yPosition);
+    yPosition += 6;
+    pdf.text(`Incorrect Answers: ${result.totalQuestions - result.correctCount}`, margin, yPosition);
+    yPosition += 6;
+    pdf.text(`Accuracy: ${result.totalQuestions > 0 ? Math.round((result.correctCount / result.totalQuestions) * 100) : 0}%`, margin, yPosition);
+    yPosition += 12;
+
+    // Detailed Question-wise Analysis
+    checkNewPage(40);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Detailed Question Analysis', margin, yPosition);
+    yPosition += 10;
+
+    // Iterate through each question
+    for (let i = 0; i < result.questions.length; i++) {
+      const q = result.questions[i];
+      const qDetails = questionDetailsMap[q.id] || {};
+      
+      checkNewPage(40);
+
+      // Question header
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
+      
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`Question ${i + 1}`, margin + 2, yPosition);
+      
+      // Status badge
+      if (qDetails.studentAnswer === null || qDetails.studentAnswer === undefined) {
+        pdf.setTextColor(150, 150, 150);
+        pdf.text('Not Attended', pageWidth - margin - 30, yPosition);
+      } else if (q.correct) {
+        pdf.setTextColor(0, 128, 0);
+        pdf.text(`Correct (+${q.marks.toFixed(2)})`, pageWidth - margin - 35, yPosition);
+      } else {
+        pdf.setTextColor(255, 0, 0);
+        pdf.text(`Wrong (${q.marks.toFixed(2)})`, pageWidth - margin - 30, yPosition);
+      }
+      pdf.setTextColor(0, 0, 0);
+      
+      yPosition += 10;
+
+      // Question text
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      const questionText = qDetails.question;
+      const questionHeight = addText(questionText, margin + 2, yPosition, pageWidth - 2 * margin - 4, 10);
+      yPosition += questionHeight + 3;
+
+      // Description if exists
+      if (qDetails.description) {
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(9);
+        const descHeight = addText(qDetails.description, margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
+        yPosition += descHeight + 3;
+      }
+
+      // For MCQ questions
+      if (q.type !== 'Programming' && qDetails.options) {
+        checkNewPage(30);
+        
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.text('Options:', margin + 2, yPosition);
+        yPosition += 5;
+
+        // Display all options with converted keys (1,2,3,4)
+        const optionEntries = Object.entries(qDetails.options);
+        for (const [optKey, optValue] of optionEntries) {
+          checkNewPage(8);
+          
+          const displayKey = convertOptionKey(optKey);
+          const isCorrectAnswer = optKey === qDetails.correctAnswer;
+          const isStudentAnswer = optKey === qDetails.studentAnswer;
+          
+          // Highlight boxes
+          if (isCorrectAnswer) {
+            pdf.setFillColor(200, 255, 200); // Light green for correct
+            pdf.rect(margin + 4, yPosition - 4, pageWidth - 2 * margin - 8, 6, 'F');
+          } else if (isStudentAnswer && !isCorrectAnswer) {
+            pdf.setFillColor(255, 200, 200); // Light red for wrong selection
+            pdf.rect(margin + 4, yPosition - 4, pageWidth - 2 * margin - 8, 6, 'F');
+          }
+
+          // Option text with converted key
+          pdf.setFont('helvetica', 'normal');
+          const optionText = `${displayKey}. ${optValue}`;
+          const optHeight = addText(optionText, margin + 6, yPosition, pageWidth - 2 * margin - 12, 9);
+          
+          // Add badges
+          let badgeX = margin + 8 + pdf.getTextWidth(optionText);
+          if (isCorrectAnswer) {
+            pdf.setTextColor(0, 128, 0);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(' [CORRECT]', badgeX, yPosition);
+          }
+          if (isStudentAnswer) {
+            pdf.setTextColor(0, 0, 255);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(' [SELECTED]', badgeX + (isCorrectAnswer ? 25 : 0), yPosition);
+          }
+          pdf.setTextColor(0, 0, 0);
+          
+          yPosition += optHeight + 2;
+        }
+
+        // Student's answer summary with converted key
+        yPosition += 2;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        if (qDetails.studentAnswer === null || qDetails.studentAnswer === undefined) {
+          pdf.setTextColor(150, 150, 150);
+          pdf.text(`Student's Answer: Not Attended`, margin + 2, yPosition);
+        } else {
+          const studentDisplayKey = convertOptionKey(q.mcqanswer);
+          pdf.text(`Student's Answer: ${q.mcqanswer+1}`, margin + 2, yPosition);
+        }
+        pdf.setTextColor(0, 0, 0);
+        yPosition += 5;
+
+        const correctDisplayKey = qDetails.correctAnswer;
+        pdf.text(`Correct Answer: Option ${correctDisplayKey}`, margin + 2, yPosition);
+        yPosition += 7;
+      }
+
+      // For Programming questions - SHOW ALL CODE WITHOUT OMISSION
+      if (q.type === 'Programming') {
+        checkNewPage(30);
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text('Code Submission:', margin + 2, yPosition);
+        yPosition += 6;
+
+        const codeToDisplay = qDetails.solution.replace(/<\/?code>/g, '') || (q.code ? q.code.code : null);
+
+        if (codeToDisplay) {
+          pdf.setFont('courier', 'normal');
+          pdf.setFontSize(7);
+          
+          // Split code into lines and display ALL of them
+          const codeLines = codeToDisplay.split('\n');
+          
+          for (const line of codeLines) {
+            // Check if we need a new page before adding each line
+            if (checkNewPage(5)) {
+              pdf.setFont('courier', 'normal');
+              pdf.setFontSize(7);
+            }
+            
+            // Truncate only extremely long lines to fit the page width
+            const truncatedLine = line.length > 95 ? line.substring(0, 95) + '...' : line;
+            pdf.text(truncatedLine, margin + 4, yPosition);
+            yPosition += 3.5;
+          }
+          
+          yPosition += 5;
+        } else {
+          pdf.setFont('helvetica', 'italic');
+          pdf.setFontSize(9);
+          pdf.setTextColor(150, 150, 150);
+          pdf.text('No code submitted', margin + 4, yPosition);
+          pdf.setTextColor(0, 0, 0);
+          yPosition += 7;
+        }
+      }
+
+      // Explanation if exists
+      if (qDetails.explanation) {
+        checkNewPage(15);
+        pdf.setFillColor(230, 240, 255);
+        const explStartY = yPosition - 3;
+        
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.text('Explanation:', margin + 2, yPosition);
+        yPosition += 5;
+        
+        pdf.setFont('helvetica', 'normal');
+        const explHeight = addText(qDetails.explanation, margin + 2, yPosition, pageWidth - 2 * margin - 4, 8);
+        
+        // Draw explanation box
+        pdf.rect(margin, explStartY, pageWidth - 2 * margin, explHeight + 8, 'S');
+        yPosition += explHeight + 5;
+      }
+
+      yPosition += 5; // Space between questions
+    }
+
+    // Footer
+    const totalPages = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'italic');
+      pdf.setTextColor(128, 128, 128);
+      pdf.text(
+        `Generated on ${new Date().toLocaleDateString()} - Page ${i} of ${totalPages}`,
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+    }
+
+    // Save PDF
+    pdf.save(`${result.studentId}_${testName || testid}_detailed_report.pdf`);
   };
 
   const fetchQuestionDetails = async (questionId, studentId, studentuid, isCorrect, questionType = 'mcq', originalId = null, codeData = null) => {
@@ -197,6 +653,7 @@ export default function AdminResult() {
     if (!questionId || !studentId) return;
 
     setIsLoadingQuestion(true);
+
     try {
       // Get full question details from Questions node
       const questionDetailsRef = ref(database, `questions/${effectiveQuestionId}`);
@@ -254,14 +711,12 @@ export default function AdminResult() {
         explanation: questionData.explanation || '',
         difficulty: questionData.difficulty || 'Not specified',
         isCorrect,
-
         // Include any additional fields from your question data structure
         ...questionData
       };
 
       setQuestionDetails(questionDetails);
       setUserCode(finalCodeData || null);
-
       setSelectedQuestion({
         id: questionId,
         studentId,
@@ -270,7 +725,6 @@ export default function AdminResult() {
       });
 
       console.log(questionDetails);
-
       setIsModalOpen(true);
     } catch (error) {
       console.error('Error fetching question details:', error);
@@ -286,153 +740,172 @@ export default function AdminResult() {
     setUserCode(null);
   };
 
-  if (loading) return <LoadingPage message="Loading results..." />;
+  if (loading) return <LoadingPage />;
 
   return (
-    <div className="container mx-auto p-4 md:p-6">
-      <div ref={pdfRef} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-100">
-          <h1 className="text-2xl font-bold text-gray-800">
-            <span className="text-indigo-600">Exam:</span> {testName || `Test ${testid}`}
-          </h1>
-          <p className="text-gray-500 mt-1">Detailed performance analysis of all students</p>
-        </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6" ref={pdfRef}>
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              {testName || 'Test Results'}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Detailed performance analysis of all students
+            </p>
+          </div>
 
-        <div className="overflow-hidden">
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={downloadAllResultsPDF}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <Download size={18} />
+              Download All Results
+            </button>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Correct</th>
-                  {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th> */}
-
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-gray-700">
+                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
+                    Student ID
+                  </th>
+                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
+                    Email
+                  </th>
+                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
+                    Score
+                  </th>
+                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
+                    Correct
+                  </th>
+                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
+                    Actions
+                  </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {results.length > 0 ? (
-                  results.map((result) => (
-                    <React.Fragment key={result.studentId}>
+                  results.map((result, index) => (
+                    <React.Fragment key={index}>
                       <tr
-                        onClick={() => setSelectedRow(selectedRow === result.studentId ? null : result.studentId)}
-                        className="hover:bg-gray-50 transition-colors cursor-pointer"
+                        className={`${selectedRow === index
+                          ? 'bg-blue-50 dark:bg-blue-900/20'
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                          } transition-colors cursor-pointer border-b border-gray-200 dark:border-gray-700`}
+                        onClick={() => setSelectedRow(selectedRow === index ? null : index)}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium">
+                        <td className="p-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-semibold">
                               {result.studentId.charAt(0).toUpperCase()}
                             </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{result.studentId}</div>
-                              <div className="text-xs text-gray-500">ID: {result.uid.substring(0, 6)}...</div>
+                            <div>
+                              <div className="font-medium text-gray-900 dark:text-white">
+                                {result.studentId}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                ID: {result.uid.substring(0, 6)}...
+                              </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                          {result.mail}
+                        <td className="p-3">
+                          <div className="text-sm text-gray-600 dark:text-gray-300">
+                            {result.mail}
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${result.totalMarks >= 70 ? 'bg-green-100 text-green-800' : result.totalMarks >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${result.totalMarks >= 70 ? 'bg-green-100 text-green-800' : result.totalMarks >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                              }`}
+                          >
                             {
-                            isNaN(result.totalMarks) ?
-                            (
-                              "Not Attended"
-                            )
-                            :
-                            (
-                                `${result.totalMarks.toFixed(2) }%` 
-                            )
-                          }
-                          
-                            
+                              isNaN(result.totalMarks) ? (
+                                "Not Attended"
+                              ) : (
+                                `${result.totalMarks.toFixed(2)}%`
+                              )
+                            }
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <span className="text-sm text-gray-900 font-medium">{result.correctCount}</span>
-                            <span className="text-xs text-gray-500 ml-1">/ {result.totalQuestions}</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                            <div
-                              className="bg-indigo-600 h-1.5 rounded-full"
-                              style={{ width: `${(result.correctCount / result.totalQuestions) * 100}%` }}
-                            ></div>
+                        <td className="p-3">
+                          <div className="text-sm text-gray-900 dark:text-white font-medium">
+                            {result.correctCount} / {result.totalQuestions}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex flex-wrap gap-1.5">
+                        <td className="p-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadStudentPDF(result);
+                            }}
+                            className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-1.5 text-sm"
+                            title="Download detailed student report"
+                          >
+                            <Download size={16} />
+                            Download PDF
+                          </button>
+                        </td>
+                        {/* <td className="p-3">
+                          <div className="flex gap-1">
                             {result.questions.map((q, i) => (
-                              <button
+                              <div
                                 key={i}
-                                className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-medium transition-all hover:scale-105 ${q.correct
-                                  ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                                  : q.marks > 0 ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                className={`w-2 h-8 rounded ${q.correct ? 'bg-green-500' : 'bg-red-500'
                                   }`}
-                                title={`Q${i + 1}: ${q.correct ? 'Correct' : q.marks > 0 ? 'Partially Correct' : 'Incorrect'}`}
-                              >
-                                {i + 1}
-                              </button>
+                                title={`${q.id}: ${q.marks} points`}
+                              />
                             ))}
                           </div>
-                        </td>
-                        {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex flex-wrap gap-1">
-                          {result.questions.map((q, i) => (
-                            <div 
-                              key={`marks-${i}`}
-                              className={`inline-flex items-center justify-center w-8 h-6 rounded text-xs font-medium ${
-                                q.correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}
-                              title={`${q.correct ? 'Correct' : 'Incorrect'} (${q.marks} marks)`}
-                            >
-                              {q.marks}
-                            </div>
-                          ))}
-                        </div>
-                      </td> */}
+                        </td> */}
                       </tr>
-                      {selectedRow === result.studentId && (
-                        <tr className="bg-gray-50">
-                          <td colSpan="5" className="px-6 py-4">
-                            <div className="space-y-3">
-                              <h3 className="text-sm font-medium text-gray-700 mb-2">Question Details:</h3>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {result.questions.map((q, i) => (
-                                  <div key={i} onClick={() => fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type)} className="bg-white p-4 rounded-lg border border-gray-200 shadow-xs hover:shadow-sm transition-shadow">
-                                    <div className="flex justify-between items-start">
-                                      <div>
-                                        <h4 className="font-medium text-gray-900">
-                                          {q.id || `Question ${i + 1}`}
-                                        </h4>
-                                        <div className="mt-2 flex items-center space-x-2">
-                                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${q.correct ? 'bg-green-100 text-green-800' :  q.marks > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                                            }`}>
-                                            {q.marks || 0} points
-                                          </span>
-                                          {q.code && (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type);
-                                              }}
-                                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200"
-                                            >
-                                              <CodeIcon className="h-3 w-3 mr-1" />
-                                              View Code
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <span className={`text-xs px-2 py-1 rounded-full ${q.correct ? 'bg-green-50 text-green-700' :  q.marks > 0 ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'
-                                        }`}>
-                                        {q.correct ? 'Correct' :  q.marks > 0 ? 'Partially Correct' : 'Incorrect'}
-                                      </span>
-                                    </div>
+                      {selectedRow === index && (
+                        <tr className="bg-gray-50 dark:bg-gray-800">
+                          <td colSpan="6" className="p-6">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                              Question Details:
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {result.questions.map((q, i) => (
+                                <div
+                                  key={i}
+                                  onClick={() =>
+                                    fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type, q.originalId, q.code)
+                                  }
+                                  className="bg-white p-4 rounded-lg border border-gray-200 shadow-xs hover:shadow-sm transition-shadow cursor-pointer"
+                                >
+                                  <div className="flex justify-between items-start mb-2">
+                                    <h4 className="font-medium text-gray-900 text-sm">
+                                      {q.id || `Question ${i + 1}`}
+                                    </h4>
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-xs font-medium ${q.marks > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                        }`}
+                                    >
+                                      {q.marks || 0} points
+                                    </span>
                                   </div>
-                                ))}
-                              </div>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-xs ${q.correct
+                                        ? 'bg-green-100 text-green-800'
+                                        : 'bg-red-100 text-red-800'
+                                        }`}
+                                    >
+                                      {q.correct ? '✓ Correct' : '✗ Wrong'}
+                                    </span>
+                                    {q.code && (
+                                      <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs flex items-center gap-1">
+                                        <CodeIcon size={12} />
+                                        Code
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </td>
                         </tr>
@@ -441,7 +914,7 @@ export default function AdminResult() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan="6" className="p-8 text-center text-gray-500 dark:text-gray-400">
                       No results found for this exam
                     </td>
                   </tr>
@@ -452,124 +925,96 @@ export default function AdminResult() {
         </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <button
-          onClick={downloadPDF}
-          className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Download PDF
-        </button>
-      </div>
-
       {/* Question Details Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium">
-                  {questionDetails?.type === 'Programming' ? (
-                    <div className="flex items-center gap-2">
-                      <CodeIcon className="w-5 h-5 text-blue-500" />
-                      <span>Programming Question</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <List className="w-5 h-5 text-blue-500" />
-                      <span>Multiple Choice Question</span>
-                    </div>
-                  )}
-                </h3>
-                <button
-                  onClick={closeModal}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                Question Details
+              </h3>
+              <button
+                onClick={closeModal}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
 
-              <div className="space-y-4">
-                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 mr-2">
-                        {questionDetails.difficulty}
-                      </span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        Question ID: {questionDetails.id}
-                      </span>
-                    </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${questionDetails.isCorrect
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                      }`}>
-                      {questionDetails.isCorrect ? 'Correct Answer' : 'Incorrect Answer'}
+            {isLoadingQuestion ? (
+              <div className="p-8 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <div className="p-6">
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${selectedQuestion?.isCorrect
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                        }`}
+                    >
+                      {selectedQuestion?.isCorrect ? '✓ Correct Answer' : '✗ Incorrect Answer'}
+                    </span>
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded-full text-sm font-medium">
+                      {questionDetails?.type || 'MCQ'}
                     </span>
                   </div>
 
+                  <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    {questionDetails?.question}
+                  </h4>
+
+                  {questionDetails?.description && (
+                    <p className="text-gray-600 dark:text-gray-300 mb-4">
+                      {questionDetails.description}
+                    </p>
+                  )}
+                </div>
+
+                {userCode && (
                   <div className="mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-medium text-gray-900 dark:text-white">Question:</h4>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        ID: {questionDetails.id}
-                      </span>
+                    <div className="flex items-center gap-2 mb-2">
+                      <CodeIcon size={18} className="text-purple-600" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">
+                        Student's Code Submission
+                      </h4>
                     </div>
-                    <div className="bg-white dark:bg-gray-700 p-4 rounded border border-gray-200 dark:border-gray-600">
-                      <div className="prose dark:prose-invert max-w-none">
-                        {questionDetails.question || 'No question text available'}
-                      </div>
-                      {questionDetails.description && (
-                        <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-                          {questionDetails.description}
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                      Difficulty: <span className="font-medium">{questionDetails.difficulty || 'Not specified'}</span>
+                    <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                      <pre className="text-sm text-gray-100">
+                        <code>{userCode.code}</code>
+                      </pre>
                     </div>
                   </div>
+                )}
 
-                  {isLoadingQuestion ? (
-                    <div className="flex justify-center p-4">
-                      <span className="animate-spin">↻</span>
-                      <span className="ml-2">Loading details...</span>
-                    </div>
-                  ) : questionDetails?.type === 'Programming' ? (
+                <div className="space-y-4">
+                  {questionDetails?.options && Object.keys(questionDetails.options).length > 0 && (
                     <div>
-                      <h4 className="font-medium mb-2">Submitted Code</h4>
-                      {userCode?.code ? (
-                        <div className="bg-gray-900 text-gray-100 p-4 rounded-md overflow-auto max-h-96">
-                          <div className="text-xs text-gray-400 mb-2">
-                            Language: {userCode.language || 'cpp'}
-                          </div>
-                          <pre className="whitespace-pre-wrap">
-                            <code>{userCode.code}</code>
-                          </pre>
-                        </div>
-                      ) : (
-                        <div className="text-gray-500 italic">No code submission found</div>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      <h4 className="font-medium mb-2">Options:</h4>
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-2">Options:</h4>
                       <div className="space-y-2">
-                        {Object.entries(questionDetails.options || {}).map(([key, value]) => (
-                          <div
-                            key={key}
-                            className={`p-2 rounded ${key === questionDetails?.correctAnswer
-                              ? 'bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800'
-                              : 'bg-gray-50 dark:bg-gray-700/50'
-                              }`}
-                          >
-                            <span className="font-medium">{key}:</span> {value}
-                            {key === questionDetails?.correctAnswer && (
-                              <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                                (Correct Answer)
-                              </span>
-                            )}
-                          </div>
-                        ))}
+                        {Object.entries(questionDetails.options).map(([key, value]) => {
+                          const displayKey = parseInt(key);
+                          const displayLabel = isNaN(displayKey) ? key : (displayKey + 1).toString();
+                          
+                          return (
+                            <div
+                              key={key}
+                              className={`p-3 rounded-lg border ${key === questionDetails?.correctAnswer
+                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
+                                }`}
+                            >
+                              <span className="font-medium">{displayLabel}:</span> {value}
+                              {key === questionDetails?.correctAnswer && (
+                                <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                                  (Correct Answer)
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -600,7 +1045,7 @@ export default function AdminResult() {
                   </button>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
