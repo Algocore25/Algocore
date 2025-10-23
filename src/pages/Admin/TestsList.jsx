@@ -16,7 +16,10 @@ import AddQuestions from './AddQuestions';
 const TestsList = () => {
   const navigate = useNavigate();
   const [tests, setTests] = useState([]);
-  const [activeTab, setActiveTab] = useState('available-tests');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Load the saved tab from localStorage, default to 'available-tests'
+    return localStorage.getItem('adminActiveTab') || 'available-tests';
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [creatingTest, setCreatingTest] = useState(false);
@@ -39,6 +42,11 @@ const TestsList = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('adminActiveTab', activeTab);
+  }, [activeTab]);
 
   const createNewTest = async () => {
     if (creatingTest) return;

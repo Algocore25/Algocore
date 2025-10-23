@@ -213,18 +213,18 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
             <XMarkIcon className="h-6 w-6" />
           </button>
           <div className="flex space-x-4 mb-6">
-            <button
+            {/* <button
               className={`px-4 py-2 rounded-md ${activeTab === 'create' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
               onClick={() => setActiveTab('create')}
             >
               {isEditMode ? 'Edit Question' : 'Create New Question'}
-            </button>
-            <button
+            </button> */}
+            {/* <button
               className={`px-4 py-2 rounded-md ${activeTab === 'select' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
               onClick={() => setActiveTab('select')}
             >
               Select Existing Questions
-            </button>
+            </button> */}
           </div>
 
           {activeTab === 'create' ? (

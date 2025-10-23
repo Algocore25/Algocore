@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FiChevronLeft, FiUsers, FiSettings, FiSave, FiTrash2, FiEdit2, FiX, FiCheck, FiUserPlus, FiMail } from 'react-icons/fi';
+import { FiChevronLeft, FiUsers, FiSettings, FiTrash2, FiEdit2, FiX, FiCheck, FiUserPlus, FiMail } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { ref, onValue, set, push, update, remove, get } from 'firebase/database';
 import { database } from '../../firebase';
@@ -16,7 +16,10 @@ const TestManage = () => {
   const [test, setTest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('questions'); // 'students', 'questions' or 'settings'
+  const [activeTab, setActiveTab] = useState(() => {
+    // Load the saved tab from localStorage, default to 'questions'
+    return localStorage.getItem('testManageActiveTab') || 'questions';
+  }); // 'students', 'questions' or 'settings'
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [testTitle, setTestTitle] = useState('');
   const [duration, setDuration] = useState(60);
@@ -132,6 +135,11 @@ const TestManage = () => {
           const testData = testSnapshot.val();
           setTest(testData);
           
+          // Set test title from database
+          if (testData.name) {
+            setTestTitle(testData.name);
+          }
+          
           // Calculate question statistics
           const stats = getQuestionCategories(testData.questions);
           setQuestionStats(stats);
@@ -181,6 +189,11 @@ const TestManage = () => {
       fetchTestData();
     }
   }, [testId, getQuestionCategories]);
+
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('testManageActiveTab', activeTab);
+  }, [activeTab]);
 
   // Fetch students
   const fetchStudents = async (testId) => {
@@ -251,6 +264,19 @@ const TestManage = () => {
       setIsEditingTitle(false);
     }
   }, [test, testTitle, handleSaveTest]);
+
+  // Auto-save test title on blur
+  const handleTitleBlur = useCallback(async () => {
+    if (!testTitle.trim()) {
+      toast.error('Test title cannot be empty');
+      setTestTitle(test?.name || '');
+      return;
+    }
+    if (testTitle !== test?.name) {
+      await handleSaveTest({ name: testTitle });
+      setTest(prev => ({ ...prev, name: testTitle }));
+    }
+  }, [testTitle, test, handleSaveTest]);
 
   // Function to handle question type changes
   const handleQuestionTypeChange = useCallback(async (key, value, max) => {
@@ -571,21 +597,16 @@ const TestManage = () => {
                   <label htmlFor="test-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Test Name
                   </label>
-                  <div className="mt-1 flex rounded-md shadow-sm">
+                  <div className="mt-1">
                     <input
                       type="text"
                       id="test-name"
                       value={testTitle}
                       onChange={(e) => setTestTitle(e.target.value)}
+                      onBlur={handleTitleBlur}
                       className="flex-1 min-w-0 block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white rounded-md p-2"
                       placeholder="Enter test name"
                     />
-                    <button
-                      onClick={handleUpdateTitle}
-                      className="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      {isSaving ? 'Saving...' : 'Save'}
-                    </button>
                   </div>
                 </div>
 
@@ -605,7 +626,7 @@ const TestManage = () => {
                           setDuration(newDuration);
                         }}
                         onBlur={() => handleSaveTest({ duration })}
-                        className="focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white pr-16 text-gray-900 dark:text-gray-100"
+                        className="focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white pr-16 p-2"
                       />
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                         <span className="text-gray-500 sm:text-sm">minutes</span>
@@ -616,6 +637,27 @@ const TestManage = () => {
 
               </div>
 
+              {/* Save status indicator */}
+              <div className="mt-4 flex justify-end">
+                <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                  {isSaving ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Saving...
+                    </span>
+                  ) : (
+                    <span className="text-green-500">
+                      <svg className="h-4 w-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Changes saved
+                    </span>
+                  )}
+                </div>
+              </div>
 
             </div>
           </div>

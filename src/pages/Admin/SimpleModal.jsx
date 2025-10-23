@@ -4,7 +4,7 @@ import { XMarkIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { database } from "../../firebase";
 import { ref, get } from "firebase/database";
 import LoadingPage from '../LoadingPage';
-const SimpleModal = ({ isOpen, onClose, onAddQuestions, questions: propQuestions = [] }) => {
+const SimpleModal = ({ isOpen, onClose, onAddQuestions, questions: propQuestions = [], existingQuestionIds = [] }) => {
   const [activeTab, setActiveTab] = useState('select');
   const [questions, setQuestions] = useState([]);
   const [filteredQuestions, setFilteredQuestions] = useState([]);
@@ -13,23 +13,52 @@ const SimpleModal = ({ isOpen, onClose, onAddQuestions, questions: propQuestions
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [filterType, setFilterType] = useState('all'); // 'all', 'mcq', 'programming', 'sql'
+  const [sortBy, setSortBy] = useState('title'); // 'title', 'type'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc', 'desc'
 
-  // Filter questions based on search term and reset to first page
+  // Filter and sort questions based on search term, type filter, and sorting
   useEffect(() => {
-    let filtered = [];
-    if (searchTerm.trim() === '') {
-      filtered = [...questions];
-    } else {
+    let filtered = [...questions];
+
+    // Apply type filter
+    if (filterType !== 'all') {
+      filtered = filtered.filter(q => q.type && q.type.toLowerCase() === filterType.toLowerCase());
+    }
+
+    // Apply search filter
+    if (searchTerm.trim() !== '') {
       const searchLower = searchTerm.toLowerCase();
-      filtered = questions.filter(
+      filtered = filtered.filter(
         q => (q.title && q.title.toLowerCase().includes(searchLower)) ||
           (q.content && q.content.toLowerCase().includes(searchLower)) ||
-          (q.description && q.description.toLowerCase().includes(searchLower))
+          (q.description && q.description.toLowerCase().includes(searchLower)) ||
+          (q.type && q.type.toLowerCase().includes(searchLower))
       );
     }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue, bValue;
+      
+      if (sortBy === 'title') {
+        aValue = (a.title || '').toLowerCase();
+        bValue = (b.title || '').toLowerCase();
+      } else if (sortBy === 'type') {
+        aValue = (a.type || '').toLowerCase();
+        bValue = (b.type || '').toLowerCase();
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+
     setFilteredQuestions(filtered);
-    setCurrentPage(1); // Reset to first page when search term changes
-  }, [searchTerm, questions]);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [searchTerm, questions, filterType, sortBy, sortOrder]);
 
   // Memoize pagination calculations
   const { totalPages, indexOfFirstItem, indexOfLastItem, currentItems, pageNumbers, startPage, endPage } = React.useMemo(() => {
@@ -158,7 +187,7 @@ const SimpleModal = ({ isOpen, onClose, onAddQuestions, questions: propQuestions
                       <input
                         type="text"
                         className="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-gray-900 dark:text-white bg-white dark:bg-gray-700 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6"
-                        placeholder="Search questions by title or content..."
+                        placeholder="Search by title, content, or type (MCQ, Programming, SQL)..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                       />
@@ -170,42 +199,155 @@ const SimpleModal = ({ isOpen, onClose, onAddQuestions, questions: propQuestions
                     </div>
                   </div>
 
+                  {/* Filter and Sort Controls */}
+                  <div className="mb-4 space-y-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Type Filter Buttons */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Filter:</span>
+                      <div className="inline-flex rounded-md shadow-sm" role="group">
+                        <button
+                          onClick={() => setFilterType('all')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-l-md border ${
+                            filterType === 'all'
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          All
+                        </button>
+                        <button
+                          onClick={() => setFilterType('mcq')}
+                          className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
+                            filterType === 'mcq'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          MCQ
+                        </button>
+                        <button
+                          onClick={() => setFilterType('programming')}
+                          className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
+                            filterType === 'programming'
+                              ? 'bg-green-600 text-white border-green-600'
+                              : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          Programming
+                        </button>
+                        <button
+                          onClick={() => setFilterType('sql')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-r-md border ${
+                            filterType === 'sql'
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          SQL
+                        </button>
+                      </div>
+                    </div>
+
+                      {/* Sort Controls */}
+                      <div className="flex items-center gap-2 ml-auto">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Sort by:</span>
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value)}
+                          className="text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-700 dark:text-white"
+                        >
+                          <option value="title">Title</option>
+                          <option value="type">Type</option>
+                        </select>
+                        <button
+                          onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                          className="px-2 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 bg-white dark:bg-gray-800 dark:text-white flex items-center gap-1"
+                          title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                        >
+                          {sortOrder === 'asc' ? '↑ A-Z' : '↓ Z-A'}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Results Counter */}
+                    {filteredQuestions.length > 0 && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Showing {filteredQuestions.length} question{filteredQuestions.length !== 1 ? 's' : ''}
+                        {filterType !== 'all' && ` (${filterType.toUpperCase()} only)`}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Questions list */}
                   <div className="space-y-4 max-h-96 overflow-y-auto mb-4">
                     {isLoading ? (
                       <LoadingPage message="Loading questions, please wait..."/>
                     ) : filteredQuestions.length === 0 ? (
                       <p className="text-center text-gray-500 py-4">
-                        {searchTerm ? 'No questions match your search.' : 'No questions available.'}
+                        {searchTerm || filterType !== 'all' 
+                          ? 'No questions match your filters.' 
+                          : 'No questions available.'}
                       </p>
                     ) : (
-                      currentItems.map((question) => (
+                      currentItems.map((question) => {
+                        const isAlreadyInTest = existingQuestionIds.includes(question.id);
+                        const isSelected = selectedQuestions.includes(question.id);
+                        
+                        return (
                         <div
                           key={question.id}
-                          className={`p-4 rounded-lg border ${selectedQuestions.includes(question.id)
+                          className={`p-4 rounded-lg border transition-all cursor-pointer relative ${
+                            isAlreadyInTest
+                              ? 'border-green-400 bg-green-50 dark:bg-green-900/20 opacity-70'
+                              : isSelected
                               ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                               : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500'
-                            } transition-colors cursor-pointer`}
+                          }`}
                           onClick={() => handleQuestionToggle(question.id)}
                         >
                           <div className="flex items-start">
-                            <input
-                              type="checkbox"
-                              checked={selectedQuestions.includes(question.id)}
-                              onChange={() => { }}
-                              className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                            />
-                            <div className="ml-3">
-                              <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-                                {question.title}
-                              </h3>
+                            <div className="relative">
+                              <input
+                                type="checkbox"
+                                checked={selectedQuestions.includes(question.id) || isAlreadyInTest}
+                                onChange={() => { }}
+                                disabled={isAlreadyInTest}
+                                className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                              />
+                              {isAlreadyInTest && (
+                                <svg className="absolute top-1 left-0 h-4 w-4 text-green-600 pointer-events-none" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="ml-3 flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {question.title}
+                                </h3>
+                                {question.type && (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    question.type.toLowerCase() === 'mcq' 
+                                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                                      : question.type.toLowerCase() === 'programming'
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                      : question.type.toLowerCase() === 'sql'
+                                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                  }`}>
+                                    {question.type.toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
                               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
                                 {question.content || question.description || 'No description available'}
                               </p>
                             </div>
                           </div>
                         </div>
-                      ))
+                      );
+                      })
                     )}
                   </div>
 

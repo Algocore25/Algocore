@@ -631,7 +631,7 @@ const DynamicExam = () => {
           <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
             <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{examName}</h1>
-              <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p>
+              {/* <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p> */}
               <p className="text-sm text-gray-500">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
               <button
                 onClick={returnToFullScreen}

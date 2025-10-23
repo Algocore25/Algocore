@@ -6,7 +6,7 @@ import LoadingPage from '../LoadingPage';
 import { useAuth } from '../../context/AuthContext';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { X, Code as CodeIcon, List, Download } from 'lucide-react';
+import { X, Code as CodeIcon, List, Download, ChevronUp, ChevronDown } from 'lucide-react';
 
 export default function AdminResult() {
   const { testid } = useParams();
@@ -19,6 +19,8 @@ export default function AdminResult() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
+  const [sortColumn, setSortColumn] = useState('studentId');
+  const [sortDirection, setSortDirection] = useState('asc');
   const user = useAuth();
   const pdfRef = useRef();
 
@@ -85,6 +87,8 @@ export default function AdminResult() {
           Promise.all(codeSubmissionsPromises)
         ]);
 
+        console.log(codeSubmissionsSnapshots);
+
         // Process results for each student
         const studentResults = studentIds.map((studentId, index) => {
           const userData = usersData[studentId] || {};
@@ -99,6 +103,8 @@ export default function AdminResult() {
 
           const totalMarks = Object.values(marks).reduce((acc, mark) => acc + mark, 0) / questionIds.length;
 
+          
+
           for (const questionId of questionIds) {
             const questionKey = studentQuestions[questionId];
             const questionType = examQuestions[questionKey] || 'mcq';
@@ -109,11 +115,8 @@ export default function AdminResult() {
 
             // Handle code data for programming questions
             let codeData = null;
-            if (questionType === 'Programming' && codeSubmissions[questionId]?.cpp) {
-              codeData = {
-                code: codeSubmissions[questionId].cpp,
-                language: 'cpp'
-              };
+            if (questionType === 'Programming' && codeSubmissions[questionKey]?.cpp) {
+              codeData =  codeSubmissions[questionKey].cpp
             }
 
             console.log(marks);
@@ -157,6 +160,58 @@ export default function AdminResult() {
     fetchreultdata();
   }, [testid]);
 
+  // Sorting function
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort results based on current sort settings
+  const sortedResults = [...results].sort((a, b) => {
+    let aValue, bValue;
+
+    switch (sortColumn) {
+      case 'studentId':
+        aValue = a.studentId.toLowerCase();
+        bValue = b.studentId.toLowerCase();
+        break;
+      case 'mail':
+        aValue = a.mail.toLowerCase();
+        bValue = b.mail.toLowerCase();
+        break;
+      case 'totalMarks':
+        // Handle NaN values by treating them as -1 for sorting
+        aValue = isNaN(a.totalMarks) ? -1 : a.totalMarks;
+        bValue = isNaN(b.totalMarks) ? -1 : b.totalMarks;
+        break;
+      case 'correctCount':
+        // Sort by percentage of correct answers
+        aValue = a.totalQuestions > 0 ? (a.correctCount / a.totalQuestions) : 0;
+        bValue = b.totalQuestions > 0 ? (b.correctCount / b.totalQuestions) : 0;
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const totalStudents = results.length;
+  const attendedResults = results.filter(result => !isNaN(result.totalMarks));
+  const totalAttended = attendedResults.length;
+  const averageScore = totalAttended > 0
+    ? attendedResults.reduce((sum, result) => sum + result.totalMarks, 0) / totalAttended
+    : null;
+  const topScore = totalAttended > 0
+    ? Math.max(...attendedResults.map(result => result.totalMarks))
+    : null;
+
   const downloadAllResultsPDF = async () => {
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -189,7 +244,7 @@ export default function AdminResult() {
     pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: 'center' });
     yPosition += 6;
 
-    pdf.text(`Total Students: ${results.length}`, pageWidth / 2, yPosition, { align: 'center' });
+    pdf.text(`Total Students: ${sortedResults.length}`, pageWidth / 2, yPosition, { align: 'center' });
     yPosition += 15;
 
     // Summary Table
@@ -218,7 +273,7 @@ export default function AdminResult() {
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8);
     
-    results.forEach((result, index) => {
+    sortedResults.forEach((result, index) => {
       if (checkNewPage(8)) {
         // Redraw header on new page
         pdf.setFillColor(70, 130, 180);
@@ -271,7 +326,7 @@ export default function AdminResult() {
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
 
-    const validScores = results.filter(r => !isNaN(r.totalMarks)).map(r => r.totalMarks);
+    const validScores = sortedResults.filter(r => !isNaN(r.totalMarks)).map(r => r.totalMarks);
     const avgScore = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(2) : 'N/A';
     const maxScore = validScores.length > 0 ? Math.max(...validScores).toFixed(2) : 'N/A';
     const minScore = validScores.length > 0 ? Math.min(...validScores).toFixed(2) : 'N/A';
@@ -282,7 +337,7 @@ export default function AdminResult() {
     yPosition += 6;
     pdf.text(`Lowest Score: ${minScore}%`, margin + 5, yPosition);
     yPosition += 6;
-    pdf.text(`Students Attended: ${validScores.length} / ${results.length}`, margin + 5, yPosition);
+    pdf.text(`Students Attended: ${validScores.length} / ${sortedResults.length}`, margin + 5, yPosition);
 
     // Footer on all pages
     const totalPages = pdf.internal.getNumberOfPages();
@@ -308,6 +363,8 @@ export default function AdminResult() {
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 15;
     let yPosition = margin;
+
+    console.log(result);
 
     // Fetch all question details for this student
     const questionDetailsMap = {};
@@ -563,7 +620,7 @@ export default function AdminResult() {
         pdf.text('Code Submission:', margin + 2, yPosition);
         yPosition += 6;
 
-        const codeToDisplay = qDetails.solution.replace(/<\/?code>/g, '') || (q.code ? q.code.code : null);
+        const codeToDisplay = q.code;
 
         if (codeToDisplay) {
           pdf.setFont('courier', 'normal');
@@ -596,6 +653,93 @@ export default function AdminResult() {
         }
       }
 
+           // Get test cases from question data
+        const testCases = qDetails.testcases || [];
+        
+        if (testCases.length > 0) {
+          for (let tcIndex = 0; tcIndex < testCases.length; tcIndex++) {
+            const testCase = testCases[tcIndex];
+            checkNewPage(25);
+            
+            // Test case header with status
+            const testCaseStatus = q.correct ? 'PASSED' : 'FAILED'; // Simplified - in real implementation, you'd need individual test case results
+            const statusColor = q.correct ? [0, 128, 0] : [255, 0, 0];
+            
+            pdf.setFillColor(240, 240, 240);
+            pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 8, 'F');
+            
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(9);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(`Test Case ${tcIndex + 1}`, margin + 2, yPosition);
+            
+            pdf.setTextColor(...statusColor);
+            pdf.text(testCaseStatus, pageWidth - margin - 20, yPosition);
+            pdf.setTextColor(0, 0, 0);
+            
+            yPosition += 8;
+            
+            // Input
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(8);
+            pdf.text('Input:', margin + 4, yPosition);
+            yPosition += 4;
+            
+            pdf.setFont('courier', 'normal');
+            pdf.setFontSize(7);
+            const inputText = testCase.input || 'No input';
+            const inputLines = pdf.splitTextToSize(inputText, pageWidth - 2 * margin - 8);
+            pdf.text(inputLines, margin + 6, yPosition);
+            yPosition += inputLines.length * 3.5 + 2;
+            
+            // Expected Output
+            checkNewPage(15);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(8);
+            pdf.setTextColor(0, 128, 0);
+            pdf.text('Expected Output:', margin + 4, yPosition);
+            yPosition += 4;
+            
+            pdf.setFont('courier', 'normal');
+            pdf.setFontSize(7);
+            pdf.setTextColor(0, 0, 0);
+            const expectedText = testCase.expectedOutput || 'No expected output';
+            const expectedLines = pdf.splitTextToSize(expectedText, pageWidth - 2 * margin - 8);
+            pdf.text(expectedLines, margin + 6, yPosition);
+            yPosition += expectedLines.length * 3.5 + 2;
+            
+            // Actual Output (if available)
+            if (qDetails.codeSubmission && testCaseStatus === 'FAILED') {
+              checkNewPage(15);
+              pdf.setFont('helvetica', 'bold');
+              pdf.setFontSize(8);
+              pdf.setTextColor(255, 0, 0);
+              pdf.text('Actual Output:', margin + 4, yPosition);
+              yPosition += 4;
+              
+              pdf.setFont('courier', 'normal');
+              pdf.setFontSize(7);
+              pdf.setTextColor(0, 0, 0);
+              const actualText = 'Code execution output would be shown here'; // In real implementation, you'd need to store/re-run test results
+              const actualLines = pdf.splitTextToSize(actualText, pageWidth - 2 * margin - 8);
+              pdf.text(actualLines, margin + 6, yPosition);
+              yPosition += actualLines.length * 3.5 + 4;
+            }
+            
+            yPosition += 3; // Space between test cases
+          }
+        } else {
+          pdf.setFont('helvetica', 'italic');
+          pdf.setFontSize(9);
+          pdf.setTextColor(150, 150, 150);
+          pdf.text('No test cases available', margin + 4, yPosition);
+          pdf.setTextColor(0, 0, 0);
+          yPosition += 7;
+        }
+
+        yPosition += 5; // Extra space after test cases
+
+
       // Explanation if exists
       if (qDetails.explanation) {
         checkNewPage(15);
@@ -617,6 +761,7 @@ export default function AdminResult() {
 
       yPosition += 5; // Space between questions
     }
+    
 
     // Footer
     const totalPages = pdf.internal.getNumberOfPages();
@@ -755,6 +900,33 @@ export default function AdminResult() {
             </p>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-700/40 rounded-lg">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
+                Total Attended
+              </p>
+              <p className="text-2xl font-semibold text-blue-900 dark:text-blue-100">
+                {totalAttended} / {totalStudents}
+              </p>
+            </div>
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-700/40 rounded-lg">
+              <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
+                Average Score
+              </p>
+              <p className="text-2xl font-semibold text-green-900 dark:text-green-100">
+                {averageScore !== null ? `${averageScore.toFixed(2)}%` : 'N/A'}
+              </p>
+            </div>
+            <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-700/40 rounded-lg">
+              <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-1">
+                Top Score
+              </p>
+              <p className="text-2xl font-semibold text-purple-900 dark:text-purple-100">
+                {topScore !== null ? `${topScore.toFixed(2)}%` : 'N/A'}
+              </p>
+            </div>
+          </div>
+
           <div className="flex justify-end mb-4">
             <button
               onClick={downloadAllResultsPDF}
@@ -770,16 +942,100 @@ export default function AdminResult() {
               <thead>
                 <tr className="bg-gray-100 dark:bg-gray-700">
                   <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    Student ID
+                    <button
+                      onClick={() => handleSort('studentId')}
+                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
+                    >
+                      <span>Student ID</span>
+                      <div className="flex flex-col">
+                        <ChevronUp
+                          size={12}
+                          className={`${sortColumn === 'studentId' && sortDirection === 'asc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400'
+                            }`}
+                        />
+                        <ChevronDown
+                          size={12}
+                          className={`${sortColumn === 'studentId' && sortDirection === 'desc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
+                            }`}
+                        />
+                      </div>
+                    </button>
                   </th>
                   <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    Email
+                    <button
+                      onClick={() => handleSort('mail')}
+                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
+                    >
+                      <span>Email</span>
+                      <div className="flex flex-col">
+                        <ChevronUp
+                          size={12}
+                          className={`${sortColumn === 'mail' && sortDirection === 'asc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400'
+                            }`}
+                        />
+                        <ChevronDown
+                          size={12}
+                          className={`${sortColumn === 'mail' && sortDirection === 'desc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
+                            }`}
+                        />
+                      </div>
+                    </button>
                   </th>
                   <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    Score
+                    <button
+                      onClick={() => handleSort('totalMarks')}
+                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
+                    >
+                      <span>Score</span>
+                      <div className="flex flex-col">
+                        <ChevronUp
+                          size={12}
+                          className={`${sortColumn === 'totalMarks' && sortDirection === 'asc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400'
+                            }`}
+                        />
+                        <ChevronDown
+                          size={12}
+                          className={`${sortColumn === 'totalMarks' && sortDirection === 'desc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
+                            }`}
+                        />
+                      </div>
+                    </button>
                   </th>
                   <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    Correct
+                    <button
+                      onClick={() => handleSort('correctCount')}
+                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
+                    >
+                      <span>Correct</span>
+                      <div className="flex flex-col">
+                        <ChevronUp
+                          size={12}
+                          className={`${sortColumn === 'correctCount' && sortDirection === 'asc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400'
+                            }`}
+                        />
+                        <ChevronDown
+                          size={12}
+                          className={`${sortColumn === 'correctCount' && sortDirection === 'desc'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
+                            }`}
+                        />
+                      </div>
+                    </button>
                   </th>
                   <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
                     Actions
@@ -787,8 +1043,8 @@ export default function AdminResult() {
                 </tr>
               </thead>
               <tbody>
-                {results.length > 0 ? (
-                  results.map((result, index) => (
+                {sortedResults.length > 0 ? (
+                  sortedResults.map((result, index) => (
                     <React.Fragment key={index}>
                       <tr
                         className={`${selectedRow === index

@@ -14,11 +14,11 @@ const LoginPage = () => {
     const [error, setError] = useState('');
     const [showWelcome, setShowWelcome] = useState(false);
 
-    // useEffect(() => {
-    //     if (user) {
-    //         navigate('/profile');
-    //     }
-    // }, [user, navigate]);
+    useEffect(() => {
+        if (user) {
+            navigate('/');
+        }
+    }, [user, navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();

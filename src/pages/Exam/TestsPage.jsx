@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TestsSidebar from '../../components/TestsSidebarStudent';
 import AvailableTests from './AvailableTests';
 import Results from './Results';
 
 const TestsPage = () => {
-  const [activeTab, setActiveTab] = useState('available-tests');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Load the saved tab from localStorage, default to 'available-tests'
+    return localStorage.getItem('studentActiveTab') || 'available-tests';
+  });
+
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('studentActiveTab', activeTab);
+  }, [activeTab]);
 
 
   return (

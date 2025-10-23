@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiTrash2, FiUserPlus, FiMail, FiUpload, FiDownload } from 'react-icons/fi';
+import { FiTrash2, FiUserPlus, FiMail, FiUpload, FiDownload, FiUsers, FiCheck, FiX } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { ref, get, set, remove, push, update } from 'firebase/database';
 import { database } from '../../firebase';
@@ -14,6 +14,13 @@ const Students = ({ test, setTest, testId }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [allStudents, setAllStudents] = useState([]);
+  const [loadingAllStudents, setLoadingAllStudents] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState(new Set());
+  const [showStudentSelector, setShowStudentSelector] = useState(false);
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('name'); // 'name' or 'email'
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
 
   // Fetch students
   const fetchStudents = useCallback(async () => {
@@ -72,6 +79,122 @@ const Students = ({ test, setTest, testId }) => {
       loadStudents();
     }
   }, [testId, fetchStudents]);
+
+  // Fetch all students from Firebase Students collection
+  const fetchAllStudents = useCallback(async () => {
+    setLoadingAllStudents(true);
+    try {
+      // Fetch students list (emails)
+      const studentsRef = ref(database, 'Students');
+      const studentsSnapshot = await get(studentsRef);
+
+      if (!studentsSnapshot.exists()) {
+        toast.error('No students found in database');
+        return;
+      }
+
+      const studentEmails = studentsSnapshot.val();
+      
+      if (!Array.isArray(studentEmails)) {
+        toast.error('Invalid students data format');
+        return;
+      }
+
+      // Fetch user data for each email to get names
+      const usersRef = ref(database, 'users');
+      const usersSnapshot = await get(usersRef);
+      const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
+
+      // Map emails to student objects with names
+      const studentsWithNames = [];
+      
+      for (const email of studentEmails) {
+        // Find user by email in users collection
+        const userEntry = Object.entries(usersData).find(
+          ([uid, userData]) => userData.email === email
+        );
+
+        studentsWithNames.push({
+          email: email,
+          name: userEntry ? userEntry[1].name || email : email,
+          uid: userEntry ? userEntry[0] : null
+        });
+      }
+
+      setAllStudents(studentsWithNames);
+      setShowStudentSelector(true);
+    } catch (error) {
+      console.error('Error fetching all students:', error);
+      toast.error('Failed to load students from database');
+    } finally {
+      setLoadingAllStudents(false);
+    }
+  }, []);
+
+  // Add selected students from the student selector
+  const addSelectedStudents = useCallback(async () => {
+    if (selectedStudents.size === 0) {
+      toast.error('Please select at least one student');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const eligibleRef = ref(database, `Exam/${testId}/Eligible`);
+      const snapshot = await get(eligibleRef);
+      const currentStudents = snapshot.exists() ? snapshot.val() : {};
+
+      let addedCount = 0;
+      let skippedCount = 0;
+      const newStudents = { ...currentStudents };
+
+      selectedStudents.forEach(studentEmail => {
+        const student = allStudents.find(s => s.email === studentEmail);
+        if (student) {
+          // Check for duplicates
+          if (currentStudents[student.name] || Object.values(currentStudents).includes(student.email)) {
+            skippedCount++;
+          } else {
+            newStudents[student.name] = student.email;
+            addedCount++;
+          }
+        }
+      });
+
+      if (addedCount > 0) {
+        await set(eligibleRef, newStudents);
+        setManualStudents(newStudents);
+        setEnrolledStudents(Object.keys(newStudents));
+        toast.success(`Added ${addedCount} student(s)${skippedCount > 0 ? `. Skipped ${skippedCount} duplicate(s).` : ''}`);
+      } else {
+        toast.warning('All selected students already exist');
+      }
+
+      setSelectedStudents(new Set());
+      setShowStudentSelector(false);
+      setStudentSearchQuery('');
+      setSortBy('name');
+      setSortOrder('asc');
+    } catch (error) {
+      console.error('Error adding students:', error);
+      toast.error('Failed to add students');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedStudents, allStudents, testId]);
+
+  // Toggle student selection
+  const toggleStudentSelection = (email) => {
+    setSelectedStudents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(email)) {
+        newSet.delete(email);
+      } else {
+        newSet.add(email);
+      }
+      return newSet;
+    });
+  };
 
   // Add student
   const addStudent = useCallback(async (student) => {
@@ -322,6 +445,205 @@ const Students = ({ test, setTest, testId }) => {
       {/* Add Student Form */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Students</h4>
+
+        {/* Select from Database Section */}
+        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center">
+            <FiUserPlus className="mr-2 h-4 w-4" />
+            Select from Student Database
+          </h5>
+          <div className="flex gap-3">
+            <button
+              onClick={fetchAllStudents}
+              disabled={loadingAllStudents}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              {loadingAllStudents ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <FiUsers className="mr-2 h-4 w-4" />
+                  Browse Students
+                </>
+              )}
+            </button>
+            {showStudentSelector && (
+              <button
+                onClick={() => {
+                  setShowStudentSelector(false);
+                  setSelectedStudents(new Set());
+                  setStudentSearchQuery('');
+                  setSortBy('name');
+                  setSortOrder('asc');
+                }}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+
+          {/* Student Selector Modal/Section */}
+          {showStudentSelector && (
+            <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-3">
+                  <h6 className="text-sm font-medium text-gray-900 dark:text-white">
+                    Select Students ({selectedStudents.size} selected)
+                  </h6>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const filteredEmails = new Set(
+                          allStudents
+                            .filter(s => 
+                              s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                              s.email.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                            )
+                            .sort((a, b) => {
+                              const aValue = a[sortBy].toLowerCase();
+                              const bValue = b[sortBy].toLowerCase();
+                              if (sortOrder === 'asc') {
+                                return aValue.localeCompare(bValue);
+                              } else {
+                                return bValue.localeCompare(aValue);
+                              }
+                            })
+                            .map(s => s.email)
+                        );
+                        setSelectedStudents(filteredEmails);
+                      }}
+                      className="text-xs px-2 py-1 text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => setSelectedStudents(new Set())}
+                      className="text-xs px-2 py-1 text-gray-600 dark:text-gray-400 hover:underline"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+                {/* Search Input */}
+                <div className="relative mb-3">
+                  <input
+                    type="text"
+                    placeholder="Search by name or email..."
+                    value={studentSearchQuery}
+                    onChange={(e) => setStudentSearchQuery(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                  />
+                  {studentSearchQuery && (
+                    <button
+                      onClick={() => setStudentSearchQuery('')}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {/* Sort Controls */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">Sort by:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="name">Name</option>
+                    <option value="email">Email</option>
+                  </select>
+                  <button
+                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white flex items-center gap-1"
+                    title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                  >
+                    {sortOrder === 'asc' ? '↑ A-Z' : '↓ Z-A'}
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {allStudents
+                  .filter(student => 
+                    student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                    student.email.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                  )
+                  .sort((a, b) => {
+                    const aValue = a[sortBy].toLowerCase();
+                    const bValue = b[sortBy].toLowerCase();
+                    if (sortOrder === 'asc') {
+                      return aValue.localeCompare(bValue);
+                    } else {
+                      return bValue.localeCompare(aValue);
+                    }
+                  })
+                  .length > 0 ? (
+                  <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {allStudents
+                      .filter(student => 
+                        student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                        student.email.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                      )
+                      .sort((a, b) => {
+                        const aValue = a[sortBy].toLowerCase();
+                        const bValue = b[sortBy].toLowerCase();
+                        if (sortOrder === 'asc') {
+                          return aValue.localeCompare(bValue);
+                        } else {
+                          return bValue.localeCompare(aValue);
+                        }
+                      })
+                      .map((student) => (
+                      <li key={student.email} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedStudents.has(student.email)}
+                            onChange={() => toggleStudentSelection(student.email)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <div className="ml-3 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{student.name}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{student.email}</p>
+                          </div>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                    No students found
+                  </div>
+                )}
+              </div>
+              {selectedStudents.size > 0 && (
+                <div className="p-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                  <button
+                    onClick={addSelectedStudents}
+                    disabled={isSaving}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    {isSaving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                        Adding...
+                      </>
+                    ) : (
+                      <>
+                        <FiCheck className="mr-2 h-4 w-4" />
+                        Add Selected Students
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* CSV Upload Section */}
         <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">

@@ -289,6 +289,7 @@ const Questions = ({ test, setTest, testId }) => {
             handleAddQuestions(questions);
           }}
           questions={editingQuestion ? [editingQuestion] : []}
+          existingQuestionIds={test?.questions ? Object.keys(test.questions) : []}
         />
       )}
     </div>
