@@ -1,11 +1,31 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ref, remove } from 'firebase/database';
+import { FiTrash2 } from 'react-icons/fi';
+import { database } from '../../firebase';
 
 export default function ResultTestCard({ test }) {
   const navigate = useNavigate();
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-all duration-200 relative border border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-900">
+      <div className="absolute top-3 right-3">
+        <button
+          onClick={async (e) => {
+            e.stopPropagation();
+            if (!window.confirm('Are you sure you want to delete this exam?')) return;
+            try {
+              await remove(ref(database, `Exam/${test.id}`));
+            } catch (error) {
+              console.error('Error deleting exam:', error);
+            }
+          }}
+          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 rounded-full hover:bg-red-50 dark:hover:bg-gray-700"
+          title="Delete exam"
+        >
+          <FiTrash2 size={18} />
+        </button>
+      </div>
       <h3 className="text-xl font-semibold text-gray-800 dark:text-white pr-6">{test.name}</h3>
       <p className="text-gray-600 dark:text-gray-300 mt-2">
         Created: {new Date(test.createdAt).toLocaleDateString()}

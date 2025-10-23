@@ -29,14 +29,28 @@ const DynamicExam = () => {
   const [results, setResults] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
 
+  useEffect(() => {
+    console.log(isViolationReady);
+  }, [isViolationReady]);
+
   // Function to check exam status
   const checkExamStatus = async () => {
     try {
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
       const statusSnapshot = await get(statusRef);
 
-      const examstatus = await get(ref(database, `Exam/${testid}/Properties/status`));
+
+      const examStatusRef = ref(database, `Exam/${testid}/Properties/status`);
+      const examstatus = await get(examStatusRef);
       console.log(examstatus.val());
+
+      const examPropertiesRef = ref(database, `Exam/${testid}/Properties`);
+      const examPropertiesSnapshot = await get(examPropertiesRef);
+      const examProperties = examPropertiesSnapshot.exists() ? examPropertiesSnapshot.val() : {};
+
+      const durationFallbackSnapshot = await get(ref(database, `Exam/${testid}/duration`));
+      const durationValue = examProperties?.duration ?? durationFallbackSnapshot.val() ?? duration;
+      const durationMinutes = Number(durationValue) || 60;
 
       if (examstatus.val() === "Completed") {
         setStage("completed");
@@ -45,14 +59,31 @@ const DynamicExam = () => {
 
       if (statusSnapshot.exists()) {
         const statusData = statusSnapshot.val();
+        const statusString = typeof statusData === "string" ? statusData : statusData?.status;
+        const isCompleted = typeof statusString === "string" && statusString.toLowerCase() === "completed";
+        const progressData = typeof statusData === "object" && statusData !== null ? statusData : {};
+        const userStartTime = progressData.startTime || examProperties?.startTime;
+
+        if (!isCompleted && userStartTime) {
+          const startTimeDate = new Date(userStartTime);
+          const elapsedMinutes = (Date.now() - startTimeDate.getTime()) / 60000;
+
+          if (elapsedMinutes >= durationMinutes) {
+              const examRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
+            await set(examRef, "completed");
+            await markExamCompleted();
+            return true;
+          }
+        }
+
         // If exam is completed
-        if (statusData.status === "completed" || statusData.completed === true) {
+        if (isCompleted || progressData.completed === true) {
           setStage("completed");
           return true;
         }
 
         // If exam is blocked
-        if (statusData.status === "blocked") {
+        if (typeof statusString === "string" && statusString.toLowerCase() === "blocked") {
           setStage("blocked");
           return true;
         }
@@ -62,9 +93,9 @@ const DynamicExam = () => {
         console.log(statusData);
 
         // If exam was started but not completed
-        if (statusData.startTime) {
+        if (progressData.startTime) {
           setStage("resume");
-          setStartTime(statusData.startTime);
+          setStartTime(progressData.startTime);
           return false;
         }
       }
@@ -328,6 +359,8 @@ const DynamicExam = () => {
     const checkDuration = async () => {
       const isExpired = await checkExamDuration();
       if (isExpired) {
+        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
+        await set(statusRef, "completed");
         setStage("completed");
         fetchResults();
       }
@@ -347,6 +380,7 @@ const DynamicExam = () => {
 
       // If exam was already started but not completed, show resume screen
       if (statusSnapshot.exists() && statusSnapshot.val().startTime && !statusSnapshot.val().completed) {
+        console.log("meow")
         setStage("resume");
         return;
       }
@@ -627,7 +661,7 @@ const DynamicExam = () => {
 
       {stage === "warning" && (
         <>
-          <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} />
+          <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} isViolationReady={isViolationReady} />
           <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
             <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{examName}</h1>

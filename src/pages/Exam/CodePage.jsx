@@ -46,6 +46,100 @@ function CodePage({ question }) {
   const { user } = useAuth();
   const [submissionStatus, setSubmissionStatus] = useState('not_attended');
 
+  useEffect(() => {
+    const preventDefault = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    const preventContextMenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    const blockPaste = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.clipboardData) {
+        e.clipboardData.setData('text/plain', '');
+        e.clipboardData.clearData();
+      }
+
+      toast.error('Copy-paste is disabled in this environment');
+      return false;
+    };
+
+    const blockDragDrop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    const options = { capture: true, passive: false };
+
+    document.addEventListener('copy', preventDefault, options);
+    document.addEventListener('cut', preventDefault, options);
+    document.addEventListener('paste', blockPaste, options);
+    document.addEventListener('contextmenu', preventContextMenu, options);
+
+    document.addEventListener('drop', blockDragDrop, options);
+    document.addEventListener('dragover', blockDragDrop, options);
+
+    const preventShortcuts = (e) => {
+      const isPaste = (e.ctrlKey || e.metaKey) && ['v', 'V', 'Insert'].includes(e.key);
+      const isCopy = (e.ctrlKey || e.metaKey) && ['c', 'C', 'Insert', 'F3', 'F16', 'F24'].includes(e.key);
+      const isCut = (e.ctrlKey || e.metaKey) && ['x', 'X', 'Delete'].includes(e.key);
+
+      if (isPaste || isCopy || isCut) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        window.getSelection().removeAllRanges();
+
+        if (isPaste) {
+          toast.error('Pasting is disabled in this environment');
+        }
+
+        return false;
+      }
+    };
+
+    document.addEventListener('keydown', preventShortcuts, { capture: true });
+
+    const blockEditable = (e) => {
+      if (e.target.isContentEditable) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+
+    document.addEventListener('paste', blockEditable, { capture: true });
+
+    const blurHandler = () => {
+      if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+        document.activeElement.blur();
+      }
+    };
+
+    window.addEventListener('blur', blurHandler);
+
+    return () => {
+      document.removeEventListener('copy', preventDefault, options);
+      document.removeEventListener('cut', preventDefault, options);
+      document.removeEventListener('paste', blockPaste, options);
+      document.removeEventListener('contextmenu', preventContextMenu, options);
+      document.removeEventListener('drop', blockDragDrop, options);
+      document.removeEventListener('dragover', blockDragDrop, options);
+      document.removeEventListener('keydown', preventShortcuts, { capture: true });
+      document.removeEventListener('paste', blockEditable, { capture: true });
+      window.removeEventListener('blur', blurHandler);
+    };
+  }, []);
+
   // Refs
   const inputRef = useRef(null);
   const outputRef = useRef(null);

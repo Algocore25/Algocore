@@ -19,7 +19,9 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
   const blurStartRef = useRef(null);
   const hoverLeaveStartRef = useRef(null);
   const lastExitRef = useRef(null);
-  
+  const switchActiveRef = useRef(false);
+  const ignoreNextBlurRef = useRef(false);
+
   // Timer refs for cancellation (prevents duplicate violations)
   const fullscreenTimerRef = useRef(null);
   const blurTimerRef = useRef(null);
@@ -49,6 +51,23 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
     }
   };
 
+  const markTabSwitch = () => {
+    if (!switchActiveRef.current) {
+      switchActiveRef.current = true;
+      setSwitchCount((prev) => prev + 1);
+      if (isViolationReady) {
+        setviolation((prev) => {
+          const nextValue = typeof prev === "number" ? prev + 1 : 1;
+          return nextValue;
+        });
+        logViolation("tab_switch_detected", {
+          detectedAt: new Date().toISOString(),
+          reason: "Immediate tab/window blur",
+        });
+      }
+    }
+  };
+
   // --- Toggle fullscreen ---
   const toggleFullscreen = () => {
     if (screenfull.isEnabled) {
@@ -66,7 +85,10 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
 
       if (!fs) {
         lastExitRef.current = Date.now();
-        
+        switchActiveRef.current = false;
+        blurStartRef.current = null;
+        ignoreNextBlurRef.current = true;
+
         // Clear any pending timer to prevent duplicate violations
         if (fullscreenTimerRef.current) {
           clearTimeout(fullscreenTimerRef.current);
@@ -97,8 +119,13 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
     const handleBlur = () => {
       // Only track if not already tracking via visibility change
       if (!document.hidden && !blurStartRef.current) {
+        if (ignoreNextBlurRef.current) {
+          ignoreNextBlurRef.current = false;
+          return;
+        }
         blurStartRef.current = Date.now();
-        
+        markTabSwitch();
+
         // Clear any pending timer
         if (blurTimerRef.current) {
           clearTimeout(blurTimerRef.current);
@@ -114,8 +141,6 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
               gracePeriod: "2000ms",
               hasFocus: document.hasFocus(),
             });
-            setviolation((prev) => prev + 1);
-            setSwitchCount((prev) => prev + 1);
           }
           blurTimerRef.current = null;
         }, 2000);
@@ -128,12 +153,14 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
         setTotalBlurTime((prev) => prev + duration);
         blurStartRef.current = null;
       }
+      switchActiveRef.current = false;
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
         blurStartRef.current = Date.now();
-        
+        markTabSwitch();
+
         // Cancel blur timer since visibility handles this better
         if (blurTimerRef.current) {
           clearTimeout(blurTimerRef.current);
@@ -155,8 +182,6 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
               pageHidden: document.hidden,
               visibilityState: document.visibilityState,
             });
-            setviolation((prev) => prev + 1);
-            setSwitchCount((prev) => prev + 1);
           }
           visibilityTimerRef.current = null;
         }, 2000);
@@ -164,6 +189,8 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
         const duration = Date.now() - blurStartRef.current;
         setTotalBlurTime((prev) => prev + duration);
         blurStartRef.current = null;
+        switchActiveRef.current = false;
+        ignoreNextBlurRef.current = false;
       }
     };
 
