@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { database } from '../../firebase';
-import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, get, set, query, orderByChild, equalTo } from 'firebase/database';
 import LoadingPage from '../LoadingPage';
 import { useAuth } from '../../context/AuthContext';
 import jsPDF from 'jspdf';
@@ -23,6 +23,24 @@ export default function AdminResult() {
   const [sortDirection, setSortDirection] = useState('asc');
   const user = useAuth();
   const pdfRef = useRef();
+
+  // Weightage state and helpers
+  const [weights, setWeights] = useState({ mcq: 25, programming: 25, sql: 25, other: 25 });
+  const [useWeightage, setUseWeightage] = useState(false);
+  const [savingWeights, setSavingWeights] = useState(false);
+
+  const normalizeType = (t) => {
+    const s = String(t || '').toLowerCase();
+    if (s.includes('program')) return 'programming';
+    if (s === 'mcq') return 'mcq';
+    if (s === 'sql') return 'sql';
+    return 'other';
+  };
+
+  // Detailed report generation progress state
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [genProgress, setGenProgress] = useState(0);
+  const [genStatus, setGenStatus] = useState('');
 
   useEffect(() => {
     const fetchreultdata = async () => {
@@ -51,6 +69,40 @@ export default function AdminResult() {
         const examQuestions = examQuestionsSnapshot.val() || {};
         const marksData = marksSnapshot.val() || {};
         setTestName(testInfoSnapshot.val() || '');
+
+        // Load weightage config
+        try {
+          const [weightageSnapshot, useWeightageSnapshot] = await Promise.all([
+            get(ref(database, `Exam/${testid}/configure/weightage`)),
+            get(ref(database, `Exam/${testid}/configure/useWeightage`))
+          ]);
+
+          if (weightageSnapshot.exists()) {
+            const w = weightageSnapshot.val() || {};
+            setWeights({
+              mcq: Number(w.mcq) || 0,
+              programming: Number(w.programming) || 0,
+              sql: Number(w.sql) || 0,
+              other: Number(w.other) || 0,
+            });
+          } else {
+            // Equal weights for present categories
+            const typesPresent = new Set(Object.values(examQuestions).map(normalizeType));
+            const present = Array.from(typesPresent);
+            const base = present.length > 0 ? Math.floor(100 / present.length) : 25;
+            const defaultW = { mcq: 0, programming: 0, sql: 0, other: 0 };
+            present.forEach((t) => { defaultW[t] = base; });
+            const remainder = 100 - base * present.length;
+            if (remainder > 0 && present[0]) defaultW[present[0]] += remainder;
+            setWeights(defaultW);
+          }
+
+          if (useWeightageSnapshot.exists()) {
+            setUseWeightage(Boolean(useWeightageSnapshot.val()));
+          }
+        } catch (e) {
+          console.error('Error loading weightage config:', e);
+        }
 
         if (!studentEmails.length) {
           setLoading(false);
@@ -170,8 +222,41 @@ export default function AdminResult() {
     }
   };
 
+  // Enrich results with weightedMarks based on category weightage
+  const enrichedResults = React.useMemo(() => {
+    return results.map((r) => {
+      const acc = {
+        mcq: { sum: 0, count: 0 },
+        programming: { sum: 0, count: 0 },
+        sql: { sum: 0, count: 0 },
+        other: { sum: 0, count: 0 },
+      };
+      (r.questions || []).forEach((q) => {
+        const t = normalizeType(q.type);
+        const m = Number(q.marks);
+        if (!isNaN(m)) {
+          acc[t].sum += m;
+          acc[t].count += 1;
+        }
+      });
+      const cats = Object.keys(acc);
+      let usedWeightSum = 0;
+      let weightedSum = 0;
+      cats.forEach((k) => {
+        if (acc[k].count > 0) {
+          const avg = acc[k].sum / acc[k].count;
+          const w = Number(weights[k]) || 0;
+          usedWeightSum += w;
+          weightedSum += avg * w;
+        }
+      });
+      const weightedMarks = usedWeightSum > 0 ? (weightedSum / usedWeightSum) : NaN;
+      return { ...r, weightedMarks };
+    });
+  }, [results, weights]);
+
   // Sort results based on current sort settings
-  const sortedResults = [...results].sort((a, b) => {
+  const sortedResults = [...enrichedResults].sort((a, b) => {
     let aValue, bValue;
 
     switch (sortColumn) {
@@ -184,9 +269,11 @@ export default function AdminResult() {
         bValue = b.mail.toLowerCase();
         break;
       case 'totalMarks':
-        // Handle NaN values by treating them as -1 for sorting
-        aValue = isNaN(a.totalMarks) ? -1 : a.totalMarks;
-        bValue = isNaN(b.totalMarks) ? -1 : b.totalMarks;
+        // Use weighted or regular marks based on toggle
+        const aScore = useWeightage ? a.weightedMarks : a.totalMarks;
+        const bScore = useWeightage ? b.weightedMarks : b.totalMarks;
+        aValue = isNaN(aScore) ? -1 : aScore;
+        bValue = isNaN(bScore) ? -1 : bScore;
         break;
       case 'correctCount':
         // Sort by percentage of correct answers
@@ -203,13 +290,16 @@ export default function AdminResult() {
   });
 
   const totalStudents = results.length;
-  const attendedResults = results.filter(result => !isNaN(result.totalMarks));
+  const attendedResults = sortedResults.filter(r => {
+    const s = useWeightage ? r.weightedMarks : r.totalMarks;
+    return !isNaN(s);
+  });
   const totalAttended = attendedResults.length;
   const averageScore = totalAttended > 0
-    ? attendedResults.reduce((sum, result) => sum + result.totalMarks, 0) / totalAttended
+    ? attendedResults.reduce((sum, r) => sum + (useWeightage ? r.weightedMarks : r.totalMarks), 0) / totalAttended
     : null;
   const topScore = totalAttended > 0
-    ? Math.max(...attendedResults.map(result => result.totalMarks))
+    ? Math.max(...attendedResults.map(r => (useWeightage ? r.weightedMarks : r.totalMarks)))
     : null;
 
   const downloadAllResultsPDF = async () => {
@@ -253,80 +343,12 @@ export default function AdminResult() {
     pdf.text('Overall Performance Summary', margin, yPosition);
     yPosition += 8;
 
-    // Table Headers
-    pdf.setFillColor(70, 130, 180);
-    pdf.setTextColor(255, 255, 255);
-    pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
-    
-    pdf.setFontSize(9);
-    pdf.text('#', margin + 2, yPosition);
-    pdf.text('Student Name', margin + 8, yPosition);
-    pdf.text('Email', margin + 60, yPosition);
-    pdf.text('Score', margin + 120, yPosition);
-    pdf.text('Correct', margin + 140, yPosition);
-    pdf.text('Total', margin + 165, yPosition);
-    
-    pdf.setTextColor(0, 0, 0);
-    yPosition += 8;
-
-    // Table Rows
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(8);
-    
-    sortedResults.forEach((result, index) => {
-      if (checkNewPage(8)) {
-        // Redraw header on new page
-        pdf.setFillColor(70, 130, 180);
-        pdf.setTextColor(255, 255, 255);
-        pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
-        pdf.setFontSize(9);
-        pdf.text('#', margin + 2, yPosition);
-        pdf.text('Student Name', margin + 8, yPosition);
-        pdf.text('Email', margin + 60, yPosition);
-        pdf.text('Score', margin + 120, yPosition);
-        pdf.text('Correct', margin + 140, yPosition);
-        pdf.text('Total', margin + 165, yPosition);
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFontSize(8);
-        yPosition += 8;
-      }
-
-      // Alternate row colors
-      if (index % 2 === 0) {
-        pdf.setFillColor(245, 245, 245);
-        pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 7, 'F');
-      }
-
-      pdf.text(`${index + 1}`, margin + 2, yPosition);
-      
-      const studentName = result.studentId.length > 20 ? result.studentId.substring(0, 20) + '...' : result.studentId;
-      pdf.text(studentName, margin + 8, yPosition);
-      
-      const email = result.mail.length > 25 ? result.mail.substring(0, 25) + '...' : result.mail;
-      pdf.text(email, margin + 60, yPosition);
-      
-      const scoreText = isNaN(result.totalMarks) ? 'N/A' : `${result.totalMarks.toFixed(1)}%`;
-      pdf.text(scoreText, margin + 120, yPosition);
-      
-      pdf.text(`${result.correctCount}`, margin + 145, yPosition);
-      pdf.text(`${result.totalQuestions}`, margin + 168, yPosition);
-      
-      yPosition += 7;
-    });
-
-    yPosition += 10;
-
-    // Statistics
-    checkNewPage(40);
-    pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Test Statistics', margin, yPosition);
-    yPosition += 8;
-
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
 
-    const validScores = sortedResults.filter(r => !isNaN(r.totalMarks)).map(r => r.totalMarks);
+    const validScores = sortedResults
+      .map(r => (useWeightage ? r.weightedMarks : r.totalMarks))
+      .filter(v => !isNaN(v));
     const avgScore = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(2) : 'N/A';
     const maxScore = validScores.length > 0 ? Math.max(...validScores).toFixed(2) : 'N/A';
     const minScore = validScores.length > 0 ? Math.min(...validScores).toFixed(2) : 'N/A';
@@ -338,6 +360,80 @@ export default function AdminResult() {
     pdf.text(`Lowest Score: ${minScore}%`, margin + 5, yPosition);
     yPosition += 6;
     pdf.text(`Students Attended: ${validScores.length} / ${sortedResults.length}`, margin + 5, yPosition);
+
+    // Scoring mode and weights info
+    yPosition += 8;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Scoring Mode', margin, yPosition);
+    yPosition += 6;
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Mode: ${useWeightage ? 'Weighted (category-wise)' : 'Standard (unweighted)'}`, margin + 5, yPosition);
+    yPosition += 5;
+    if (useWeightage) {
+      const weightsLine = `Weights — MCQ: ${Number(weights.mcq)||0}%, Programming: ${Number(weights.programming)||0}%, SQL: ${Number(weights.sql)||0}%, Other: ${Number(weights.other)||0}%`;
+      pdf.text(weightsLine, margin + 5, yPosition);
+      yPosition += 6;
+    }
+
+    // Students table header
+    yPosition += 8;
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    pdf.text('Students', margin, yPosition);
+    yPosition += 8;
+
+    // Header row
+    pdf.setFillColor(70, 130, 180);
+    pdf.setTextColor(255, 255, 255);
+    pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
+    pdf.setFontSize(9);
+    pdf.text('#', margin + 2, yPosition);
+    pdf.text('Student Name', margin + 8, yPosition);
+    pdf.text('Email', margin + 60, yPosition);
+    pdf.text('Score', margin + 120, yPosition);
+    pdf.text('Correct', margin + 140, yPosition);
+    pdf.text('Total', margin + 165, yPosition);
+    pdf.setTextColor(0, 0, 0);
+    yPosition += 8;
+
+    // Rows with zebra striping
+    sortedResults.forEach((result, index) => {
+      if (yPosition + 10 > pageHeight - margin) {
+        pdf.addPage();
+        yPosition = margin;
+        // repeat header on new page
+        pdf.setFillColor(70, 130, 180);
+        pdf.setTextColor(255, 255, 255);
+        pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
+        pdf.setFontSize(9);
+        pdf.text('#', margin + 2, yPosition);
+        pdf.text('Student Name', margin + 8, yPosition);
+        pdf.text('Email', margin + 60, yPosition);
+        pdf.text('Score', margin + 120, yPosition);
+        pdf.text('Correct', margin + 140, yPosition);
+        pdf.text('Total', margin + 165, yPosition);
+        pdf.setTextColor(0, 0, 0);
+        yPosition += 8;
+      }
+
+      if (index % 2 === 1) {
+        pdf.setFillColor(245, 245, 245);
+        pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 7, 'F');
+      }
+
+      pdf.setFontSize(9);
+      pdf.text(`${index + 1}`, margin + 2, yPosition);
+      const studentName = result.studentId.length > 20 ? result.studentId.substring(0, 20) + '...' : result.studentId;
+      pdf.text(studentName, margin + 8, yPosition);
+      const email = result.mail.length > 25 ? result.mail.substring(0, 25) + '...' : result.mail;
+      pdf.text(email, margin + 60, yPosition);
+      const scoreVal = useWeightage ? result.weightedMarks : result.totalMarks;
+      const scoreText = isNaN(scoreVal) ? 'N/A' : `${scoreVal.toFixed(1)}%`;
+      pdf.text(scoreText, margin + 120, yPosition);
+      pdf.text(`${result.correctCount}`, margin + 145, yPosition);
+      pdf.text(`${result.totalQuestions}`, margin + 168, yPosition);
+      yPosition += 7;
+    });
 
     // Footer on all pages
     const totalPages = pdf.internal.getNumberOfPages();
@@ -355,6 +451,453 @@ export default function AdminResult() {
     }
 
     pdf.save(`${testName || testid}_all_results.pdf`);
+  };
+
+  const downloadDetailedReportPDF = async () => {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    let yPosition = margin;
+    // Track current tint (RGB) for student pages; null for summary/TOC
+    let currentTint = null;
+    const tintPalette = [
+      [250, 252, 255], // very light blue
+      [255, 250, 252], // very light pink
+      [252, 255, 250], // very light green
+      [248, 250, 255], // light bluish
+      [255, 252, 248], // light warm
+      [248, 255, 252], // light cyan
+      [252, 248, 255], // light violet
+      [255, 248, 252], // light rose
+      [246, 251, 255],
+      [251, 255, 246],
+      [255, 246, 251],
+      [246, 255, 252]
+    ];
+
+    // Page header for each page
+    const drawHeader = () => {
+      pdf.setFillColor(245, 248, 255);
+      pdf.rect(0, 0, pageWidth, 14, 'F');
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(40, 80, 160);
+      pdf.text(`${testName || testid}`, margin, 9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(100, 100, 100);
+      pdf.text('Detailed Report', pageWidth - margin, 9, { align: 'right' });
+      pdf.setDrawColor(220, 220, 220);
+      pdf.line(margin, 14, pageWidth - margin, 14);
+      yPosition = 18;
+      pdf.setTextColor(0, 0, 0);
+    };
+
+    const checkNewPage = (required) => {
+      if (yPosition + required > pageHeight - margin) {
+        pdf.addPage();
+        drawHeader();
+        if (currentTint) {
+          pdf.setFillColor(...currentTint);
+          pdf.rect(0, 14, pageWidth, pageHeight - 14, 'F');
+        }
+        return true;
+      }
+      return false;
+    };
+
+    // Helpers
+    const addText = (text, x, y, maxWidth, fontSize = 10) => {
+      pdf.setFontSize(fontSize);
+      const lines = pdf.splitTextToSize(String(text ?? ''), maxWidth);
+      pdf.text(lines, x, y);
+      return lines.length * (fontSize * 0.35);
+    };
+
+    const convertOptionKey = (key) => {
+      const numKey = parseInt(key);
+      return isNaN(numKey) ? key : (numKey + 1).toString();
+    };
+
+    setIsGeneratingReport(true);
+    setGenProgress(0);
+    setGenStatus('Preparing report...');
+
+    try {
+      drawHeader();
+      // Title
+      pdf.setFontSize(18);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Detailed Test Report', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 10;
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Test: ${testName || testid}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 8;
+      pdf.setFontSize(9);
+      pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 12;
+
+      // TOC header
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      pdf.text('Students Summary (Click name to jump to details)', margin, yPosition);
+      yPosition += 8;
+
+      // TOC table header
+      pdf.setFillColor(70, 130, 180);
+      pdf.setTextColor(255, 255, 255);
+      pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
+      pdf.setFontSize(9);
+      pdf.text('#', margin + 2, yPosition);
+      pdf.text('Student Name', margin + 8, yPosition);
+      pdf.text('Email', margin + 60, yPosition);
+      pdf.text('Score', margin + 120, yPosition);
+      pdf.text('Correct', margin + 140, yPosition);
+      pdf.text('Total', margin + 165, yPosition);
+      pdf.setTextColor(0, 0, 0);
+      yPosition += 8;
+
+      const tocEntries = [];
+
+      sortedResults.forEach((result, index) => {
+        if (checkNewPage(8)) {
+          // Redraw header on new TOC page
+          pdf.setFillColor(70, 130, 180);
+          pdf.setTextColor(255, 255, 255);
+          pdf.rect(margin, yPosition - 6, pageWidth - 2 * margin, 8, 'F');
+          pdf.setFontSize(9);
+          pdf.text('#', margin + 2, yPosition);
+          pdf.text('Student Name', margin + 8, yPosition);
+          pdf.text('Email', margin + 60, yPosition);
+          pdf.text('Score', margin + 120, yPosition);
+          pdf.text('Correct', margin + 140, yPosition);
+          pdf.text('Total', margin + 165, yPosition);
+          pdf.setTextColor(0, 0, 0);
+          yPosition += 8;
+        }
+
+        const currentTocPage = pdf.internal.getNumberOfPages();
+
+        // zebra row background
+        if (index % 2 === 1) {
+          pdf.setFillColor(245, 245, 245);
+          pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 7, 'F');
+        }
+
+        pdf.text(`${index + 1}`, margin + 2, yPosition);
+        const studentName = result.studentId.length > 20 ? result.studentId.substring(0, 20) + '...' : result.studentId;
+        pdf.text(studentName, margin + 8, yPosition);
+        const nameWidth = pdf.getTextWidth(studentName);
+        const email = result.mail.length > 25 ? result.mail.substring(0, 25) + '...' : result.mail;
+        pdf.text(email, margin + 60, yPosition);
+        const scoreVal = useWeightage ? result.weightedMarks : result.totalMarks;
+        const scoreText = isNaN(scoreVal) ? 'N/A' : `${scoreVal.toFixed(1)}%`;
+        pdf.text(scoreText, margin + 120, yPosition);
+        pdf.text(`${result.correctCount}`, margin + 145, yPosition);
+        pdf.text(`${result.totalQuestions}`, margin + 168, yPosition);
+
+        tocEntries.push({
+          page: currentTocPage,
+          x: margin + 8,
+          y: yPosition,
+          w: nameWidth,
+          uid: result.uid,
+        });
+
+        yPosition += 7;
+      });
+
+      // Students detailed sections
+      const pageForStudent = {};
+      const total = sortedResults.length;
+      for (let i = 0; i < sortedResults.length; i++) {
+        const r = sortedResults[i];
+        pdf.addPage();
+        const studentPageNumber = pdf.internal.getNumberOfPages();
+        pageForStudent[r.uid] = studentPageNumber;
+        // Assign unique very light background tint for this student
+        currentTint = tintPalette[i % tintPalette.length];
+        drawHeader();
+        pdf.setFillColor(...currentTint);
+        pdf.rect(0, 14, pageWidth, pageHeight - 14, 'F');
+        // Back to Summary link
+        pdf.setFontSize(8);
+        pdf.setTextColor(60, 90, 160);
+        pdf.text('Back to Summary', pageWidth - margin, yPosition, { align: 'right' });
+        pdf.link(pageWidth - margin - 35, yPosition - 4, 35, 6, { pageNumber: 1, top: 18 });
+        pdf.setTextColor(0, 0, 0);
+        yPosition += 6;
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(14);
+        pdf.text(`Student: ${r.studentId}`, margin, yPosition);
+        yPosition += 7;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.text(`Email: ${r.mail}`, margin, yPosition);
+        yPosition += 5;
+        pdf.text(`Student ID: ${r.uid.substring(0, 10)}...`, margin, yPosition);
+        yPosition += 5;
+        const sc = useWeightage ? r.weightedMarks : r.totalMarks;
+        pdf.text(`Score: ${isNaN(sc) ? 'Not Attended' : sc.toFixed(2) + '%'}`, margin, yPosition);
+        yPosition += 8;
+
+        // Performance summary card
+        const w = pageWidth - 2 * margin;
+        const colW = w / 3;
+        const accPct = r.totalQuestions > 0 ? Math.round((r.correctCount / r.totalQuestions) * 100) : 0;
+        pdf.setFillColor(250, 250, 250);
+        pdf.setDrawColor(230, 230, 230);
+        pdf.rect(margin, yPosition - 4, w, 22, 'F');
+        pdf.rect(margin, yPosition - 4, w, 22, 'S');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.text('Score', margin + 4, yPosition + 2);
+        pdf.text('Correct', margin + 4 + colW, yPosition + 2);
+        pdf.text('Accuracy', margin + 4 + 2 * colW, yPosition + 2);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(11);
+        pdf.text(isNaN(sc) ? 'N/A' : `${sc.toFixed(1)}%`, margin + 4, yPosition + 12);
+        pdf.text(`${r.correctCount} / ${r.totalQuestions}`, margin + 4 + colW, yPosition + 12);
+        pdf.text(`${accPct}%`, margin + 4 + 2 * colW, yPosition + 12);
+        yPosition += 24;
+
+        // Category breakdown
+        const cats = ['mcq', 'programming', 'sql', 'other'];
+        const catStats = { mcq: { att: 0, cor: 0, sum: 0 }, programming: { att: 0, cor: 0, sum: 0 }, sql: { att: 0, cor: 0, sum: 0 }, other: { att: 0, cor: 0, sum: 0 } };
+        (r.questions || []).forEach(qi2 => { const t = normalizeType(qi2.type); catStats[t].att++; if (qi2.correct) catStats[t].cor++; const m = Number(qi2.marks); if (!isNaN(m)) catStats[t].sum += m; });
+        const presentCats = cats.filter(c => catStats[c].att > 0);
+        if (presentCats.length) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(11);
+          pdf.text('Category Breakdown', margin, yPosition);
+          yPosition += 6;
+
+          pdf.setFillColor(70, 130, 180);
+          pdf.setTextColor(255, 255, 255);
+          pdf.rect(margin, yPosition - 5, w, 7, 'F');
+          pdf.setFontSize(9);
+          pdf.text('Category', margin + 2, yPosition);
+          pdf.text('Attempted', margin + 52, yPosition);
+          pdf.text('Correct', margin + 88, yPosition);
+          pdf.text('Avg Mark', margin + 118, yPosition);
+          if (useWeightage) pdf.text('Weight', margin + 150, yPosition);
+          pdf.setTextColor(0, 0, 0);
+          yPosition += 8;
+
+          presentCats.forEach((c, idx) => {
+            if (yPosition + 8 > pageHeight - margin) { 
+              pdf.addPage(); 
+              drawHeader(); 
+              if (currentTint) { pdf.setFillColor(...currentTint); pdf.rect(0, 14, pageWidth, pageHeight - 14, 'F'); }
+            }
+            if (idx % 2 === 1) { pdf.setFillColor(245, 245, 245); pdf.rect(margin, yPosition - 5, w, 7, 'F'); }
+            const avg = catStats[c].att ? (catStats[c].sum / catStats[c].att).toFixed(1) : '0.0';
+            const label = c.charAt(0).toUpperCase() + c.slice(1);
+            pdf.setFontSize(9);
+            pdf.text(label, margin + 2, yPosition);
+            pdf.text(String(catStats[c].att), margin + 60, yPosition, { align: 'right' });
+            pdf.text(String(catStats[c].cor), margin + 96, yPosition, { align: 'right' });
+            pdf.text(String(avg), margin + 130, yPosition, { align: 'right' });
+            if (useWeightage) pdf.text(`${Number(weights[c]) || 0}%`, margin + 180, yPosition, { align: 'right' });
+            yPosition += 7;
+          });
+
+          yPosition += 4;
+        }
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(12);
+        pdf.text('Question Details', margin, yPosition);
+        yPosition += 6;
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        for (let qi = 0; qi < (r.questions || []).length; qi++) {
+          const q = r.questions[qi];
+
+          // Fetch question details and student's answer
+          let qData = {};
+          let studentAnswer = null; // value from ExamSubmissions (true/false or null)
+          let studentAnswerIndex = null; // numeric 0-based from ExamCode or q.mcqanswer
+          try {
+            const [qSnap, ansSnap, codeSnap] = await Promise.all([
+              get(ref(database, `questions/${q.id}`)),
+              get(ref(database, `ExamSubmissions/${testid}/${r.uid}/${q.id}`)),
+              get(ref(database, `ExamCode/${testid}/${r.uid}/${q.id}`))
+            ]);
+            qData = qSnap.val() || {};
+            studentAnswer = ansSnap.val();
+            const codeVal = codeSnap.exists() ? codeSnap.val() : null;
+            if (typeof q.mcqanswer === 'number') {
+              studentAnswerIndex = q.mcqanswer;
+            } else if (typeof codeVal === 'number') {
+              studentAnswerIndex = codeVal;
+            } else {
+              studentAnswerIndex = null;
+            }
+          } catch (e) {
+            console.error('Error fetching q/a for', q.id, e);
+          }
+
+          checkNewPage(16);
+          const status = (studentAnswer === null || studentAnswer === undefined) ? 'Not Attended' : (q.correct ? 'Correct' : 'Wrong');
+          const statusColor = status === 'Correct' ? [0,128,0] : status === 'Wrong' ? [255,0,0] : [150,150,150];
+          const type = String(q.type || '').toUpperCase();
+
+          // Header row
+          pdf.setFillColor(240, 240, 240);
+          pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(10);
+          pdf.setTextColor(0,0,0);
+          pdf.text(`Question ${qi + 1} [${type}] - ${(Number(q.marks)||0).toFixed(2)} pts`, margin + 2, yPosition);
+          pdf.setTextColor(...statusColor);
+          pdf.text(status, pageWidth - margin - 25, yPosition);
+          pdf.setTextColor(0,0,0);
+          yPosition += 8;
+
+          // Question text
+          pdf.setFont('helvetica', 'bold');
+          const qTitle = qData.questionname || qData.question || q.id;
+          const titleH = addText(qTitle, margin + 2, yPosition, pageWidth - 2 * margin - 4, 10);
+          yPosition += titleH + 3;
+
+          if (qData.description) {
+            pdf.setFont('helvetica', 'normal');
+            const descH = addText(qData.description, margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
+            yPosition += descH + 3;
+          }
+
+          // MCQ-like questions
+          if (q.type !== 'Programming' && qData.options) {
+            checkNewPage(8);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Options:', margin + 2, yPosition);
+            yPosition += 5;
+            pdf.setFont('helvetica', 'normal');
+            const entries = Object.entries(qData.options);
+            for (const [optKey, optValue] of entries) {
+              checkNewPage(7);
+              const isCorrectAnswer = optKey === qData.correctAnswer;
+              const isStudentAnswer = studentAnswerIndex !== null
+                ? String(optKey) === String(studentAnswerIndex)
+                : String(optKey) === String(studentAnswer);
+              if (isCorrectAnswer) {
+                pdf.setFillColor(200, 255, 200);
+                pdf.rect(margin + 4, yPosition - 4, pageWidth - 2 * margin - 8, 6, 'F');
+              } else if (isStudentAnswer && !isCorrectAnswer) {
+                pdf.setFillColor(255, 200, 200);
+                pdf.rect(margin + 4, yPosition - 4, pageWidth - 2 * margin - 8, 6, 'F');
+              }
+              const optLabel = `${convertOptionKey(optKey)}. ${optValue}`;
+              const textH = addText(optLabel, margin + 6, yPosition, pageWidth - 2 * margin - 12, 9);
+              yPosition += textH + 2;
+            }
+
+            // Student answer and correct answer
+            checkNewPage(10);
+            pdf.setFont('helvetica', 'bold');
+            if (studentAnswerIndex === null && (studentAnswer === null || studentAnswer === undefined)) {
+              pdf.setTextColor(150,150,150);
+              pdf.text(`Student's Answer: Not Attended`, margin + 2, yPosition);
+            } else {
+              const stIdx = studentAnswerIndex !== null ? studentAnswerIndex : null;
+              if (stIdx !== null) {
+                const stLabel = convertOptionKey(String(stIdx));
+                pdf.text(`Student's Answer: Option ${stLabel}`, margin + 2, yPosition);
+              } else {
+                // Fallback: we only know correct/wrong
+                const infer = studentAnswer === 'true' ? 'Correct' : (studentAnswer === 'false' ? 'Wrong' : 'Unknown');
+                pdf.text(`Student's Answer: ${infer}`, margin + 2, yPosition);
+              }
+            }
+            pdf.setTextColor(0,0,0);
+            yPosition += 5;
+            pdf.text(`Correct Answer: Option ${qData.correctAnswer}`, margin + 2, yPosition);
+            yPosition += 6;
+          }
+
+          // Programming code snippet
+          if (q.type === 'Programming' && q.code) {
+            checkNewPage(10);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Code Submission:', margin + 2, yPosition);
+            yPosition += 6;
+            pdf.setFont('courier', 'normal');
+            pdf.setFontSize(7);
+            const codeLines = String(q.code).split('\n');
+            for (let li = 0; li < Math.min(codeLines.length, 60); li++) {
+              checkNewPage(5);
+              const line = codeLines[li];
+              const truncated = line.length > 95 ? line.substring(0, 95) + '...' : line;
+              // Background for code line
+              pdf.setFillColor(240, 240, 240);
+              pdf.rect(margin + 2, yPosition - 3, pageWidth - 2 * margin - 4, 4.5, 'F');
+              pdf.setTextColor(20, 20, 20);
+              pdf.text(truncated, margin + 4, yPosition);
+              pdf.setTextColor(0, 0, 0);
+              yPosition += 3.5;
+            }
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(9);
+            yPosition += 2;
+          }
+
+          // Explanation
+          if (qData.explanation) {
+            checkNewPage(12);
+            pdf.setFillColor(230, 240, 255);
+            const boxStart = yPosition - 3;
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('Explanation:', margin + 2, yPosition);
+            yPosition += 5;
+            pdf.setFont('helvetica', 'normal');
+            const explH = addText(qData.explanation, margin + 2, yPosition, pageWidth - 2 * margin - 4, 8);
+            pdf.rect(margin, boxStart, pageWidth - 2 * margin, explH + 8, 'S');
+            yPosition += explH + 4;
+          }
+        }
+
+        setGenProgress(Math.round(((i + 1) / total) * 100));
+        setGenStatus(`Processed ${i + 1} of ${total} students`);
+        if (i % 3 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+
+      // Backfill TOC links to student pages
+      tocEntries.forEach((e) => {
+        const target = pageForStudent[e.uid];
+        if (!target) return;
+        pdf.setPage(e.page);
+        pdf.link(e.x, e.y - 4, e.w, 6, { pageNumber: target, top: margin });
+      });
+
+      // Footer
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'italic');
+        pdf.setTextColor(128, 128, 128);
+        pdf.text(
+          `Page ${i} of ${totalPages} - ${testName || testid}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
+      }
+
+      pdf.save(`${testName || testid}_detailed_all_students.pdf`);
+    } catch (err) {
+      console.error('Error generating detailed report:', err);
+    } finally {
+      setIsGeneratingReport(false);
+      setGenProgress(0);
+      setGenStatus('');
+    }
   };
 
   const downloadStudentPDF = async (result) => {
@@ -626,7 +1169,7 @@ export default function AdminResult() {
           pdf.setFont('courier', 'normal');
           pdf.setFontSize(7);
           
-          // Split code into lines and display ALL of them
+          // Split code into lines and display ALL of them with background
           const codeLines = codeToDisplay.split('\n');
           
           for (const line of codeLines) {
@@ -638,7 +1181,12 @@ export default function AdminResult() {
             
             // Truncate only extremely long lines to fit the page width
             const truncatedLine = line.length > 95 ? line.substring(0, 95) + '...' : line;
+            // Light background behind code line
+            pdf.setFillColor(240, 240, 240);
+            pdf.rect(margin + 2, yPosition - 3, pageWidth - 2 * margin - 4, 4.5, 'F');
+            pdf.setTextColor(20, 20, 20);
             pdf.text(truncatedLine, margin + 4, yPosition);
+            pdf.setTextColor(0, 0, 0);
             yPosition += 3.5;
           }
           
@@ -927,7 +1475,118 @@ export default function AdminResult() {
             </div>
           </div>
 
-          <div className="flex justify-end mb-4">
+          <div className="mb-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">MCQ (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={weights.mcq}
+                    onChange={(e) => setWeights((w) => ({ ...w, mcq: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Programming (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={weights.programming}
+                    onChange={(e) => setWeights((w) => ({ ...w, programming: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">SQL (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={weights.sql}
+                    onChange={(e) => setWeights((w) => ({ ...w, sql: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Other (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={weights.other}
+                    onChange={(e) => setWeights((w) => ({ ...w, other: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col items-start gap-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="useWeightage"
+                    type="checkbox"
+                    checked={useWeightage}
+                    onChange={async (e) => {
+                      const val = e.target.checked;
+                      setUseWeightage(val);
+                      try { await set(ref(database, `Exam/${testid}/configure/useWeightage`), val); } catch (err) { console.error(err); }
+                    }}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor="useWeightage" className="text-sm text-gray-700 dark:text-gray-200">Use weightage in scores</label>
+                </div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  Total: {['mcq','programming','sql','other'].reduce((s,k)=>s+(Number(weights[k])||0),0)}%
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const present = new Set();
+                      enrichedResults.forEach(r => (r.questions||[]).forEach(q => present.add(normalizeType(q.type))));
+                      const arr = Array.from(present);
+                      const base = arr.length>0 ? Math.floor(100/arr.length) : 25;
+                      const equal = { mcq: 0, programming: 0, sql: 0, other: 0 };
+                      arr.forEach(t=>{ equal[t]=base; });
+                      const rem = 100 - base*arr.length; if (rem>0 && arr[0]) equal[arr[0]] += rem;
+                      setWeights(equal);
+                    }}
+                    className="px-3 py-1.5 rounded-md border text-sm bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
+                  >
+                    Distribute equally
+                  </button>
+                  <button
+                    disabled={savingWeights}
+                    onClick={async ()=>{
+                      setSavingWeights(true);
+                      try {
+                        await set(ref(database, `Exam/${testid}/configure/weightage`), weights);
+                      } catch (err) {
+                        console.error('Failed to save weights', err);
+                      } finally {
+                        setSavingWeights(false);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-60"
+                  >
+                    {savingWeights ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end mb-4 gap-2">
+            <button
+              onClick={downloadDetailedReportPDF}
+              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2"
+            >
+              <Download size={18} />
+              Download Detailed Report
+            </button>
             <button
               onClick={downloadAllResultsPDF}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -1074,18 +1733,21 @@ export default function AdminResult() {
                           </div>
                         </td>
                         <td className="p-3">
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${result.totalMarks >= 70 ? 'bg-green-100 text-green-800' : result.totalMarks >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                              }`}
-                          >
-                            {
-                              isNaN(result.totalMarks) ? (
-                                "Not Attended"
-                              ) : (
-                                `${result.totalMarks.toFixed(2)}%`
-                              )
-                            }
-                          </span>
+                          {(() => {
+                            const score = useWeightage ? result.weightedMarks : result.totalMarks;
+                            const badgeClass = isNaN(score)
+                              ? 'bg-gray-100 text-gray-800'
+                              : score >= 70
+                                ? 'bg-green-100 text-green-800'
+                                : score >= 50
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800';
+                            return (
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}>
+                                {isNaN(score) ? 'Not Attended' : `${score.toFixed(2)}%`}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="p-3">
                           <div className="text-sm text-gray-900 dark:text-white font-medium">
@@ -1302,6 +1964,18 @@ export default function AdminResult() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {isGeneratingReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">Generating Detailed Report</h3>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-3">
+              <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${genProgress}%` }} />
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">{genStatus}</div>
           </div>
         </div>
       )}

@@ -33,14 +33,14 @@ const ExamMonitor = () => {
         try {
             const violationsRef = ref(database, `Exam/${testid}/Violations/${userId}`);
             const snapshot = await get(violationsRef);
-            
+
             if (snapshot.exists()) {
                 const violations = snapshot.val();
                 const violationsArray = Object.entries(violations).map(([id, data]) => ({
                     id,
                     ...data
                 })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort by newest first
-                
+
                 setViolationDetails(prev => ({ ...prev, [userId]: violationsArray }));
             } else {
                 setViolationDetails(prev => ({ ...prev, [userId]: [] }));
@@ -56,11 +56,11 @@ const ExamMonitor = () => {
 
     const toggleRow = async (userId) => {
         const isExpanded = expandedRows[userId];
-        
+
         if (!isExpanded) {
             await fetchViolationDetails(userId);
         }
-        
+
         setExpandedRows(prev => ({ ...prev, [userId]: !isExpanded }));
     };
 
@@ -74,16 +74,16 @@ const ExamMonitor = () => {
         try {
             const myQuestionsRef = ref(database, `Exam/${testid}/myquestions/${userId}`);
             const questionsRef = ref(database, 'questions');
-            
+
             const [myQuestionsSnap, allQuestionsSnap] = await Promise.all([
                 get(myQuestionsRef),
                 get(questionsRef)
             ]);
-            
+
             if (myQuestionsSnap.exists() && allQuestionsSnap.exists()) {
                 const myQuestions = myQuestionsSnap.val();
                 const allQuestions = allQuestionsSnap.val();
-                
+
                 const questionsList = Object.entries(myQuestions).map(([order, questionId]) => {
                     const questionData = allQuestions[questionId];
                     return {
@@ -94,7 +94,7 @@ const ExamMonitor = () => {
                         difficulty: questionData?.difficulty || 'N/A'
                     };
                 }).sort((a, b) => a.order - b.order);
-                
+
                 setQuestionDetails(prev => ({ ...prev, [userId]: questionsList }));
             } else {
                 setQuestionDetails(prev => ({ ...prev, [userId]: [] }));
@@ -110,11 +110,11 @@ const ExamMonitor = () => {
 
     const toggleQuestions = async (userId) => {
         const isExpanded = expandedQuestions[userId];
-        
+
         if (!isExpanded) {
             await fetchQuestionDetails(userId);
         }
-        
+
         setExpandedQuestions(prev => ({ ...prev, [userId]: !isExpanded }));
     };
 
@@ -130,13 +130,13 @@ const ExamMonitor = () => {
         try {
             const myQuestionsRef = ref(database, `Exam/${testid}/myquestions/${userId}/${questionOrder}`);
             await set(myQuestionsRef, newQuestionId);
-            
+
             toast.success('Question changed successfully!');
-            
+
             // Refresh the question details
             setQuestionDetails(prev => ({ ...prev, [userId]: null }));
             await fetchQuestionDetails(userId);
-            
+
             setChangingQuestion({});
         } catch (error) {
             console.error('Error changing question:', error);
@@ -244,7 +244,7 @@ const ExamMonitor = () => {
 
                 // Get all eligible students
                 const eligibleEmails = Object.values(exam.Eligible || {});
-                
+
                 // Fetch all users
                 const usersRef = ref(database, 'users');
                 const usersSnapshot = await get(usersRef);
@@ -272,6 +272,28 @@ const ExamMonitor = () => {
                     const userProgress = progress[userId];
                     const userViolations = violations[userId] ?? 0;
                     const allocatedQuestions = myQuestions[userId] ? Object.keys(myQuestions[userId]).length : 0;
+
+                    if(  userProgress?.status?.toLowerCase() === "started") {
+                         const givenTime = new Date(userProgress?.startTime|| '');
+                    const currentTime = new Date();
+
+                    // Calculate difference in minutes
+                    const diffMinutes = (currentTime - givenTime) / (1000 * 60);
+
+                    if (diffMinutes > exam.duration) {
+                        console.log(`More than ${exam.duration} minutes have passed.`);
+                        userProgress.status = 'completed';
+                        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${userId}/status`);
+                        await set(statusRef, "completed");
+                    } else {
+                        console.log("Less than or equal to 60 minutes have passed.");
+                    }
+
+                    console.log("Difference (minutes):", diffMinutes);
+
+                    }
+
+                   
 
                     monitoredUsers.push({
                         id: `${testid}-${userId}`,
@@ -335,7 +357,7 @@ const ExamMonitor = () => {
 
     if (isLoading) {
         return (
-            <LoadingPage message="Loading Exam Data, please wait..."/>
+            <LoadingPage message="Loading Exam Data, please wait..." />
         );
     }
 
@@ -580,26 +602,24 @@ const ExamMonitor = () => {
                                                                     <div className="flex items-start justify-between mb-2">
                                                                         <span className="text-xs font-mono text-gray-500 dark:text-gray-400">Q{idx + 1}</span>
                                                                         <div className="flex gap-1">
-                                                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
-                                                                                question.type.toLowerCase() === 'mcq' 
+                                                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${question.type.toLowerCase() === 'mcq'
                                                                                     ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
                                                                                     : question.type.toLowerCase() === 'programming'
-                                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                                                    : question.type.toLowerCase() === 'sql'
-                                                                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                                                                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                                                            }`}>
+                                                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                                                        : question.type.toLowerCase() === 'sql'
+                                                                                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                                                                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                                                }`}>
                                                                                 {question.type}
                                                                             </span>
-                                                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
-                                                                                question.difficulty.toLowerCase() === 'easy' 
+                                                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${question.difficulty.toLowerCase() === 'easy'
                                                                                     ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                                                                                     : question.difficulty.toLowerCase() === 'medium'
-                                                                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-                                                                                    : question.difficulty.toLowerCase() === 'hard'
-                                                                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                                                                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                                                            }`}>
+                                                                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                                                                        : question.difficulty.toLowerCase() === 'hard'
+                                                                                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                                                }`}>
                                                                                 {question.difficulty}
                                                                             </span>
                                                                         </div>
@@ -610,7 +630,7 @@ const ExamMonitor = () => {
                                                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono truncate">
                                                                         ID: {question.id}
                                                                     </p>
-                                                                    
+
                                                                     {/* Change Question Section */}
                                                                     {changingQuestion.userId === user.userId && changingQuestion.questionOrder === question.order ? (
                                                                         <div className="mt-3 space-y-2">
@@ -639,8 +659,8 @@ const ExamMonitor = () => {
                                                                                     const alreadyAllocated = questionDetails[user.userId]?.some(uq => uq.id === q.id);
                                                                                     return isSameType && !alreadyAllocated;
                                                                                 }).length === 0 && (
-                                                                                    <option value="" disabled>No available questions of same type</option>
-                                                                                )}
+                                                                                        <option value="" disabled>No available questions of same type</option>
+                                                                                    )}
                                                                             </select>
                                                                             <button
                                                                                 onClick={handleCancelChangeQuestion}
@@ -657,16 +677,15 @@ const ExamMonitor = () => {
                                                                                 return isSameType && !alreadyAllocated;
                                                                             });
                                                                             const hasReplacements = availableReplacements.length > 0;
-                                                                            
+
                                                                             return (
                                                                                 <button
                                                                                     onClick={() => hasReplacements && handleStartChangeQuestion(user.userId, question.order)}
                                                                                     disabled={!hasReplacements}
-                                                                                    className={`mt-2 text-[10px] px-2 py-0.5 rounded transition-colors inline-flex items-center gap-1 ${
-                                                                                        hasReplacements 
+                                                                                    className={`mt-2 text-[10px] px-2 py-0.5 rounded transition-colors inline-flex items-center gap-1 ${hasReplacements
                                                                                             ? 'bg-indigo-500 hover:bg-indigo-600 text-white cursor-pointer'
                                                                                             : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                                                                                    }`}
+                                                                                        }`}
                                                                                     title={hasReplacements ? `${availableReplacements.length} replacement(s) available` : 'No available replacements of same type'}
                                                                                 >
                                                                                     {hasReplacements ? (

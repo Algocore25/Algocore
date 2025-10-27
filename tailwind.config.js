@@ -20,12 +20,22 @@ module.exports = {
         'dark-tertiary': '#2E3238',
       },
       animation: {
-        fadeIn: 'fadeIn 0.2s ease-in-out',
+        fadeIn: 'fadeIn 0.3s ease-in-out',
+        slideUp: 'slideUp 0.4s ease-out',
+        shimmer: 'shimmer 2s infinite',
       },
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0', transform: 'translateY(-10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideUp: {
+          '0%': { opacity: '0', transform: 'translateY(20px) scale(0.95)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
         },
       },
     },

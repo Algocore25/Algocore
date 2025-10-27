@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDatabase, ref, onValue, push, set, update } from 'firebase/database';
 import { FiPlus } from 'react-icons/fi';
@@ -23,6 +23,8 @@ const TestsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [creatingTest, setCreatingTest] = useState(false);
+  const [sortField, setSortField] = useState('date');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   useEffect(() => {
     const db = getDatabase();
@@ -100,17 +102,40 @@ const TestsList = () => {
     }
   };
 
-  const filteredTests = tests.filter(test => {
-    const testStatus = test.Properties?.status || 'NotStarted';
-    const matchesSearch = test?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredTests = useMemo(() => {
+    if (!Array.isArray(tests)) {
+      return [];
+    }
 
-    // Filter based on active tab
-    if (activeTab === 'available-tests') return matchesSearch && testStatus === 'Started';
-    if (activeTab === 'results') return matchesSearch && testStatus === 'Completed';
-    if (activeTab === 'edit-tests') return matchesSearch && testStatus === 'NotStarted';
+    return tests.filter(test => {
+      const testStatus = test.Properties?.status || 'NotStarted';
+      const matchesSearch = test?.name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesSearch;
-  });
+      if (activeTab === 'available-tests') return matchesSearch && testStatus === 'Started';
+      if (activeTab === 'results') return matchesSearch && testStatus === 'Completed';
+      if (activeTab === 'edit-tests') return matchesSearch && testStatus === 'NotStarted';
+
+      return matchesSearch;
+    });
+  }, [tests, searchTerm, activeTab]);
+
+  const sortedTests = useMemo(() => {
+    const testsToSort = [...filteredTests];
+
+    return testsToSort.sort((a, b) => {
+      if (sortField === 'name') {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        const comparison = nameA.localeCompare(nameB);
+        return sortOrder === 'asc' ? comparison : -comparison;
+      }
+
+      const dateA = new Date(a.completedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.completedAt || b.createdAt || 0).getTime();
+      const comparison = dateA - dateB;
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredTests, sortField, sortOrder]);
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
@@ -119,7 +144,7 @@ const TestsList = () => {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tests</h1>
-          <div className="flex space-x-4">
+          <div className="flex flex-wrap items-center gap-4 justify-end">
             <input
               type="text"
               placeholder="Search tests..."
@@ -127,7 +152,34 @@ const TestsList = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-
+            <div className="flex items-center gap-2">
+              <label htmlFor="sortField" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Sort
+              </label>
+              <select
+                id="sortField"
+                value={sortField}
+                onChange={(event) => setSortField(event.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="date">Date</option>
+                <option value="name">Name</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="sortOrder" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Order
+              </label>
+              <select
+                id="sortOrder"
+                value={sortOrder}
+                onChange={(event) => setSortOrder(event.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </div>
             {activeTab === 'edit-tests' && <button
               onClick={createNewTest}
               disabled={creatingTest}
@@ -145,7 +197,7 @@ const TestsList = () => {
           <AddQuestions />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTests.map((test) => (
+            {sortedTests.map((test) => (
               <div key={test.id}>
                 {activeTab === 'edit-tests' && <EditTestCard test={test} startTest={startTest} />}
                 {activeTab === 'available-tests' && <AvailableTestCard test={test} endTest={endTest} />}

@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Exam2 from "./Exam2";
 import { database } from "../../firebase";
-import { ref, get, set, child } from "firebase/database";
+import { ref, get, set, child, push } from "firebase/database";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { usePersonDetection } from "../../LiveProctoring/hooks/usePersonDetection";
+import { VideoCanvas } from "../../LiveProctoring/components/VideoCanvas";
 
 import FullscreenTracker from "../FullscreenTracker";
 import LoadingPage from "../LoadingPage";
@@ -20,6 +22,33 @@ const DynamicExam = () => {
   const [configdata, setConfigdata] = useState({});
   const [duration, setDuration] = useState(60 * 30); // New state
   const containerRef = useRef(null);
+
+  const [showPermModal, setShowPermModal] = useState(false);
+  const [camOK, setCamOK] = useState(null);
+  const [micOK, setMicOK] = useState(null);
+  const [permError, setPermError] = useState("");
+  const [isChecking, setIsChecking] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const analyserRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const rafRef = useRef(null);
+  const [permVerified, setPermVerified] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const [showToast, setShowToast] = useState(false);
+  const [detections, setDetections] = useState([]);
+  const detectionIntervalRef = useRef(null);
+  const proctorStreamRef = useRef(null);
+  const noPersonStartTime = useRef(null);
+  const multiPersonStartTime = useRef(null);
+  const violationTriggered = useRef({ noPerson: false, multiPerson: false });
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [audioDevices, setAudioDevices] = useState([]);
+  const [selectedVideoDevice, setSelectedVideoDevice] = useState("");
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState("");
+
+  const { detectPersons, isLoading: aiLoading, error: aiError, modelReady } = usePersonDetection();
 
   const { testid } = useParams();
 
@@ -52,7 +81,7 @@ const DynamicExam = () => {
       const durationValue = examProperties?.duration ?? durationFallbackSnapshot.val() ?? duration;
       const durationMinutes = Number(durationValue) || 60;
 
-      if (examstatus.val() === "Completed") {
+      if (examstatus.val().toLowerCase() === "completed") {
         setStage("completed");
         return true;
       }
@@ -103,6 +132,264 @@ const DynamicExam = () => {
     } catch (error) {
       console.error("Error checking exam status:", error);
       return false;
+    }
+  };
+
+  const showToastNotification = useCallback((message) => {
+    setToastMsg(message);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 5000);
+  }, []);
+
+  // --- Log violation to Firebase ---
+  const logViolation = useCallback(async (reason, details = {}) => {
+    if (!testid || !user?.uid) return;
+    
+    try {
+      const violationRef = ref(database, `Exam/${testid}/Violations/${user.uid}`);
+      const newViolationRef = push(violationRef);
+      
+      await set(newViolationRef, {
+        reason,
+        timestamp: new Date().toISOString(),
+        details,
+        userAgent: navigator.userAgent,
+        screenSize: `${window.screen.width}x${window.screen.height}`,
+        windowSize: `${window.innerWidth}x${window.innerHeight}`,
+      });
+      
+      console.log(`[Violation Logged] ${reason}`, details);
+    } catch (error) {
+      console.error("Error logging violation:", error);
+    }
+  }, [testid, user]);
+
+  const runDetection = useCallback(async () => {
+    if (!videoRef.current || stage !== "exam" || !proctorStreamRef.current) return;
+    const results = await detectPersons(videoRef.current);
+    setDetections(results);
+    const personCount = results.length;
+    const now = Date.now();
+
+    if (personCount === 0) {
+      if (!noPersonStartTime.current) {
+        noPersonStartTime.current = now;
+        violationTriggered.current.noPerson = false;
+      } else {
+        const duration = (now - noPersonStartTime.current) / 1000;
+        if (duration >= 5 && !violationTriggered.current.noPerson) {
+          showToastNotification("⚠️ No person detected for 5 seconds - Violation recorded");
+          setviolation(prev => (prev || 0) + 1);
+          logViolation("No Person Detected", {
+            duration: `${duration.toFixed(1)} seconds`,
+            personCount: 0,
+            detectionTime: new Date().toISOString()
+          });
+          violationTriggered.current.noPerson = true;
+        }
+      }
+      multiPersonStartTime.current = null;
+      violationTriggered.current.multiPerson = false;
+    } else if (personCount > 1) {
+      if (!multiPersonStartTime.current) {
+        multiPersonStartTime.current = now;
+        violationTriggered.current.multiPerson = false;
+      } else {
+        const duration = (now - multiPersonStartTime.current) / 1000;
+        if (duration >= 5 && !violationTriggered.current.multiPerson) {
+          showToastNotification(`⚠️ Multiple persons detected for 5 seconds - Violation recorded`);
+          setviolation(prev => (prev || 0) + 1);
+          logViolation("Multiple Persons Detected", {
+            duration: `${duration.toFixed(1)} seconds`,
+            personCount: personCount,
+            detectionTime: new Date().toISOString()
+          });
+          violationTriggered.current.multiPerson = true;
+        }
+      }
+      noPersonStartTime.current = null;
+      violationTriggered.current.noPerson = false;
+    } else {
+      noPersonStartTime.current = null;
+      multiPersonStartTime.current = null;
+      violationTriggered.current.noPerson = false;
+      violationTriggered.current.multiPerson = false;
+    }
+  }, [detectPersons, stage, showToastNotification, setviolation]);
+
+  useEffect(() => {
+    if (stage === "exam" && proctorStreamRef.current) {
+      if (videoRef.current && proctorStreamRef.current) {
+        videoRef.current.srcObject = proctorStreamRef.current;
+      }
+      if (modelReady) {
+        detectionIntervalRef.current = setInterval(runDetection, 1000);
+      }
+    } else {
+      if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
+      noPersonStartTime.current = null;
+      multiPersonStartTime.current = null;
+      violationTriggered.current = { noPerson: false, multiPerson: false };
+    }
+    return () => {
+      if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
+    };
+  }, [stage, modelReady, runDetection]);
+
+  const cleanupMedia = () => {
+    try {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      if (analyserRef.current && analyserRef.current.disconnect) analyserRef.current.disconnect();
+      analyserRef.current = null;
+      if (audioCtxRef.current && audioCtxRef.current.close) audioCtxRef.current.close();
+      audioCtxRef.current = null;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      streamRef.current = null;
+      if (videoRef.current) {
+        try { videoRef.current.srcObject = null; } catch (_) {}
+      }
+    } catch (_) {}
+  };
+
+  const enumerateDevices = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter(d => d.kind === 'videoinput');
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+      setVideoDevices(videoInputs);
+      setAudioDevices(audioInputs);
+      if (videoInputs.length > 0 && !selectedVideoDevice) setSelectedVideoDevice(videoInputs[0].deviceId);
+      if (audioInputs.length > 0 && !selectedAudioDevice) setSelectedAudioDevice(audioInputs[0].deviceId);
+    } catch (e) {
+      console.error("Error enumerating devices:", e);
+    }
+  };
+
+  const startPermissionCheck = async () => {
+    setIsChecking(true);
+    setPermError("");
+    setCamOK(null);
+    setMicOK(null);
+    setAudioLevel(0);
+    cleanupMedia();
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Media devices not supported");
+      }
+      const constraints = {
+        video: selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : true,
+        audio: selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : true
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      if (videoRef.current) {
+        try { videoRef.current.srcObject = stream; } catch (_) {}
+      }
+      const vTrack = stream.getVideoTracks()[0];
+      const aTrack = stream.getAudioTracks()[0];
+      setCamOK(Boolean(vTrack && vTrack.readyState === "live"));
+      setMicOK(Boolean(aTrack && aTrack.readyState === "live"));
+
+      await enumerateDevices();
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      audioCtxRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyserRef.current = analyser;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteTimeDomainData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        const level = Math.min(100, Math.max(0, Math.round(rms * 180)));
+        setAudioLevel(level);
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) {
+      setPermError(e?.message || "Failed to access camera/microphone");
+      setCamOK(false);
+      setMicOK(false);
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const openPermissionModal = async () => {
+    setShowPermModal(true);
+    setPermVerified(false);
+    await enumerateDevices();
+    startPermissionCheck();
+  };
+
+  const closePermissionModal = () => {
+    setShowPermModal(false);
+    cleanupMedia();
+  };
+
+  const continueAfterPermissions = async () => {
+    if (!camOK || !micOK) {
+      setPermError("Please allow both camera and microphone to continue");
+      return;
+    }
+    if (!modelReady) {
+      setPermError("AI model is still loading. Please wait...");
+      return;
+    }
+    setPermVerified(true);
+    // Save stream for proctoring but DON'T stop tracks
+    proctorStreamRef.current = streamRef.current;
+    // Keep video reference but don't cleanup
+    setShowPermModal(false);
+    
+    if (stage === "resume" || stage === "warning") {
+      // For resume/warning, directly enter fullscreen and set stage to exam
+      try {
+        const isCompleted = await checkExamStatus();
+        if (isCompleted) return;
+        if (containerRef.current.requestFullscreen) {
+          await containerRef.current.requestFullscreen();
+        }
+        setStage("exam");
+      } catch (error) {
+        console.error("Failed to re-enter fullscreen:", error);
+      }
+    } else {
+      // For initial start, log start time and enter fullscreen
+      try {
+        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
+        const statusSnapshot = await get(statusRef);
+        if (statusSnapshot.exists() && statusSnapshot.val().startTime && !statusSnapshot.val().completed) {
+          setStage("resume");
+          return;
+        }
+        if (statusSnapshot.exists() && (statusSnapshot.val().status === "completed" || statusSnapshot.val().completed === true)) {
+          return;
+        }
+        const currentTime = new Date().toISOString();
+        await set(ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`), {
+          startTime: currentTime,
+          status: "started"
+        });
+        setStartTime(currentTime);
+        if (containerRef.current.requestFullscreen) {
+          await containerRef.current.requestFullscreen();
+        }
+        setStage("exam");
+      } catch (error) {
+        console.error("Failed to enter fullscreen:", error);
+      }
     }
   };
 
@@ -374,6 +661,10 @@ const DynamicExam = () => {
 
   const startExam = async () => {
     try {
+      if (!permVerified) {
+        openPermissionModal();
+        return;
+      }
       // Check exam status first
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
       const statusSnapshot = await get(statusRef);
@@ -409,6 +700,10 @@ const DynamicExam = () => {
 
   const returnToFullScreen = async () => {
     try {
+      if (!permVerified) {
+        openPermissionModal();
+        return;
+      }
       // Check exam status before returning to full screen
       const isCompleted = await checkExamStatus();
       if (isCompleted) {
@@ -515,10 +810,11 @@ const DynamicExam = () => {
   const markExamBlocked = async () => {
     try {
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
-      await set(statusRef, "blocked");
+      const statusRefSnapshot = await get(statusRef);
+      console.log( statusRefSnapshot.val());
       const examstatus = ref(database, `Exam/${testid}/Properties/status`);
       const examstatusSnapshot = await get(examstatus);
-      if (examstatusSnapshot.val() === "Completed") {
+      if (examstatusSnapshot.val().toLowerCase() === "completed" || (statusRefSnapshot.exists() && statusRefSnapshot.val() === "completed")) {
 
         const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
         await set(statusRef, "completed");
@@ -529,6 +825,8 @@ const DynamicExam = () => {
       }
       console.log("2 my block")
       setStage("blocked");
+      await set(statusRef, "blocked");
+
 
     } catch (error) {
       console.error("Error marking exam as blocked:", error);
@@ -629,7 +927,7 @@ const DynamicExam = () => {
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
                 <button
-                  onClick={startExam}
+                  onClick={openPermissionModal}
                   className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
                 >
                   <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -651,10 +949,13 @@ const DynamicExam = () => {
             setviolation={setviolation}
             setIsViolationReady={setIsViolationReady}
             Questions={Questions}
-            onExamComplete={markExamCompleted} // Pass the completion handler
+            onExamComplete={markExamCompleted}
             startTime={startTime}
             duration={duration}
             examName={examName}
+            videoRef={videoRef}
+            detections={detections}
+            isProctoringActive={!!proctorStreamRef.current}
           />
         </>
       )}
@@ -668,7 +969,7 @@ const DynamicExam = () => {
               {/* <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p> */}
               <p className="text-sm text-gray-500">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
               <button
-                onClick={returnToFullScreen}
+                onClick={openPermissionModal}
                 className="px-6 py-3 rounded-md font-semibold text-white transition-colors bg-red-600 hover:bg-red-700"
               >
                 Return to Fullscreen
@@ -679,69 +980,77 @@ const DynamicExam = () => {
       )}
 
       {stage === "resume" && (
-        <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 overflow-hidden">
-          <div className="w-full max-w-lg max-h-[95vh] flex flex-col">
-            <div className="h-4 sm:h-6 md:h-8 lg:h-12"></div>
-
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-full">
-              {/* Header Section */}
-              <div className="bg-gradient-to-r from-yellow-500 to-orange-500 px-6 py-6 text-center flex-shrink-0">
-                <h1 className="text-2xl font-bold text-white mb-1">Test Paused</h1>
-                <p className="text-sm text-yellow-50">Ready to continue?</p>
+        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+          <div className="w-full max-w-lg mx-auto">
+            {/* Main Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              
+              {/* Header with Icon */}
+              <div className="bg-yellow-50 dark:bg-yellow-900/10 px-6 py-8 border-b border-yellow-100 dark:border-yellow-900/20">
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Exam Paused</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{examName}</p>
+                  </div>
+                </div>
               </div>
 
-              {/* Content Section - Scrollable if needed */}
-              <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
-                {/* User Info Card */}
-                <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
-                  <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full text-white font-bold text-lg shadow-lg">
-                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Student</p>
-                    <p className="text-base font-semibold text-gray-800 dark:text-gray-200">{user?.name || 'User'}</p>
-                  </div>
+              {/* Content */}
+              <div className="px-6 py-6 space-y-6">
+                {/* User Info */}
+                <div>
+                  <p className="text-gray-700 dark:text-gray-300">
+                    <span className="font-medium text-gray-900 dark:text-white">{user?.name || 'User'}</span>
+                  </p>
+                  <p className="text-gray-600 dark:text-gray-400 mt-2">
+                    Your exam has been paused. Click below to resume and continue from where you left off.
+                  </p>
                 </div>
 
-                {/* Exam Info Card */}
-                <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Exam</p>
-                  <p className="text-base font-semibold text-gray-800 dark:text-gray-200">{examName || 'Test'}</p>
-                </div>
-
-                {/* Test Summary */}
-                {configdata && (
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-1">Questions</h3>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 space-y-1.5 max-h-32 overflow-y-auto">
+                {/* Exam Details */}
+                {configdata && Object.entries(configdata).some(([_, count]) => count > 0) && (
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">Exam Information</p>
+                    <div className="grid grid-cols-2 gap-3">
                       {Object.entries(configdata).map(([type, count]) => (
                         count > 0 && (
-                          <div key={type} className="flex justify-between items-center py-2 px-3 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-                            <span className="text-sm text-gray-700 dark:text-gray-200 capitalize font-medium">{type.toLowerCase()}</span>
-                            <span className="px-2.5 py-0.5 text-xs font-semibold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full">
-                              {count}
-                            </span>
+                          <div key={type} className="bg-gray-50 dark:bg-gray-900/50 rounded-md px-3 py-2">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{type.toLowerCase()}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{count} {count === 1 ? 'Q' : 'Qs'}</p>
                           </div>
                         )
                       ))}
                     </div>
                   </div>
                 )}
+
+                {/* Resume Button */}
+                <div className="pt-4">
+                  <button
+                    onClick={openPermissionModal}
+                    className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Resume Exam</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Footer with Button */}
-              <div className="px-6 pb-6 flex-shrink-0">
-                <button
-                  onClick={returnToFullScreen}
-                  className="w-full px-6 py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:focus:ring-yellow-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <div className="flex items-center justify-center space-x-2">
-                    <span>Resume Test</span>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                    </svg>
-                  </div>
-                </button>
+              {/* Footer */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                  Your progress has been saved
+                </p>
               </div>
             </div>
           </div>
@@ -749,68 +1058,131 @@ const DynamicExam = () => {
       )}
 
       {stage === "blocked" && (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 p-4">
-          <div className="w-full max-w-md mx-auto p-8 rounded-2xl shadow-xl bg-white dark:bg-gray-800 text-center space-y-6">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
-              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-              </svg>
-            </div>
-
-            <div className="space-y-3">
-              <h2 className="text-2xl font-bold text-red-700 dark:text-red-400">Exam Blocked</h2>
-              <p className="text-gray-600 dark:text-gray-300">
-                <span className="font-medium">{user?.name || 'User'}</span>, your access to <span className="font-semibold">{examName}</span> has been restricted.
-              </p>
-
-              <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 mt-4 text-left">
-                <p className="text-red-700 dark:text-red-300 text-sm">
-                  You have exceeded the maximum number of allowed violations. For further assistance, please contact the administrator.
-                </p>
-              </div>
-
-              {configdata && (
-                <div className="mt-6 space-y-3">
-                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Exam Details</h3>
-                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 space-y-2">
-                    {Object.entries(configdata).map(([type, count]) => (
-                      count > 0 && (
-                        <div key={type} className="flex justify-between items-center py-2 px-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors">
-                          <span className="text-gray-700 dark:text-gray-200 capitalize">{type.toLowerCase()}</span>
-                          <span className="px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 rounded-full">
-                            {count} {count === 1 ? 'question' : 'questions'}
-                          </span>
-                        </div>
-                      )
-                    ))}
+        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+          <div className="w-full max-w-lg mx-auto">
+            {/* Main Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              
+              {/* Header with Icon */}
+              <div className="bg-red-50 dark:bg-red-900/10 px-6 py-8 border-b border-red-100 dark:border-red-900/20">
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Access Restricted</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{examName}</p>
                   </div>
                 </div>
-              )}
+              </div>
+
+              {/* Content */}
+              <div className="px-6 py-6 space-y-4">
+                {/* User Message */}
+                <div>
+                  <p className="text-gray-700 dark:text-gray-300">
+                    <span className="font-medium text-gray-900 dark:text-white">{user?.name || 'User'}</span>,
+                  </p>
+                  <p className="text-gray-600 dark:text-gray-400 mt-2">
+                    Your access to this exam has been restricted due to violation of exam policies.
+                  </p>
+                </div>
+
+                {/* Reason Box */}
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border-l-4 border-red-500">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    <span className="font-medium">Reason:</span> Maximum allowed violations exceeded
+                  </p>
+                </div>
+
+                {/* Exam Details (if available) */}
+                {configdata && Object.entries(configdata).some(([_, count]) => count > 0) && (
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">Exam Information</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.entries(configdata).map(([type, count]) => (
+                        count > 0 && (
+                          <div key={type} className="bg-gray-50 dark:bg-gray-900/50 rounded-md px-3 py-2">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{type.toLowerCase()}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{count} {count === 1 ? 'Q' : 'Qs'}</p>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Next Steps */}
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-2">Next Steps</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Please contact your administrator or exam coordinator for assistance.
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Need help?</span>
+                  <a href="mailto:support@algocore.com" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                    support@algocore.com
+                  </a>
+                </div>
+              </div>
             </div>
 
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Need help? Contact support at <span className="font-medium">support@algocore.com</span>
-              </p>
+            {/* Back to Dashboard Link */}
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => window.location.href = '/'}
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                ← Back to Dashboard
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {stage === "completed" && (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/10 dark:to-green-900/5 p-4">
-          <div className="w-full max-w-2xl mx-auto p-8 rounded-2xl shadow-xl bg-white dark:bg-gray-800 space-y-6">
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
-                <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
+        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+          <div className="w-full max-w-2xl mx-auto">
+            {/* Main Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              
+              {/* Header */}
+              <div className="bg-green-50 dark:bg-green-900/10 px-6 py-8 border-b border-green-100 dark:border-green-900/20">
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Exam Completed</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{examName}</p>
+                  </div>
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-green-700 dark:text-green-400">Test Completed Successfully!</h2>
-              <p className="text-gray-600 dark:text-gray-300 mt-2">
-                <span className="font-medium">{user?.name || 'User'}</span>, you have completed <span className="font-semibold">{examName}</span>.
-              </p>
-            </div>
+
+              {/* Content */}
+              <div className="px-6 py-6 space-y-6">
+                {/* User Greeting */}
+                <div>
+                  <p className="text-gray-700 dark:text-gray-300">
+                    Congratulations <span className="font-medium text-gray-900 dark:text-white">{user?.name || 'User'}</span>!
+                  </p>
+                  <p className="text-gray-600 dark:text-gray-400 mt-2">
+                    You have successfully completed the exam. Your results are shown below.
+                  </p>
+                </div>
 
             {loadingResults ? (
               <div className="py-8 text-center">
@@ -820,81 +1192,75 @@ const DynamicExam = () => {
             ) : results ? (
               <>
                 {/* Results Summary */}
-                <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-6 space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 text-center">Your Results</h3>
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">Your Results</p>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                    <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow">
-                      <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Score</p>
-                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg px-4 py-3 text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Score</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
                         {results.score}%
                       </p>
                     </div>
-                    <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow">
-                      <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Correct Answers</p>
-                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                        {results.correctCount}/{results.totalQuestions}
+                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg px-4 py-3 text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Correct</p>
+                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {results.correctCount}
                       </p>
                     </div>
-                    <div className="bg-white dark:bg-gray-700 p-4 rounded-lg shadow">
-                      <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Total Questions</p>
-                      <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">
+                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg px-4 py-3 text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
                         {results.totalQuestions}
                       </p>
                     </div>
                   </div>
 
-                  {results.questions && (
-                    <div className="mt-4 space-y-3">
-                    <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 text-center">Question Breakdown</h4>
-                    <div className="space-y-2">
-                      {results.questions.map((q, index) => (
-                        <div 
-                          key={index}
-                          className={`p-3 rounded-lg border ${
-                            q.correct 
-                              ? 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-800/50' 
-                              : q.mark > 0 ? 'bg-yellow-50 border-yellow-100 dark:bg-yellow-900/20 dark:border-yellow-800/50' : 'bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-800/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
+                  {results.questions && results.questions.length > 0 && (
+                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">Question Breakdown</p>
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {results.questions.map((q, index) => (
+                          <div 
+                            key={index}
+                            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg"
+                          >
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                Q{index + 1}: {q.id || `Question ${index + 1}`}
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                Q{index + 1}
                               </p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {q.type} • {q.mark || 0} {q.mark === 1 ? 'point' : 'points'}
+                                {q.type} • {q.mark || 0} pts
                               </p>
                             </div>
                             <span 
-                              className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${
+                              className={`ml-2 px-3 py-1 text-xs font-medium rounded-full ${
                                 q.correct
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
-                                  : q.mark > 0 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200' : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                  : q.mark > 0 
+                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' 
+                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                               }`}
                             >
-                              {q.correct ? 'Correct' : q.mark > 0 ? 'Partial' : 'Incorrect'}
+                              {q.correct ? '✓' : q.mark > 0 ? '~' : '✗'}
                             </span>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
                   )}
                 </div>
 
-                {/* Test Summary */}
-                {configdata && (
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Test Summary</h3>
-                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-4 space-y-2">
+                {/* Exam Info */}
+                {configdata && Object.entries(configdata).some(([_, count]) => count > 0) && (
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">Exam Summary</p>
+                    <div className="grid grid-cols-2 gap-3">
                       {Object.entries(configdata).map(([type, count]) => (
                         count > 0 && (
-                          <div key={type} className="flex justify-between items-center py-2 px-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md transition-colors">
-                            <span className="text-gray-700 dark:text-gray-200 capitalize">{type.toLowerCase()}</span>
-                            <span className="px-3 py-1 text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 rounded-full">
-                              {count} {count === 1 ? 'question' : 'questions'}
-                            </span>
+                          <div key={type} className="bg-gray-50 dark:bg-gray-900/50 rounded-md px-3 py-2">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{type.toLowerCase()}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{count} {count === 1 ? 'Q' : 'Qs'}</p>
                           </div>
                         )
                       ))}
@@ -907,11 +1273,262 @@ const DynamicExam = () => {
                 <p className="text-gray-500 dark:text-gray-400">Unable to load results. Please check your dashboard later.</p>
               </div>
             )}
+              </div>
 
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                You can view these results in your dashboard at any time.
-              </p>
+              {/* Footer */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                  View detailed results anytime in your dashboard
+                </p>
+              </div>
+            </div>
+
+            {/* Back to Dashboard Link */}
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => window.location.href = '/'}
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                ← Back to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showToast && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-lg shadow-2xl animate-bounce">
+          {toastMsg}
+        </div>
+      )}
+
+      {showPermModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 scale-100 animate-slideUp">
+            {/* Header with gradient */}
+            <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Hardware & AI Verification
+              </h2>
+              <p className="text-blue-100 text-sm mt-1">Please verify your devices and AI model before starting</p>
+            </div>
+
+            {/* Progress Steps */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between max-w-md mx-auto">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${camOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                    {camOK ? '✓' : '1'}
+                  </div>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Camera</span>
+                </div>
+                <div className={`flex-1 h-1 mx-2 rounded-full transition-all ${camOK ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${micOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                    {micOK ? '✓' : '2'}
+                  </div>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Microphone</span>
+                </div>
+                <div className={`flex-1 h-1 mx-2 rounded-full transition-all ${modelReady ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${modelReady ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                    {modelReady ? '✓' : '3'}
+                  </div>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">AI Model</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Camera Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Camera Device
+                    </label>
+                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${camOK ? 'bg-green-100 text-green-700' : camOK === false ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      {camOK ? '✓ Active' : camOK === false ? '✗ Blocked' : '⏳ Pending'}
+                    </div>
+                  </div>
+                  
+                  {videoDevices.length > 0 && (
+                    <select 
+                      value={selectedVideoDevice} 
+                      onChange={(e) => { setSelectedVideoDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      {videoDevices.map((device, idx) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Camera ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <div className="relative aspect-video w-full bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg overflow-hidden shadow-inner border-2 border-gray-700">
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                    {isChecking && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                        <div className="text-white text-center">
+                          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                          <p className="text-sm">Initializing camera...</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Microphone Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                      Microphone Device
+                    </label>
+                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${micOK ? 'bg-green-100 text-green-700' : micOK === false ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      {micOK ? '✓ Active' : micOK === false ? '✗ Blocked' : '⏳ Pending'}
+                    </div>
+                  </div>
+
+                  {audioDevices.length > 0 && (
+                    <select 
+                      value={selectedAudioDevice} 
+                      onChange={(e) => { setSelectedAudioDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      {audioDevices.map((device, idx) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Microphone ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Audio Level</p>
+                      <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center px-3 overflow-hidden relative">
+                        <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-400 to-green-600 rounded-lg transition-all duration-150 ease-out" style={{ width: `${audioLevel}%` }}></div>
+                        <div className="relative z-10 flex items-center gap-1">
+                          {[...Array(10)].map((_, i) => (
+                            <div key={i} className={`w-1.5 h-${i < Math.floor(audioLevel / 10) ? '8' : '3'} rounded-full transition-all ${i < Math.floor(audioLevel / 10) ? 'bg-white' : 'bg-gray-400'}`}></div>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">Speak to test your microphone</p>
+                    </div>
+
+                    {/* AI Model Status */}
+                    <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        AI Proctoring Model
+                      </p>
+                      <div className="flex items-center gap-3">
+                        {aiLoading && (
+                          <>
+                            <div className="relative w-10 h-10">
+                              <div className="absolute inset-0 border-4 border-purple-200 dark:border-purple-700 rounded-full"></div>
+                              <div className="absolute inset-0 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Loading AI model...</p>
+                              <div className="mt-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full animate-pulse" style={{width: '70%'}}></div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        {aiError && (
+                          <div className="flex items-center gap-2 text-red-600">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                            <span className="text-sm">Error: {aiError}</span>
+                          </div>
+                        )}
+                        {modelReady && (
+                          <div className="flex items-center gap-2 text-green-600">
+                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <span className="text-sm font-semibold">AI Model Ready</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {permError && (
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2 text-red-700 dark:text-red-300">
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-sm font-medium">{permError}</p>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {camOK && micOK && modelReady && (
+                <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-300 dark:border-green-700 rounded-lg flex items-center gap-3 animate-fadeIn">
+                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-green-800 dark:text-green-200">All Systems Ready!</p>
+                    <p className="text-xs text-green-700 dark:text-green-300">Your camera, microphone, and AI model are functioning correctly.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-3">
+              <button 
+                onClick={startPermissionCheck} 
+                disabled={isChecking} 
+                className="px-4 py-2 text-sm font-medium border-2 border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              >
+                <svg className={`w-4 h-4 ${isChecking ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isChecking ? "Testing..." : "Re-test Devices"}
+              </button>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={closePermissionModal} 
+                  className="px-5 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={continueAfterPermissions} 
+                  disabled={!camOK || !micOK || !modelReady} 
+                  className="px-6 py-2 text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                  Start Exam
+                </button>
+              </div>
             </div>
           </div>
         </div>

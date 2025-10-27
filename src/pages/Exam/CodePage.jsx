@@ -44,6 +44,7 @@ function CodePage({ question }) {
 
   const { testid } = useParams();
   const { user } = useAuth();
+  const userId = user?.uid;
   const [submissionStatus, setSubmissionStatus] = useState('not_attended');
 
   useEffect(() => {
@@ -140,7 +141,7 @@ function CodePage({ question }) {
     };
   }, []);
 
-  // Refs
+  // Refsz
   const inputRef = useRef(null);
   const outputRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -171,8 +172,9 @@ function CodePage({ question }) {
 
   // Fetch submission status from Firebase
   const fetchSubmissionStatus = useCallback(async () => {
+    if (!userId || !testid || !question) return;
     try {
-      const resultRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/${question}/`);
+      const resultRef = ref(database, `ExamSubmissions/${testid}/${userId}/${question}/`);
       const snapshot = await get(resultRef);
 
       if (snapshot.exists()) {
@@ -185,7 +187,7 @@ function CodePage({ question }) {
       console.error("Error fetching submission status:", error);
       setSubmissionStatus('not_attended');
     }
-  }, [testid, question]);
+  }, [testid, question, userId]);
 
 
 
@@ -193,7 +195,7 @@ function CodePage({ question }) {
   useEffect(() => {
     console.log(question);
     fetchSubmissionStatus();
-  }, [question]);
+  }, [question, fetchSubmissionStatus]);
 
   const handleSubmit2 = async () => {
     if (!questionData || !questionData.testcases) {
@@ -493,9 +495,10 @@ function CodePage({ question }) {
 
   // Fixed loadCode function
   const loadCode = useCallback(async () => {
+    if (!userId || !testid || !question) return;
     try {
       const dbRef = ref(database);
-      const codeKey = `ExamCode/${testid}/${user.uid}/${question}/${selectedLanguage}`;
+      const codeKey = `ExamCode/${testid}/${userId}/${question}/${selectedLanguage}`;
       const snapshot = await get(child(dbRef, codeKey));
 
       console.log(snapshot.val());
@@ -514,19 +517,20 @@ function CodePage({ question }) {
       // Fallback to default template on error
       setCode(languageTemplates[selectedLanguage] || "");
     }
-  }, [selectedLanguage, questionData]);
+  }, [selectedLanguage, testid, question, userId]);
 
   // Fixed saveCode function
   const saveCode = useCallback(async (codeToSave) => {
+    if (!userId || !testid || !question) return;
     try {
-      const codeKey = `ExamCode/${testid}/${user.uid}/${question}/${selectedLanguage}`;
+      const codeKey = `ExamCode/${testid}/${userId}/${question}/${selectedLanguage}`;
       const dbRef = ref(database, codeKey);
       await set(dbRef, codeToSave);
       console.log("Code auto-saved successfully!");
     } catch (error) {
       console.error("Error saving code:", error);
     }
-  }, [selectedLanguage]);
+  }, [selectedLanguage, testid, question, userId]);
 
 
   // Fixed handleCodeChange function
@@ -555,10 +559,10 @@ function CodePage({ question }) {
 
   // Load code when component mounts or language changes
   useEffect(() => {
-    if (questionData) { // Only load after question data is available
+    if (questionData && userId) { // Only load after question data is available
       loadCode();
     }
-  }, [loadCode, questionData, selectedLanguage]);
+  }, [loadCode, questionData, userId]);
 
 
   // Cleanup timeout on unmount

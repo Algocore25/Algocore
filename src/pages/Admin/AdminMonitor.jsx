@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ref, onValue } from 'firebase/database';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ref, onValue, get } from 'firebase/database';
 import { database } from '../../firebase';
 import {
   FiUser,
@@ -12,7 +12,9 @@ import {
   FiUsers,
   FiBookOpen,
   FiActivity,
-  FiTrendingUp
+  FiTrendingUp,
+  FiClock,
+  FiRefreshCw
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -43,12 +45,23 @@ const AdminMonitor = () => {
   const [submissions, setSubmissions] = useState({});
   const [userProgress, setUserProgress] = useState({});
   const [users, setUsers] = useState({});
-  const [courses, setCourses] = useState({});  // Add this line
+  const [courses, setCourses] = useState({});
+  const [activityTime, setActivityTime] = useState({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
 
   const [Students, setStudents] = useState([]);
+  
+  const [loadingStates, setLoadingStates] = useState({
+    submissions: true,
+    userProgress: true,
+    users: true,
+    courses: true,
+    activityTime: true,
+    students: true
+  });
 
 
   const [filters, setFilters] = useState({
@@ -57,50 +70,97 @@ const AdminMonitor = () => {
     sortOrder: 'asc' // 'asc' or 'desc'
   });
 
+  // Extract fetch logic into reusable function
+  const fetchAllData = useCallback(async () => {
+    try {
+      const [
+        submissionsSnap,
+        progressSnap,
+        usersSnap,
+        coursesSnap,
+        studentsSnap,
+        activityTimeSnap
+      ] = await Promise.all([
+        get(ref(database, 'Submissions')),
+        get(ref(database, 'userprogress')),
+        get(ref(database, 'users')),
+        get(ref(database, 'AlgoCore')),
+        get(ref(database, 'Students')),
+        get(ref(database, 'Activitytime'))
+      ]);
+
+      // Set all data at once
+      setSubmissions(submissionsSnap.val() || {});
+      setUserProgress(progressSnap.val() || {});
+      setUsers(usersSnap.val() || {});
+      setCourses(coursesSnap.val() || {});
+      setStudents(studentsSnap.val() || []);
+      setActivityTime(activityTimeSnap.val() || {});
+      
+      // Batch loading state updates
+      setLoadingStates({
+        submissions: false,
+        userProgress: false,
+        users: false,
+        courses: false,
+        students: false,
+        activityTime: false
+      });
+
+      setRefreshing(false);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchAllData();
+  };
+
   useEffect(() => {
+    fetchAllData();
+
+    // Disabled real-time listeners for better performance
+    // Uncomment if you need real-time updates
+    /*
     const submissionsRef = ref(database, 'Submissions');
     const progressRef = ref(database, 'userprogress');
-    const usersRef = ref(database, 'users');
-    const coursesRef = ref(database, 'AlgoCore');  // Add this line
-    const studentsRef = ref(database, 'Students');  // Add this line
-
-    const unsubscribeCourses = onValue(coursesRef, (snapshot) => {
-      const data = snapshot.val();
-      setCourses(data || {});
-    });
-
-    const unsubscribeUsers = onValue(usersRef, (snapshot) => {  // Add this block
-      const data = snapshot.val();
-      setUsers(data || {});
-    });
+    const activityTimeRef = ref(database, 'Activitytime');
 
     const unsubscribeSubmissions = onValue(submissionsRef, (snapshot) => {
-      const data = snapshot.val();
-      setSubmissions(data || {});
+      setSubmissions(snapshot.val() || {});
     });
 
     const unsubscribeProgress = onValue(progressRef, (snapshot) => {
-      const data = snapshot.val();
-      setUserProgress(data || {});
+      setUserProgress(snapshot.val() || {});
     });
 
-    const unsubscribeStudents = onValue(studentsRef, (snapshot) => {  // Add this block
-      const data = snapshot.val();
-      setStudents(data || []);
-      setLoading(false);
+    const unsubscribeActivityTime = onValue(activityTimeRef, (snapshot) => {
+      setActivityTime(snapshot.val() || {});
     });
 
     return () => {
       unsubscribeSubmissions();
       unsubscribeProgress();
-      unsubscribeUsers();  // Add this line
-      unsubscribeCourses();  // Add this line
-      unsubscribeStudents();  // Add this line
+      unsubscribeActivityTime();
     };
+    */
   }, []);
 
-  console.log('submissions:', submissions);
-  console.log('user progress:', userProgress);
+  // Check if all data is loaded
+  useEffect(() => {
+    const allLoaded = Object.values(loadingStates).every(state => state === false);
+    if (allLoaded) {
+      setLoading(false);
+    }
+  }, [loadingStates]);
+
+  // Removed console logs for better performance
+  // console.log('submissions:', submissions);
+  // console.log('user progress:', userProgress);
 
   // Add this function to calculate total questions
   const calculateTotalQuestions = (courseName) => {
@@ -122,8 +182,14 @@ const AdminMonitor = () => {
 
 
   const processedData = React.useMemo(() => {
+    // Early return if no users data
+    if (!users || Object.keys(users).length === 0) {
+      return { users: [], courses: [] };
+    }
+
     const processedUsers = {};
     const availableCourses = new Set();
+    const studentEmailSet = new Set(Students); // Convert to Set for O(1) lookup
 
     // First, process all available courses
     if (courses) {
@@ -134,10 +200,16 @@ const AdminMonitor = () => {
       });
     }
 
+    // Pre-calculate total questions for each course (cache)
+    const courseTotals = {};
+    availableCourses.forEach(course => {
+      courseTotals[course] = calculateTotalQuestions(course);
+    });
+
     // FIRST: Process ALL users from the users object
     Object.entries(users).forEach(([userId, userDetails]) => {
       
-      if (Students.indexOf(userDetails.email) === -1) return;
+      if (!studentEmailSet.has(userDetails.email)) return; // O(1) instead of O(n)
       
       processedUsers[userId] = {
         id: userId,
@@ -145,17 +217,19 @@ const AdminMonitor = () => {
         email: userDetails.email || 'No email',
         photo: userDetails.profilePhoto || '',
         submissions: {},
-        stats: { attempted: 0, correct: 0, wrong: 0 },
+        stats: { attempted: 0 },
         courseProgress: {},
-        overallProgress: { completed: 0, total: 0, percentage: '0.0' } // Add this default
+        overallProgress: { completed: 0, total: 0, percentage: '0.0' },
+        lastActivity: null,
+        activeTime: activityTime[userId] || 0
       };
 
       // Initialize progress for all available courses
       availableCourses.forEach(course => {
         processedUsers[userId].courseProgress[course] = {
           completed: 0,
-          total: calculateTotalQuestions(course),
-          percentage: '0.0' // Ensure it's a string
+          total: courseTotals[course], // Use cached value
+          percentage: '0.0'
         };
       });
 
@@ -172,7 +246,7 @@ const AdminMonitor = () => {
             if (!processedUsers[userId].courseProgress[course]) {
               processedUsers[userId].courseProgress[course] = {
                 completed: 0,
-                total: calculateTotalQuestions(course),
+                total: courseTotals[course] || calculateTotalQuestions(course),
                 percentage: '0.0'
               };
             }
@@ -196,10 +270,10 @@ const AdminMonitor = () => {
               // Update stats for code submissions
               const latestSubmission = submissions[submissions.length - 1];
               processedUsers[userId].stats.attempted++;
-              if (latestSubmission.status === 'correct') {
-                processedUsers[userId].stats.correct++;
-              } else {
-                processedUsers[userId].stats.wrong++;
+              // Track last activity time
+              const submissionTime = new Date(latestSubmission.timestamp.replace(/_/g, ':').replace(/:(\d{3})Z$/, '.$1Z'));
+              if (!processedUsers[userId].lastActivity || submissionTime > processedUsers[userId].lastActivity) {
+                processedUsers[userId].lastActivity = submissionTime;
               }
             });
           });
@@ -236,11 +310,6 @@ const AdminMonitor = () => {
                     // Update stats for MCQs
                     if (status === true || status === false) {
                       processedUsers[userId].stats.attempted++;
-                      if (status === true) {
-                        processedUsers[userId].stats.correct++;
-                      } else {
-                        processedUsers[userId].stats.wrong++;
-                      }
                     }
                   }
                 });
@@ -272,11 +341,19 @@ const AdminMonitor = () => {
             });
           }
 
-          processedUsers[userId].courseProgress[course] = {
-            completed,
-            total: totalQuestions,
-            percentage: totalQuestions > 0 ? ((completed / totalQuestions) * 100).toFixed(1) : '0.0'
-          };
+          if (totalQuestions > 0) {
+            processedUsers[userId].courseProgress[course] = {
+              completed,
+              total: totalQuestions,
+              percentage: ((completed / totalQuestions) * 100).toFixed(1)
+            };
+          } else {
+            processedUsers[userId].courseProgress[course] = {
+              completed: 0,
+              total: 0,
+              percentage: '0.0'
+            };
+          }
         });
 
         // Calculate overall progress
@@ -290,12 +367,19 @@ const AdminMonitor = () => {
           }
         });
 
-        processedUsers[userId].overallProgress = {
-          completed: totalCompleted,
-          total: totalQuestions,
-          percentage: totalQuestions > 0 ? ((totalCompleted / totalQuestions) * 100).toFixed(1) : '0.0'
-        };
-
+        if (totalQuestions > 0) {
+          processedUsers[userId].overallProgress = {
+            completed: totalCompleted,
+            total: totalQuestions,
+            percentage: ((totalCompleted / totalQuestions) * 100).toFixed(1)
+          };
+        } else {
+          processedUsers[userId].overallProgress = {
+            completed: 0,
+            total: 0,
+            percentage: '0.0'
+          };
+        }
 
       }
     });
@@ -305,7 +389,7 @@ const AdminMonitor = () => {
       users: Object.values(processedUsers),
       courses: Array.from(availableCourses)
     };
-  }, [submissions, userProgress, users, courses]);
+  }, [submissions, userProgress, users, courses, activityTime]);
 
   // Add new function to format percentage
   const formatPercentage = (value) => {
@@ -317,8 +401,8 @@ const AdminMonitor = () => {
   };
 
 
-  // Add sorting function
-  const sortUsers = (users) => {
+  // Add sorting function - memoized for performance
+  const sortUsers = useCallback((users) => {
     return [...users].sort((a, b) => {
       let comparison = 0;
       switch (filters.sortBy) {
@@ -328,14 +412,16 @@ const AdminMonitor = () => {
         case 'attempted':
           comparison = a.stats.attempted - b.stats.attempted;
           break;
-        case 'correct':
-          comparison = a.stats.correct - b.stats.correct;
-          break;
-        case 'wrong':
-          comparison = a.stats.wrong - b.stats.wrong;
-          break;
         case 'overall':
           comparison = parseFloat(a.overallProgress.percentage) - parseFloat(b.overallProgress.percentage);
+          break;
+        case 'activity':
+          const aTime = a.lastActivity ? new Date(a.lastActivity).getTime() : 0;
+          const bTime = b.lastActivity ? new Date(b.lastActivity).getTime() : 0;
+          comparison = aTime - bTime;
+          break;
+        case 'activeTime':
+          comparison = (a.activeTime || 0) - (b.activeTime || 0);
           break;
         default:
           if (filters.sortBy.startsWith('course_')) {
@@ -347,18 +433,22 @@ const AdminMonitor = () => {
       }
       return filters.sortOrder === 'asc' ? comparison : -comparison;
     });
-  };
+  }, [filters.sortBy, filters.sortOrder]);
 
-  // Update filteredUsers to include sorting
+  // Update filteredUsers to include sorting (optimized)
   const filteredUsers = React.useMemo(() => {
-    const filtered = processedData.users.filter(user => {
-      const matchesSearch = !filters.search ||
-        user.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        user.email.toLowerCase().includes(filters.search.toLowerCase());
-      return matchesSearch;
-    });
+    if (!processedData.users || processedData.users.length === 0) return [];
+    
+    const searchLower = filters.search.toLowerCase();
+    const filtered = searchLower
+      ? processedData.users.filter(user => 
+          user.name.toLowerCase().includes(searchLower) ||
+          user.email.toLowerCase().includes(searchLower)
+        )
+      : processedData.users;
+    
     return sortUsers(filtered);
-  }, [processedData.users, filters]);
+  }, [processedData.users, filters.search, sortUsers]);
 
   // Add this function to get sorted course names
   const sortedCourseNames = React.useMemo(() => {
@@ -407,19 +497,43 @@ const AdminMonitor = () => {
     return total > 0 ? (completed / total * 100).toFixed(1) : 0;
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading submissions...</p>
-        </div>
-      </div>
-    );
-  }
+  // Calculate loading progress
+  const loadedCount = Object.values(loadingStates).filter(state => !state).length;
+  const totalCount = Object.keys(loadingStates).length;
+  const loadingPercentage = Math.round((loadedCount / totalCount) * 100);
+  
+  // Get currently loading item
+  const currentlyLoading = Object.entries(loadingStates)
+    .find(([key, isLoading]) => isLoading)?.[0] || 'Complete';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Top Loading Progress Bar - Thin Line */}
+      {(loading || refreshing) && (
+        <div className="fixed top-0 left-0 right-0 z-50 group">
+          <div className="h-1 bg-gray-200 dark:bg-gray-700 relative overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out relative"
+              style={{ width: `${loadingPercentage}%` }}
+            >
+              {/* Shimmer effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-shimmer"></div>
+            </div>
+            {/* Percentage indicator on bar */}
+            <div 
+              className="absolute top-0 h-full flex items-center text-[10px] font-bold text-white transition-all duration-300 px-1"
+              style={{ left: `${Math.max(2, Math.min(95, loadingPercentage))}%` }}
+            >
+              {loadingPercentage}%
+            </div>
+          </div>
+          {/* Tooltip showing current loading item - appears on hover */}
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gray-900 text-white text-xs px-3 py-1 text-center">
+            {loadingPercentage < 100 ? `Loading ${currentlyLoading.replace(/([A-Z])/g, ' $1').trim()}...` : 'Complete'}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 py-6">
@@ -430,6 +544,14 @@ const AdminMonitor = () => {
             </div>
             {/* Header students count box */}
             <div className="flex items-center space-x-4">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors"
+              >
+                <FiRefreshCw className={`${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Refreshing...' : 'Refresh Data'}
+              </button>
               <div className="bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-lg">
                 <div className="flex items-center">
                   <FiUsers className="mr-2 text-blue-600 dark:text-blue-400" />
@@ -480,9 +602,9 @@ const AdminMonitor = () => {
                 >
                   <option value="name">Name</option>
                   <option value="attempted">Total Attempted</option>
-                  <option value="correct">Total Correct</option>
-                  <option value="wrong">Total Wrong</option>
                   <option value="overall">Overall Progress</option>
+                  <option value="activity">Last Activity</option>
+                  <option value="activeTime">Time Spent</option>
                   {processedData.courses.map(course => (
                     <option key={course} value={`course_${course}`}>{course} Progress</option>
                   ))}
@@ -509,10 +631,39 @@ const AdminMonitor = () => {
         {/* Students Grid */}
         <motion.div
           layout
-          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6"
+          className={`grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 ${loading ? 'opacity-50 pointer-events-none' : ''}`}
         >
           <AnimatePresence>
-            {filteredUsers.map(user => (
+            {loading && filteredUsers.length === 0 ? (
+              // Skeleton loaders while loading
+              Array.from({ length: 6 }).map((_, idx) => (
+                <div key={`skeleton-${idx}`} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
+                      <div className="ml-3">
+                        <div className="h-4 w-32 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
+                        <div className="h-3 w-48 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="text-center">
+                        <div className="h-8 w-12 bg-gray-300 dark:bg-gray-600 rounded mx-auto mb-2"></div>
+                        <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded mx-auto"></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full mb-4"></div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              filteredUsers.map(user => (
               <motion.div
                 key={user.id}
                 layout
@@ -552,18 +703,41 @@ const AdminMonitor = () => {
                   </div>
 
                   {/* Stats */}
-                  <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                     <div className="text-center">
                       <div className="text-2xl font-bold text-gray-900 dark:text-white">{user.stats.attempted}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">Attempted</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-300">Attempted</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">{user.stats.correct}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">Correct</div>
+                      <div className="text-base font-semibold text-blue-600 dark:text-blue-400">
+                        {user.lastActivity ? (
+                          <div className="flex flex-col items-center">
+                            <FiActivity className="text-blue-600 dark:text-blue-400 mb-1" size={18} />
+                            <span className="text-[10px]">{new Date(user.lastActivity).toLocaleDateString()}</span>
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                              {new Date(user.lastActivity).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">No activity</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">Last Active</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-red-600 dark:text-red-400">{user.stats.wrong}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">Wrong</div>
+                      <div className="text-base font-semibold text-green-600 dark:text-green-400">
+                        {user.activeTime > 0 ? (
+                          <div className="flex flex-col items-center">
+                            <FiClock className="text-green-600 dark:text-green-400 mb-1" size={18} />
+                            <span className="text-xs font-bold">
+                              {Math.floor(user.activeTime / (1000 * 60 * 60))}h {Math.floor((user.activeTime % (1000 * 60 * 60)) / (1000 * 60))}m
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">0h 0m</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">Time Spent</div>
                     </div>
                   </div>
 
@@ -606,7 +780,8 @@ const AdminMonitor = () => {
 
                 </div>
               </motion.div>
-            ))}
+              ))
+            )}
           </AnimatePresence>
         </motion.div>
       </div>

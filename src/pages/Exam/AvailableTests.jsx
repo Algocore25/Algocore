@@ -45,7 +45,7 @@ const AvailableTests = () => {
                 return (
                     Array.isArray(Object.values(test.Eligible || {} )) &&
                     Object.values(test.Eligible || {} ).includes(user?.email) &&
-                    test.Properties.status !== "Completed"
+                    test.Properties.status?.toLowerCase() !== "completed"
                 );
             });
             

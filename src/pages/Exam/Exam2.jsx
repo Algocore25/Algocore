@@ -3,10 +3,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { languageTemplates } from '../constants';
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { VideoCanvas } from '../../LiveProctoring/components/VideoCanvas';
 
 import { database } from "../../firebase";
 import { ref, get, set, child, onValue, off } from "firebase/database";
-import { Wifi, WifiOff } from "lucide-react";
+import { Wifi, WifiOff  } from "lucide-react";
 
 
 
@@ -23,14 +24,15 @@ import {
     FiCheckCircle,
     FiXCircle,
     FiMaximize,
-    FiMinimize
+    FiMinimize,
+    FiRadio
 } from 'react-icons/fi';
 import DynamicComponent from './DynamicComponent';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 
-const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setviolation, setIsViolationReady }) => {
+const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setviolation, setIsViolationReady, videoRef, detections, isProctoringActive }) => {
 
     const { testid } = useParams();
     const [answeredQuestions, setAnsweredQuestions] = useState({});
@@ -322,6 +324,8 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
     const menuRef = useRef(null);
 
     const [activeQuestion, setActiveQuestion] = useState(0);
+    const [currentQuestionType, setCurrentQuestionType] = useState('');
+    const [questionTypes, setQuestionTypes] = useState({});
     const [showSubmitModal, setShowSubmitModal] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -348,6 +352,83 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
         console.log(Questions[0]);
 
     }, []);
+
+    useEffect(() => {
+        if (!Questions || Questions.length === 0) {
+            if (Object.keys(questionTypes).length > 0) {
+                setQuestionTypes({});
+            }
+            setCurrentQuestionType('');
+            return;
+        }
+
+        const questionId = Questions[activeQuestion];
+        if (!questionId) {
+            setCurrentQuestionType('');
+            return;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(questionTypes, questionId)) {
+            setCurrentQuestionType(questionTypes[questionId] || '');
+        } else {
+            setCurrentQuestionType('');
+        }
+    }, [Questions, activeQuestion, questionTypes]);
+
+    useEffect(() => {
+        if (!Questions || Questions.length === 0) {
+            if (Object.keys(questionTypes).length > 0) {
+                setQuestionTypes({});
+            }
+            return;
+        }
+
+        const missingIds = Questions.filter(
+            (questionId) => questionId && !Object.prototype.hasOwnProperty.call(questionTypes, questionId)
+        );
+
+        if (missingIds.length === 0) return;
+
+        let isMounted = true;
+
+        const fetchQuestionTypes = async () => {
+            try {
+                const results = await Promise.all(
+                    missingIds.map(async (questionId) => {
+                        try {
+                            const questionRef = ref(database, `questions/${questionId}`);
+                            const snapshot = await get(questionRef);
+                            const data = snapshot.exists() ? snapshot.val() : null;
+                            return [questionId, data?.type || ''];
+                        } catch (error) {
+                            console.error('Error fetching question type:', error);
+                            return [questionId, ''];
+                        }
+                    })
+                );
+
+                if (!isMounted) return;
+
+                setQuestionTypes((prev) => {
+                    const updated = { ...prev };
+                    results.forEach(([id, type]) => {
+                        if (id) {
+                            updated[id] = type;
+                        }
+                    });
+                    return updated;
+                });
+            } catch (error) {
+                console.error('Error fetching question types:', error);
+            }
+        };
+
+        fetchQuestionTypes();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [Questions, questionTypes]);
 
 
 
@@ -392,7 +473,18 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                         <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
                             {examName}
                         </h1>
-                       
+                        
+                        {/* Camera Monitoring */}
+                        {isProctoringActive && videoRef && (
+                            <div className="relative w-16 h-16 bg-gray-900 rounded-lg overflow-hidden shadow-md border border-red-500">
+                                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                                <VideoCanvas videoRef={videoRef} detections={detections} isActive={true} />
+                                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-1 bg-red-600/90 text-white px-1 py-0.5 text-[8px]">
+                                    <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div>
+                                    LIVE
+                                </div>
+                            </div>
+                        )}
                     </div>
                     
                     {/* User Info */}
@@ -447,6 +539,14 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                 {timeLeft !== null ? formatTime(timeLeft) : 'Loading...'}
                             </span>
                         </div>
+
+                        {/* Question type */}
+                        {/* <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                            <span className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase">Type</span>
+                            <span className="text-sm font-medium text-purple-800 dark:text-purple-200 capitalize">
+                                {currentQuestionType || 'Loading'}
+                            </span>
+                        </div> */}
 
                         {/* Progress indicator */}
                         <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -533,34 +633,69 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                     </button>
                                 </div>
                                 <div className="overflow-y-auto h-[calc(100%-4rem)]">
-                                    {Questions?.map((question, index) => (
-                                        <button
-                                            key={index}
-                                            onClick={() => {
-                                                goToQuestion(index);
-                                                setIsMenuOpen(false);
-                                            }}
-                                            className={`w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${activeQuestion === index
-                                                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
-                                                : 'text-gray-700 dark:text-gray-300'
+                                    {Questions?.map((question, index) => {
+                                        const typeLabel = questionTypes[question];
+                                        const normalizedType = typeLabel?.toLowerCase();
+                                        const answerValue = answeredQuestions?.[question];
+                                        const isCorrect = answerValue === true || answerValue === 'true';
+                                        const isIncorrect = answerValue === false || answerValue === 'false';
+                                        const hasAnswer = answerValue !== undefined && answerValue !== null && answerValue !== '';
+
+                                        let statusIcon = null;
+
+                                        if (normalizedType === 'mcq') {
+                   
+                                            if (!hasAnswer) {
+                                                statusIcon = <FiRadio className="ml-2 flex-shrink-0 text-gray-400" />
+                                            }
+                                            else
+                                            {
+                                                statusIcon = <FiCheckCircle className="ml-2 flex-shrink-0 text-green-500" />;
+                                            }
+                                        } else if (normalizedType === 'programming') {
+                                            if (!hasAnswer) {
+                                                statusIcon = <FiRadio className="ml-2 flex-shrink-0 text-gray-400" />
+                                            }
+                                            else if (isCorrect) {
+                                                statusIcon = <FiCheckCircle className="ml-2 flex-shrink-0 text-green-500" />;;
+                                            }
+                                            else if (isIncorrect) {
+                                                statusIcon = <FiXCircle className="ml-2 flex-shrink-0 text-red-500" />;
+                                            }
+                                        } 
+
+                                        return (
+                                            <button
+                                                key={index}
+                                                onClick={() => {
+                                                    goToQuestion(index);
+                                                    setIsMenuOpen(false);
+                                                }}
+                                                className={`w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${activeQuestion === index
+                                                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
+                                                    : 'text-gray-700 dark:text-gray-300'
                                                 }`}
-                                        >
-                                            <div className="flex items-center">
-                                                <span className={`w-6 h-6 flex items-center justify-center rounded-full mr-2 text-sm font-medium ${activeQuestion === index
-                                                    ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-200'
-                                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                            >
+                                                <div className="flex items-center">
+                                                    <span className={`w-6 h-6 flex items-center justify-center rounded-full mr-2 text-sm font-medium ${activeQuestion === index
+                                                        ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-200'
+                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                                                     }`}>
-                                                    {index + 1}
-                                                </span>
-                                                <span className="truncate flex-1">
-                                                    {question}
-                                                </span>
-                                                {answeredQuestions[question] && (
-                                                    <FiCheckCircle className="ml-2 flex-shrink-0 text-green-500" />
-                                                )}
-                                            </div>
-                                        </button>
-                                    ))}
+                                                        {index + 1}
+                                                    </span>
+                                                    <div className="flex flex-col flex-1 min-w-0">
+                                                        <span className="truncate text-sm font-medium">
+                                                            {question}
+                                                        </span>
+                                                        <span className="text-[11px] uppercase tracking-wide font-semibold text-purple-600 dark:text-purple-300">
+                                                            {typeLabel ? typeLabel : 'Loading'}
+                                                        </span>
+                                                    </div>
+                                                    {statusIcon}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </motion.div>
                         )}
