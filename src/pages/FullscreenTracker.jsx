@@ -4,7 +4,7 @@ import { database } from "../firebase";
 import { ref, push, set, serverTimestamp } from "firebase/database";
 import { useAuth } from "../context/AuthContext";
 
-const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }) => {
+const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid, enableViolationTracking = true }) => {
   const { user } = useAuth();
   const containerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -30,6 +30,8 @@ const FullscreenTracker = ({ violation, setviolation, isViolationReady, testid }
 
   // --- Log violation to Firebase ---
   const logViolation = async (reason, details = {}) => {
+    // Only log if violation tracking is enabled
+    if (!enableViolationTracking) return;
     if (!testid || !user?.uid) return;
     
     try {

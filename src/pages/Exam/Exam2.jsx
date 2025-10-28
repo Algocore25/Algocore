@@ -581,32 +581,6 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                 <span className="hidden md:inline">Next</span>
                                 <FiChevronRight className="w-4 h-4" />
                             </button>
-                            
-                            {/* Divider */}
-                            <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1" />
-                            
-                            {/* Submit button */}
-                            <button
-                                onClick={submitExam}
-                                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-sm font-semibold rounded-lg shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md"
-                                disabled={isSubmitting}
-                                title="Submit Exam"
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <span>Submitting...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <FiCheck className="w-4 h-4" />
-                                        <span>Submit</span>
-                                    </>
-                                )}
-                            </button>
                         </div>
                     </div>
                 </nav>
@@ -632,7 +606,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                         <FiX size={20} />
                                     </button>
                                 </div>
-                                <div className="overflow-y-auto h-[calc(100%-4rem)]">
+                                <div className="overflow-y-auto h-[calc(100%-9rem)]">
                                     {Questions?.map((question, index) => {
                                         const typeLabel = questionTypes[question];
                                         const normalizedType = typeLabel?.toLowerCase();
@@ -696,6 +670,34 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                             </button>
                                         );
                                     })}
+                                </div>
+                                
+                                {/* Submit button at bottom of sidebar */}
+                                <div className="absolute bottom-0 left-0 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                                    <button
+                                        onClick={() => {
+                                            submitExam();
+                                            setIsMenuOpen(false);
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-sm font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={isSubmitting}
+                                        title="Submit Exam"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                <span>Submitting...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FiCheck className="w-4 h-4" />
+                                                <span>Submit Exam</span>
+                                            </>
+                                        )}
+                                    </button>
                                 </div>
                             </motion.div>
                         )}

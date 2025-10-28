@@ -25,6 +25,8 @@ const TestManage = () => {
   const [testTitle, setTestTitle] = useState('');
   const [duration, setDuration] = useState(60);
   const [isSaving, setIsSaving] = useState(false);
+  const [enableVideoProctoring, setEnableVideoProctoring] = useState(true);
+  const [blockOnViolations, setBlockOnViolations] = useState(false);
   // Initialize state with default values
   const [questionsPerType, setQuestionsPerType] = useState({
     mcq: 0,
@@ -148,6 +150,18 @@ const TestManage = () => {
           // Set duration if available
           if (testData.duration) {
             setDuration(testData.duration);
+          }
+
+          // Set proctoring settings if available
+          if (testData.proctorSettings) {
+            setEnableVideoProctoring(
+              testData.proctorSettings.enableVideoProctoring === undefined 
+                ? true 
+                : testData.proctorSettings.enableVideoProctoring
+            );
+            setBlockOnViolations(
+              testData.proctorSettings.blockOnViolations === true
+            );
           }
 
           // Load saved configuration if exists
@@ -646,6 +660,84 @@ const TestManage = () => {
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                         <span className="text-gray-500 sm:text-sm">minutes</span>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Proctoring Settings */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    Proctoring Settings
+                  </label>
+                  <div className="space-y-4">
+                    {/* Video Proctoring Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                          Video Proctoring
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Enable AI-powered video monitoring to detect multiple persons or no person during the exam
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const newValue = !enableVideoProctoring;
+                          setEnableVideoProctoring(newValue);
+                          await handleSaveTest({
+                            proctorSettings: {
+                              enableVideoProctoring: newValue,
+                              enableFullscreen: true,
+                              blockOnViolations: blockOnViolations
+                            }
+                          });
+                        }}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                          enableVideoProctoring ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            enableVideoProctoring ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Block on Violations Toggle */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                          Block on Excessive Violations
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Automatically block students from continuing the exam when they exceed the violation threshold.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const newValue = !blockOnViolations;
+                          setBlockOnViolations(newValue);
+                          await handleSaveTest({
+                            proctorSettings: {
+                              enableVideoProctoring: enableVideoProctoring,
+                              enableFullscreen: true,
+                              blockOnViolations: newValue
+                            }
+                          });
+                        }}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                          blockOnViolations ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            blockOnViolations ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </div>
                   </div>
                 </div>

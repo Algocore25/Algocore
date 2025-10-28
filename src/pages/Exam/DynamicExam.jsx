@@ -47,6 +47,11 @@ const DynamicExam = () => {
   const [audioDevices, setAudioDevices] = useState([]);
   const [selectedVideoDevice, setSelectedVideoDevice] = useState("");
   const [selectedAudioDevice, setSelectedAudioDevice] = useState("");
+  const [proctorSettings, setProctorSettings] = useState({
+    enableVideoProctoring: true,
+    enableFullscreen: true,
+    blockOnViolations: false
+  });
 
   const { detectPersons, isLoading: aiLoading, error: aiError, modelReady } = usePersonDetection();
 
@@ -218,7 +223,8 @@ const DynamicExam = () => {
   }, [detectPersons, stage, showToastNotification, setviolation]);
 
   useEffect(() => {
-    if (stage === "exam" && proctorStreamRef.current) {
+    // Only run video proctoring if enabled
+    if (stage === "exam" && proctorStreamRef.current && proctorSettings.enableVideoProctoring) {
       if (videoRef.current && proctorStreamRef.current) {
         videoRef.current.srcObject = proctorStreamRef.current;
       }
@@ -234,7 +240,7 @@ const DynamicExam = () => {
     return () => {
       if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     };
-  }, [stage, modelReady, runDetection]);
+  }, [stage, modelReady, runDetection, proctorSettings.enableVideoProctoring]);
 
   const cleanupMedia = () => {
     try {
@@ -339,13 +345,16 @@ const DynamicExam = () => {
   };
 
   const continueAfterPermissions = async () => {
-    if (!camOK || !micOK) {
-      setPermError("Please allow both camera and microphone to continue");
-      return;
-    }
-    if (!modelReady) {
-      setPermError("AI model is still loading. Please wait...");
-      return;
+    // Only require camera/mic/AI if video proctoring is enabled
+    if (proctorSettings.enableVideoProctoring) {
+      if (!camOK || !micOK) {
+        setPermError("Please allow both camera and microphone to continue");
+        return;
+      }
+      if (!modelReady) {
+        setPermError("AI model is still loading. Please wait...");
+        return;
+      }
     }
     setPermVerified(true);
     // Save stream for proctoring but DON'T stop tracks
@@ -383,6 +392,7 @@ const DynamicExam = () => {
           status: "started"
         });
         setStartTime(currentTime);
+        // Always request fullscreen, but violations only tracked if enabled
         if (containerRef.current.requestFullscreen) {
           await containerRef.current.requestFullscreen();
         }
@@ -448,15 +458,15 @@ const DynamicExam = () => {
       const currstage = ref(database, `Exam/${testid}/Properties2/Progress/${user.uid}/stage`);
       const currstageSnapshot = await get(currstage);
 
-      // Check if the exam should be blocked
-      if (violation >= 2 && currstageSnapshot.val() != "completed") {
+      // Check if the exam should be blocked (only if blockOnViolations is enabled)
+      if (proctorSettings.blockOnViolations && violation >= 2 && currstageSnapshot.val() != "completed") {
         console.log(currstageSnapshot.val());
         markExamBlocked();
       }
     };
 
     saveAndCheckViolations();
-  }, [violation, isViolationReady, testid, user]);
+  }, [violation, isViolationReady, testid, user, proctorSettings.blockOnViolations]);
 
   // Function to check exam duration
   const checkExamDuration = async () => {
@@ -496,6 +506,18 @@ const DynamicExam = () => {
         const examname = await get(ref(database, `Exam/${testid}/name`));
 
         setExamName(examname.val());
+
+        // Fetch proctoring settings
+        const proctorSettingsRef = ref(database, `Exam/${testid}/proctorSettings`);
+        const proctorSettingsSnapshot = await get(proctorSettingsRef);
+        if (proctorSettingsSnapshot.exists()) {
+          const settings = proctorSettingsSnapshot.val();
+          setProctorSettings({
+            enableVideoProctoring: settings.enableVideoProctoring === undefined ? true : settings.enableVideoProctoring,
+            enableFullscreen: settings.enableFullscreen === undefined ? true : settings.enableFullscreen,
+            blockOnViolations: settings.blockOnViolations === true
+          });
+        }
 
         const configdata = await get(ref(database, `Exam/${testid}/configure/questionsPerType`));
         setConfigdata(configdata.val());
@@ -623,13 +645,14 @@ const DynamicExam = () => {
     const handleFullScreenChange = async () => {
       const isFullScreen = document.fullscreenElement !== null;
 
+      // Always enforce fullscreen during exam
       if (!isFullScreen && stage === "exam") {
         // Exit from full screen during exam - check exam status first
         console.log("Exited full screen, checking exam status...");
 
         const isCompleted = await checkExamStatus();
         if (!isCompleted) {
-          // Only show warning if exam is not completed
+          // Always show warning when exiting fullscreen
           setStage("warning");
         }
         // If exam is completed, checkExamStatus will have already set stage to "completed"
@@ -661,7 +684,8 @@ const DynamicExam = () => {
 
   const startExam = async () => {
     try {
-      if (!permVerified) {
+      // Only require permission modal if video proctoring is enabled
+      if (proctorSettings.enableVideoProctoring && !permVerified) {
         openPermissionModal();
         return;
       }
@@ -689,6 +713,7 @@ const DynamicExam = () => {
       });
       setStartTime(currentTime);
 
+      // Always request fullscreen, but violations only tracked if enabled
       if (containerRef.current.requestFullscreen) {
         await containerRef.current.requestFullscreen();
       }
@@ -700,7 +725,8 @@ const DynamicExam = () => {
 
   const returnToFullScreen = async () => {
     try {
-      if (!permVerified) {
+      // Only require permission modal if video proctoring is enabled
+      if (proctorSettings.enableVideoProctoring && !permVerified) {
         openPermissionModal();
         return;
       }
@@ -710,6 +736,7 @@ const DynamicExam = () => {
         return; // Don't return to exam if it's already completed
       }
 
+      // Always request fullscreen, but violations only tracked if enabled
       if (containerRef.current.requestFullscreen) {
         await containerRef.current.requestFullscreen();
       }
@@ -903,12 +930,22 @@ const DynamicExam = () => {
                     </svg>
                     <span>This exam must be taken in full-screen mode. The test will automatically start in full-screen.</span>
                   </li>
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <span>Exiting full screen will show a warning. Multiple violations may result in exam termination.</span>
-                  </li>
+                  {proctorSettings.enableFullscreen && (
+                    <li className="flex items-start">
+                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span>Exiting full screen will be tracked as a violation. Multiple violations may result in exam termination.</span>
+                    </li>
+                  )}
+                  {proctorSettings.enableVideoProctoring && (
+                    <li className="flex items-start">
+                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span>Video proctoring is enabled. Your camera will monitor for multiple persons or no person during the exam.</span>
+                    </li>
+                  )}
                   <li className="flex items-start">
                     <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
@@ -927,7 +964,7 @@ const DynamicExam = () => {
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
                 <button
-                  onClick={openPermissionModal}
+                  onClick={proctorSettings.enableVideoProctoring ? openPermissionModal : startExam}
                   className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
                 >
                   <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -944,7 +981,7 @@ const DynamicExam = () => {
 
       {stage === "exam" && (
         <>
-          <FullscreenTracker violation={violation} setviolation={setviolation} setIsViolationReady={setIsViolationReady} isViolationReady={isViolationReady} testid={testid} />
+          <FullscreenTracker violation={violation} setviolation={setviolation} setIsViolationReady={setIsViolationReady} isViolationReady={isViolationReady} testid={testid} enableViolationTracking={proctorSettings.enableFullscreen} />
           <Exam2
             setviolation={setviolation}
             setIsViolationReady={setIsViolationReady}
@@ -955,29 +992,29 @@ const DynamicExam = () => {
             examName={examName}
             videoRef={videoRef}
             detections={detections}
-            isProctoringActive={!!proctorStreamRef.current}
+            isProctoringActive={proctorSettings.enableVideoProctoring && !!proctorStreamRef.current}
           />
         </>
       )}
 
       {stage === "warning" && (
-        <>
-          <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} isViolationReady={isViolationReady} />
-          <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
-            <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{examName}</h1>
-              {/* <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p> */}
-              <p className="text-sm text-gray-500">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
-              <button
-                onClick={openPermissionModal}
-                className="px-6 py-3 rounded-md font-semibold text-white transition-colors bg-red-600 hover:bg-red-700"
-              >
-                Return to Fullscreen
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+            <>
+              <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} isViolationReady={isViolationReady} enableViolationTracking={proctorSettings.enableFullscreen} />
+              <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
+                <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
+                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{examName}</h1>
+                  {/* <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p> */}
+                  <p className="text-sm text-gray-500">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
+                  <button
+                    onClick={proctorSettings.enableVideoProctoring ? openPermissionModal : returnToFullScreen}
+                    className="px-6 py-3 rounded-md font-semibold text-white transition-colors bg-red-600 hover:bg-red-700"
+                  >
+                    Return to Fullscreen
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
       {stage === "resume" && (
         <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -1034,7 +1071,7 @@ const DynamicExam = () => {
                 {/* Resume Button */}
                 <div className="pt-4">
                   <button
-                    onClick={openPermissionModal}
+                    onClick={proctorSettings.enableVideoProctoring ? openPermissionModal : returnToFullScreen}
                     className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1520,7 +1557,7 @@ const DynamicExam = () => {
                 </button>
                 <button 
                   onClick={continueAfterPermissions} 
-                  disabled={!camOK || !micOK || !modelReady} 
+                  disabled={proctorSettings.enableVideoProctoring && (!camOK || !micOK || !modelReady)} 
                   className="px-6 py-2 text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
