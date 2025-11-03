@@ -18,12 +18,25 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const isSetupRef = useRef(false);
 
   const rtcConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-    ],
+    iceServers: (() => {
+      const servers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+      ];
+      const turnUrl = process.env.REACT_APP_TURN_URL;
+      const turnUser = process.env.REACT_APP_TURN_USERNAME;
+      const turnCred = process.env.REACT_APP_TURN_CREDENTIAL;
+      if (turnUrl && turnUser && turnCred) {
+        servers.push({ urls: turnUrl, username: turnUser, credential: turnCred });
+      }
+      if (typeof window !== 'undefined' && window.__TURN_CONFIG__) {
+        const t = window.__TURN_CONFIG__;
+        if (t.urls) servers.push({ urls: t.urls, username: t.username, credential: t.credential });
+      }
+      return servers;
+    })(),
     iceCandidatePoolSize: 10,
   };
 
@@ -88,6 +101,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
       };
 
       // Handle connection state
+      let restartAttempted = false;
       pc.onconnectionstatechange = () => {
         console.log(`[Viewer ${viewerIdRef.current}] Connection state:`, pc.connectionState);
         setConnectionState(pc.connectionState);
@@ -95,14 +109,34 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
         if (pc.connectionState === 'connected') {
           setError(null);
         } else if (pc.connectionState === 'failed') {
-          setError('Connection failed');
-          isSetupRef.current = false;
+          // Try one-time ICE restart
+          if (!restartAttempted && typeof pc.restartIce === 'function') {
+            console.warn(`[Viewer ${viewerIdRef.current}] Connection failed, attempting ICE restart`);
+            restartAttempted = true;
+            try {
+              pc.restartIce();
+            } catch (e) {
+              console.error(`[Viewer ${viewerIdRef.current}] ICE restart error:`, e);
+            }
+          } else {
+            setError('Connection failed');
+            isSetupRef.current = false;
+            // Fallback to retry after short delay
+            setTimeout(() => {
+              cleanup();
+              setupConnection();
+            }, 1000);
+          }
         }
       };
 
       // Handle ICE connection state
       pc.oniceconnectionstatechange = () => {
         console.log(`[Viewer ${viewerIdRef.current}] ICE state:`, pc.iceConnectionState);
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log(`[Viewer ${viewerIdRef.current}] ICE gathering:`, pc.iceGatheringState);
       };
 
       // Register as viewer
