@@ -194,12 +194,34 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
         offerToReceiveVideo: false,
         offerToReceiveAudio: false,
       });
-      await pc.setLocalDescription(offer);
+      // Prefer H.264 for Safari compatibility
+      const preferH264 = (sdp) => {
+        try {
+          const lines = sdp.split('\n');
+          const mLineIndex = lines.findIndex(l => l.startsWith('m=video'));
+          if (mLineIndex === -1) return sdp;
+          const h264Pt = lines
+            .filter(l => l.startsWith('a=rtpmap:'))
+            .map(l => ({ pt: l.match(/a=rtpmap:(\d+)/)?.[1], codec: l.toLowerCase() }))
+            .find(x => x.codec.includes('h264'))?.pt;
+          if (!h264Pt) return sdp;
+          const parts = lines[mLineIndex].split(' ');
+          const header = parts.slice(0, 3);
+          const pts = parts.slice(3).filter(Boolean);
+          const reordered = [h264Pt, ...pts.filter(p => p !== h264Pt)];
+          lines[mLineIndex] = [...header, ...reordered].join(' ');
+          return lines.join('\n');
+        } catch (_) {
+          return sdp;
+        }
+      };
+      const mungedOffer = { ...offer, sdp: preferH264(offer.sdp) };
+      await pc.setLocalDescription(mungedOffer);
 
       console.log('[WebRTC] Sending offer to viewer:', viewerId);
       await set(ref(database, `LiveStreams/${testid}/${userId}/offers/${viewerId}`), {
-        sdp: offer.sdp,
-        type: offer.type,
+        sdp: mungedOffer.sdp,
+        type: mungedOffer.type,
         timestamp: Date.now(),
       });
 
