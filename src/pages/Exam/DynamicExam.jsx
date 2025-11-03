@@ -5,6 +5,7 @@ import { ref, get, set, child, push } from "firebase/database";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { usePersonDetection } from "../../LiveProctoring/hooks/usePersonDetection";
+import { useWebRTCStream } from "../../LiveProctoring/hooks/useWebRTCStreamV2";
 import { VideoCanvas } from "../../LiveProctoring/components/VideoCanvas";
 
 import FullscreenTracker from "../FullscreenTracker";
@@ -40,6 +41,7 @@ const DynamicExam = () => {
   const [detections, setDetections] = useState([]);
   const detectionIntervalRef = useRef(null);
   const proctorStreamRef = useRef(null);
+  const [proctorStream, setProctorStream] = useState(null);
   const noPersonStartTime = useRef(null);
   const multiPersonStartTime = useRef(null);
   const violationTriggered = useRef({ noPerson: false, multiPerson: false });
@@ -59,6 +61,14 @@ const DynamicExam = () => {
 
   const { user } = useAuth();
 
+  // WebRTC livestream to admin - use state instead of ref
+  const { isStreaming, connectionStatus, activeConnections } = useWebRTCStream(
+    testid,
+    user?.uid,
+    proctorStream,
+    stage === "exam" && proctorSettings.enableVideoProctoring
+  );
+
   const [examName, setExamName] = useState(null);
   const [results, setResults] = useState(null);
   const [loadingResults, setLoadingResults] = useState(false);
@@ -66,6 +76,18 @@ const DynamicExam = () => {
   useEffect(() => {
     console.log(isViolationReady);
   }, [isViolationReady]);
+
+  // Debug logging for streaming
+  useEffect(() => {
+    console.log('[DynamicExam] Streaming status:', {
+      isStreaming,
+      connectionStatus,
+      activeConnections,
+      hasProctorStream: !!proctorStream,
+      stage,
+      enableVideoProctoring: proctorSettings.enableVideoProctoring
+    });
+  }, [isStreaming, connectionStatus, activeConnections, proctorStream, stage, proctorSettings.enableVideoProctoring]);
 
   // Function to check exam status
   const checkExamStatus = async () => {
@@ -228,6 +250,10 @@ const DynamicExam = () => {
       if (videoRef.current && proctorStreamRef.current) {
         videoRef.current.srcObject = proctorStreamRef.current;
       }
+      // Ensure state is updated for WebRTC streaming
+      if (proctorStreamRef.current && !proctorStream) {
+        setProctorStream(proctorStreamRef.current);
+      }
       if (modelReady) {
         detectionIntervalRef.current = setInterval(runDetection, 1000);
       }
@@ -240,7 +266,7 @@ const DynamicExam = () => {
     return () => {
       if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     };
-  }, [stage, modelReady, runDetection, proctorSettings.enableVideoProctoring]);
+  }, [stage, modelReady, runDetection, proctorSettings.enableVideoProctoring, proctorStream]);
 
   const cleanupMedia = () => {
     try {
@@ -359,6 +385,7 @@ const DynamicExam = () => {
     setPermVerified(true);
     // Save stream for proctoring but DON'T stop tracks
     proctorStreamRef.current = streamRef.current;
+    setProctorStream(streamRef.current); // Update state to trigger WebRTC hook
     // Keep video reference but don't cleanup
     setShowPermModal(false);
     
@@ -994,6 +1021,28 @@ const DynamicExam = () => {
             detections={detections}
             isProctoringActive={proctorSettings.enableVideoProctoring && !!proctorStreamRef.current}
           />
+          {/* Streaming Status Indicator */}
+          {proctorSettings.enableVideoProctoring && (
+            <div className="fixed bottom-4 right-4 z-50">
+              <div className={`flex flex-col items-end gap-1 px-3 py-2 rounded-lg shadow-lg ${
+                connectionStatus === 'streaming' 
+                  ? 'bg-green-600 text-white' 
+                  : connectionStatus === 'ready'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-yellow-600 text-white'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${connectionStatus === 'streaming' ? 'bg-white animate-pulse' : 'bg-white opacity-50'}`}></div>
+                  <span className="text-xs font-medium">
+                    {connectionStatus === 'streaming' ? 'Streaming' : connectionStatus === 'ready' ? 'Ready' : 'Initializing...'}
+                  </span>
+                </div>
+                {activeConnections > 0 && (
+                  <span className="text-[10px] opacity-90">{activeConnections} viewer{activeConnections > 1 ? 's' : ''}</span>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -1340,41 +1389,36 @@ const DynamicExam = () => {
       )}
 
       {showPermModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 scale-100 animate-slideUp">
-            {/* Header with gradient */}
-            <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                Hardware & AI Verification
-              </h2>
-              <p className="text-blue-100 text-sm mt-1">Please verify your devices and AI model before starting</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-5 bg-blue-600 dark:bg-blue-700 border-b border-blue-700 dark:border-blue-800">
+              <h2 className="text-xl font-semibold text-white">Device Verification</h2>
+              <p className="text-blue-100 text-sm mt-1">Verify your camera, microphone, and AI model</p>
             </div>
 
             {/* Progress Steps */}
-            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between max-w-md mx-auto">
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-center gap-8 max-w-xl mx-auto">
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${camOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${camOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
                     {camOK ? '✓' : '1'}
                   </div>
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Camera</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Camera</span>
                 </div>
-                <div className={`flex-1 h-1 mx-2 rounded-full transition-all ${camOK ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <div className={`h-0.5 w-16 ${camOK ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${micOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${micOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
                     {micOK ? '✓' : '2'}
                   </div>
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Microphone</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Microphone</span>
                 </div>
-                <div className={`flex-1 h-1 mx-2 rounded-full transition-all ${modelReady ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <div className={`h-0.5 w-16 ${modelReady ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${modelReady ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${modelReady ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
                     {modelReady ? '✓' : '3'}
                   </div>
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">AI Model</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">AI Model</span>
                 </div>
               </div>
             </div>
@@ -1383,23 +1427,18 @@ const DynamicExam = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Camera Section */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      Camera Device
-                    </label>
-                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${camOK ? 'bg-green-100 text-green-700' : camOK === false ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                      {camOK ? '✓ Active' : camOK === false ? '✗ Blocked' : '⏳ Pending'}
-                    </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Camera</label>
+                    <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${camOK ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : camOK === false ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
+                      {camOK ? '✓ Connected' : camOK === false ? '✗ Blocked' : 'Checking...'}
+                    </span>
                   </div>
                   
                   {videoDevices.length > 0 && (
                     <select 
                       value={selectedVideoDevice} 
                       onChange={(e) => { setSelectedVideoDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       {videoDevices.map((device, idx) => (
                         <option key={device.deviceId} value={device.deviceId}>
@@ -1409,13 +1448,13 @@ const DynamicExam = () => {
                     </select>
                   )}
 
-                  <div className="relative aspect-video w-full bg-gradient-to-br from-gray-900 to-gray-800 rounded-lg overflow-hidden shadow-inner border-2 border-gray-700">
+                  <div className="relative aspect-video w-full bg-gray-900 rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
                     <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                     {isChecking && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/60">
                         <div className="text-white text-center">
-                          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                          <p className="text-sm">Initializing camera...</p>
+                          <div className="w-10 h-10 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                          <p className="text-sm">Initializing...</p>
                         </div>
                       </div>
                     )}
@@ -1424,23 +1463,18 @@ const DynamicExam = () => {
 
                 {/* Microphone Section */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                      Microphone Device
-                    </label>
-                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${micOK ? 'bg-green-100 text-green-700' : micOK === false ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                      {micOK ? '✓ Active' : micOK === false ? '✗ Blocked' : '⏳ Pending'}
-                    </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Microphone</label>
+                    <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${micOK ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : micOK === false ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
+                      {micOK ? '✓ Connected' : micOK === false ? '✗ Blocked' : 'Checking...'}
+                    </span>
                   </div>
 
                   {audioDevices.length > 0 && (
                     <select 
                       value={selectedAudioDevice} 
                       onChange={(e) => { setSelectedAudioDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       {audioDevices.map((device, idx) => (
                         <option key={device.deviceId} value={device.deviceId}>
@@ -1450,58 +1484,40 @@ const DynamicExam = () => {
                     </select>
                   )}
 
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <div className="space-y-3">
+                    <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-4 border border-gray-200 dark:border-gray-700">
                       <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Audio Level</p>
-                      <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center px-3 overflow-hidden relative">
-                        <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-400 to-green-600 rounded-lg transition-all duration-150 ease-out" style={{ width: `${audioLevel}%` }}></div>
-                        <div className="relative z-10 flex items-center gap-1">
-                          {[...Array(10)].map((_, i) => (
-                            <div key={i} className={`w-1.5 h-${i < Math.floor(audioLevel / 10) ? '8' : '3'} rounded-full transition-all ${i < Math.floor(audioLevel / 10) ? 'bg-white' : 'bg-gray-400'}`}></div>
-                          ))}
-                        </div>
+                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden relative">
+                        <div className="absolute inset-y-0 left-0 bg-green-500 transition-all duration-150" style={{ width: `${audioLevel}%` }}></div>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">Speak to test your microphone</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Speak to test microphone</p>
                     </div>
 
                     {/* AI Model Status */}
-                    <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2 flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        AI Proctoring Model
-                      </p>
-                      <div className="flex items-center gap-3">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-md p-4 border border-blue-200 dark:border-blue-800">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">AI Proctoring Model</p>
+                      <div className="flex items-center gap-2">
                         {aiLoading && (
                           <>
-                            <div className="relative w-10 h-10">
-                              <div className="absolute inset-0 border-4 border-purple-200 dark:border-purple-700 rounded-full"></div>
-                              <div className="absolute inset-0 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Loading AI model...</p>
-                              <div className="mt-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full animate-pulse" style={{width: '70%'}}></div>
-                              </div>
-                            </div>
+                            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Loading model...</span>
                           </>
                         )}
                         {aiError && (
-                          <div className="flex items-center gap-2 text-red-600">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <>
+                            <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                             </svg>
-                            <span className="text-sm">Error: {aiError}</span>
-                          </div>
+                            <span className="text-sm text-red-600">Error: {aiError}</span>
+                          </>
                         )}
                         {modelReady && (
-                          <div className="flex items-center gap-2 text-green-600">
-                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <>
+                            <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                             </svg>
-                            <span className="text-sm font-semibold">AI Model Ready</span>
-                          </div>
+                            <span className="text-sm text-green-600 font-medium">Model Ready</span>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1511,58 +1527,41 @@ const DynamicExam = () => {
 
               {/* Error Message */}
               {permError && (
-                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2 text-red-700 dark:text-red-300">
-                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  <p className="text-sm font-medium">{permError}</p>
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-red-700 dark:text-red-300">
+                  <p className="text-sm">{permError}</p>
                 </div>
               )}
 
               {/* Success Message */}
               {camOK && micOK && modelReady && (
-                <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-300 dark:border-green-700 rounded-lg flex items-center gap-3 animate-fadeIn">
-                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-green-800 dark:text-green-200">All Systems Ready!</p>
-                    <p className="text-xs text-green-700 dark:text-green-300">Your camera, microphone, and AI model are functioning correctly.</p>
-                  </div>
+                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200">✓ All devices ready</p>
                 </div>
               )}
             </div>
 
             {/* Footer Actions */}
-            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center gap-3">
               <button 
                 onClick={startPermissionCheck} 
                 disabled={isChecking} 
-                className="px-4 py-2 text-sm font-medium border-2 border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <svg className={`w-4 h-4 ${isChecking ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {isChecking ? "Testing..." : "Re-test Devices"}
+                {isChecking ? "Testing..." : "Retest"}
               </button>
               
               <div className="flex gap-3">
                 <button 
                   onClick={closePermissionModal} 
-                  className="px-5 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all"
+                  className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={continueAfterPermissions} 
                   disabled={proctorSettings.enableVideoProctoring && (!camOK || !micOK || !modelReady)} 
-                  className="px-6 py-2 text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2"
+                  className="px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
                   Start Exam
                 </button>
               </div>

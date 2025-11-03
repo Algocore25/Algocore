@@ -4,6 +4,7 @@ import { ref, onValue, get, update, set } from 'firebase/database';
 import { database } from '../../firebase';
 import toast from 'react-hot-toast';
 import LoadingPage from '../LoadingPage';
+import LiveStreamViewer from '../../LiveProctoring/components/LiveStreamViewerV2';
 
 const ExamMonitor = () => {
     const [monitoredData, setMonitoredData] = useState([]);
@@ -794,6 +795,11 @@ const ExamMonitor = () => {
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            {/* Live Camera Feeds Section */}
+            <div className="mt-8">
+                <LiveStreamViewer testid={testid} />
             </div>
         </div>
     );
