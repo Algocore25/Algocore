@@ -90,7 +90,7 @@ const DynamicExam = () => {
   }, [isStreaming, connectionStatus, activeConnections, proctorStream, stage, proctorSettings.enableVideoProctoring]);
 
   // Function to check exam status
-  const checkExamStatus = async () => {
+  const checkExamStatus = async (allowResume = true) => {
     try {
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
       const statusSnapshot = await get(statusRef);
@@ -150,7 +150,10 @@ const DynamicExam = () => {
 
         // If exam was started but not completed
         if (progressData.startTime) {
-          setStage("resume");
+          // Only trigger resume screen if allowed and not already in exam view
+          if (allowResume && stage !== "exam") {
+            setStage("resume");
+          }
           setStartTime(progressData.startTime);
           return false;
         }
@@ -389,44 +392,61 @@ const DynamicExam = () => {
     // Keep video reference but don't cleanup
     setShowPermModal(false);
     
-    if (stage === "resume" || stage === "warning") {
-      // For resume/warning, directly enter fullscreen and set stage to exam
+    const enterFullscreen = async () => {
+      const element = containerRef.current || document.documentElement;
       try {
-        const isCompleted = await checkExamStatus();
-        if (isCompleted) return;
-        if (containerRef.current.requestFullscreen) {
-          await containerRef.current.requestFullscreen();
-        }
-        setStage("exam");
-      } catch (error) {
-        console.error("Failed to re-enter fullscreen:", error);
+        if (element.requestFullscreen) return await element.requestFullscreen();
+        // @ts-ignore - vendor prefixes for Safari/IE11
+        if (element.webkitRequestFullscreen) return await element.webkitRequestFullscreen();
+        // @ts-ignore
+        if (element.msRequestFullscreen) return await element.msRequestFullscreen();
+      } catch (err) {
+        console.error("Fullscreen request failed:", err);
       }
-    } else {
-      // For initial start, log start time and enter fullscreen
-      try {
-        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
-        const statusSnapshot = await get(statusRef);
-        if (statusSnapshot.exists() && statusSnapshot.val().startTime && !statusSnapshot.val().completed) {
-          setStage("resume");
-          return;
-        }
-        if (statusSnapshot.exists() && (statusSnapshot.val().status === "completed" || statusSnapshot.val().completed === true)) {
-          return;
-        }
-        const currentTime = new Date().toISOString();
-        await set(ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`), {
-          startTime: currentTime,
-          status: "started"
-        });
-        setStartTime(currentTime);
-        // Always request fullscreen, but violations only tracked if enabled
-        if (containerRef.current.requestFullscreen) {
-          await containerRef.current.requestFullscreen();
-        }
-        setStage("exam");
-      } catch (error) {
-        console.error("Failed to enter fullscreen:", error);
+    };
+
+    const previousStage = stage;
+
+    try {
+      // Enter fullscreen first, then immediately show exam UI
+      await enterFullscreen();
+
+      // Ensure startTime is present locally before rendering Exam2 to avoid UI glitches
+      if (!startTime) {
+        const provisionalStart = new Date().toISOString();
+        setStartTime(provisionalStart);
       }
+      setStage("exam");
+
+      // Perform status checks/writes in background without delaying UI
+      (async () => {
+        if (previousStage === "resume" || previousStage === "warning") {
+          const isCompleted = await checkExamStatus(false);
+          if (isCompleted) return; // checkExamStatus will set stage accordingly
+          // already showing exam
+        } else {
+          const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
+          const statusSnapshot = await get(statusRef);
+          if (statusSnapshot.exists()) {
+            const data = statusSnapshot.val();
+            if (data?.status === "completed" || data?.completed === true) {
+              // If already completed, reflect that
+              setStage("completed");
+              return;
+            }
+          }
+          if (!statusSnapshot.exists() || !statusSnapshot.val()?.startTime) {
+            const timeToPersist = startTime || new Date().toISOString();
+            await set(ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`), {
+              startTime: timeToPersist,
+              status: "started"
+            });
+            if (!startTime) setStartTime(timeToPersist);
+          }
+        }
+      })();
+    } catch (error) {
+      console.error("Failed to enter fullscreen:", error);
     }
   };
 
@@ -1022,7 +1042,7 @@ const DynamicExam = () => {
             isProctoringActive={proctorSettings.enableVideoProctoring && !!proctorStreamRef.current}
           />
           {/* Streaming Status Indicator */}
-          {proctorSettings.enableVideoProctoring && (
+          {/* {proctorSettings.enableVideoProctoring && (
             <div className="fixed bottom-4 right-4 z-50">
               <div className={`flex flex-col items-end gap-1 px-3 py-2 rounded-lg shadow-lg ${
                 connectionStatus === 'streaming' 
@@ -1042,7 +1062,7 @@ const DynamicExam = () => {
                 )}
               </div>
             </div>
-          )}
+          )} */}
         </>
       )}
 
