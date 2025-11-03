@@ -14,12 +14,27 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
   const listenersRef = useRef([]);
 
   const rtcConfig = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-    ],
+    iceServers: (() => {
+      const servers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+      ];
+      // Optional TURN via env if provided
+      const turnUrl = process.env.REACT_APP_TURN_URL;
+      const turnUser = process.env.REACT_APP_TURN_USERNAME;
+      const turnCred = process.env.REACT_APP_TURN_CREDENTIAL;
+      if (turnUrl && turnUser && turnCred) {
+        servers.push({ urls: turnUrl, username: turnUser, credential: turnCred });
+      }
+      // Optional TURN from runtime global (e.g., injected via script)
+      if (typeof window !== 'undefined' && window.__TURN_CONFIG__) {
+        const t = window.__TURN_CONFIG__;
+        if (t.urls) servers.push({ urls: t.urls, username: t.username, credential: t.credential });
+      }
+      return servers;
+    })(),
     iceCandidatePoolSize: 10,
   };
 
@@ -135,6 +150,9 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
         }
       };
 
+      // Track ICE restart attempts per viewer
+      const restartAttemptedRef = { value: false };
+
       // Handle connection state changes
       pc.onconnectionstatechange = () => {
         console.log(`[WebRTC] Connection state [${viewerId}]:`, pc.connectionState);
@@ -142,7 +160,21 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
         if (pc.connectionState === 'connected') {
           setConnectionStatus('streaming');
           updateActiveConnections();
-        } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        } else if (pc.connectionState === 'failed') {
+          // Try a one-time ICE restart to recover
+          if (!restartAttemptedRef.value && typeof pc.restartIce === 'function') {
+            console.warn('[WebRTC] Connection failed, attempting ICE restart for viewer:', viewerId);
+            restartAttemptedRef.value = true;
+            try {
+              pc.restartIce();
+            } catch (e) {
+              console.error('[WebRTC] ICE restart error:', e);
+            }
+          } else {
+            peerConnectionsRef.current.delete(viewerId);
+            updateActiveConnections();
+          }
+        } else if (pc.connectionState === 'closed') {
           peerConnectionsRef.current.delete(viewerId);
           updateActiveConnections();
         }
@@ -151,6 +183,10 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
       // Handle ICE connection state
       pc.oniceconnectionstatechange = () => {
         console.log(`[WebRTC] ICE state [${viewerId}]:`, pc.iceConnectionState);
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log(`[WebRTC] ICE gathering [${viewerId}]:`, pc.iceGatheringState);
       };
 
       // Create and send offer
