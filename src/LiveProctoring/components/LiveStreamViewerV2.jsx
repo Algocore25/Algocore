@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { ref, onValue, set, remove, onDisconnect } from 'firebase/database';
+import { ref, onValue, set, remove, onDisconnect, get } from 'firebase/database';
 import { database } from '../../firebase';
 import { FiVideo, FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw, FiUser, FiSearch, FiFilter, FiGrid, FiList } from 'react-icons/fi';
 
@@ -12,10 +12,12 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const [connectionState, setConnectionState] = useState('new');
   const [isMuted, setIsMuted] = useState(false); // Unmuted by default to hear audio
   const [error, setError] = useState(null);
+  const [diagnostics, setDiagnostics] = useState({ iceState: 'new', gatheringState: 'new', candidatesReceived: 0, candidatesSent: 0 });
   const listenersRef = useRef([]);
   const viewerIdRef = useRef(`viewer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const iceCandidateQueueRef = useRef([]);
   const isSetupRef = useRef(false);
+  const isPlayingRef = useRef(false);
 
   const rtcConfig = {
     iceServers: (() => {
@@ -49,6 +51,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
     console.log(`[Viewer ${viewerIdRef.current}] Cleaning up`);
     
     isSetupRef.current = false;
+    isPlayingRef.current = false;
     
     // Stop and remove all tracks from video element
     if (videoRef.current && videoRef.current.srcObject) {
@@ -110,6 +113,19 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
     try {
       console.log(`[Viewer ${viewerIdRef.current}] Setting up connection for student:`, userId);
+      
+      // Check if student is actually streaming
+      const streamStatusRef = ref(database, `LiveStreams/${testid}/${userId}`);
+      const streamStatus = await get(streamStatusRef);
+      if (!streamStatus.exists() || !streamStatus.val()?.active) {
+        console.warn(`[Viewer ${viewerIdRef.current}] Student is not streaming yet`);
+        setError('Student not streaming');
+        isSetupRef.current = false;
+        // Retry after a delay
+        setTimeout(() => setupConnection(), 3000);
+        return;
+      }
+      console.log(`[Viewer ${viewerIdRef.current}] Student stream is active`);
 
       const pc = new RTCPeerConnection(rtcConfig);
       peerConnectionRef.current = pc;
@@ -183,13 +199,14 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           
           // Wait a bit for the stream to be ready, then play
           setTimeout(async () => {
-            if (!videoRef.current) return;
+            if (!videoRef.current || isPlayingRef.current) return;
             
             try {
               console.log(`[Viewer ${viewerIdRef.current}] Video element readyState:`, videoRef.current.readyState);
               console.log(`[Viewer ${viewerIdRef.current}] Video element videoWidth:`, videoRef.current.videoWidth);
               console.log(`[Viewer ${viewerIdRef.current}] Video element videoHeight:`, videoRef.current.videoHeight);
               
+              isPlayingRef.current = true;
               await videoRef.current.play();
               console.log(`[Viewer ${viewerIdRef.current}] ✅ Video playback started successfully`);
               setConnectionState('connected');
@@ -208,9 +225,11 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
               }, 1000);
             } catch (error) {
               console.error(`[Viewer ${viewerIdRef.current}] Video play error:`, error);
+              isPlayingRef.current = false;
               if (error.name === 'NotAllowedError') {
                 setError('Autoplay blocked. Click retry to play.');
-              } else {
+              } else if (error.name !== 'AbortError') {
+                // Ignore AbortError as it's expected when interrupted
                 setError('Failed to start video playback');
               }
             }
@@ -221,7 +240,8 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log(`[Viewer ${viewerIdRef.current}] ICE candidate:`, event.candidate.type);
+          console.log(`[Viewer ${viewerIdRef.current}] ICE candidate:`, event.candidate.type, event.candidate.candidate);
+          setDiagnostics(prev => ({ ...prev, candidatesSent: prev.candidatesSent + 1 }));
           const candidateRef = ref(
             database,
             `LiveStreams/${testid}/${userId}/ice/${viewerIdRef.current}/viewer/${Date.now()}`
@@ -231,7 +251,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
               console.error(`[Viewer ${viewerIdRef.current}] Error sending ICE candidate:`, error);
             });
         } else {
-          console.log(`[Viewer ${viewerIdRef.current}] All ICE candidates sent`);
+          console.log(`[Viewer ${viewerIdRef.current}] All ICE candidates sent (total: ${diagnostics.candidatesSent})`);
         }
       };
 
@@ -247,7 +267,30 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           setError(null);
           restartAttempted = false;
         } else if (state === 'failed') {
-          console.warn(`[Viewer ${viewerIdRef.current}] Connection failed`);
+          console.error(`[Viewer ${viewerIdRef.current}] Connection failed`);
+          console.error(`[Viewer ${viewerIdRef.current}] Diagnostics:`, {
+            connectionState: state,
+            iceState: pc.iceConnectionState,
+            gatheringState: pc.iceGatheringState,
+            signalingState: pc.signalingState,
+            candidatesSent: diagnostics.candidatesSent,
+            candidatesReceived: diagnostics.candidatesReceived,
+            localDescription: !!pc.localDescription,
+            remoteDescription: !!pc.remoteDescription
+          });
+          
+          console.error(`[Viewer ${viewerIdRef.current}] 🔍 TROUBLESHOOTING TIPS:`);
+          console.error(`  1. Check if student has enabled camera/microphone`);
+          console.error(`  2. Verify network connectivity on both sides`);
+          console.error(`  3. If behind firewall/NAT, configure TURN server:`);
+          console.error(`     REACT_APP_TURN_URL, REACT_APP_TURN_USERNAME, REACT_APP_TURN_CREDENTIAL`);
+          console.error(`  4. ICE candidates - Sent: ${diagnostics.candidatesSent}, Received: ${diagnostics.candidatesReceived}`);
+          if (diagnostics.candidatesReceived === 0) {
+            console.error(`     ⚠️ No candidates received from student - student may not be streaming`);
+          }
+          if (pc.iceConnectionState === 'failed') {
+            console.error(`     ⚠️ ICE connection failed - likely network/firewall issue`);
+          }
           
           // Try ICE restart first
           if (!restartAttempted && typeof pc.restartIce === 'function') {
@@ -297,16 +340,24 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
       pc.oniceconnectionstatechange = () => {
         const iceState = pc.iceConnectionState;
         console.log(`[Viewer ${viewerIdRef.current}] ICE state:`, iceState);
+        setDiagnostics(prev => ({ ...prev, iceState }));
         
         if (iceState === 'connected' || iceState === 'completed') {
           console.log(`[Viewer ${viewerIdRef.current}] ICE connection established`);
         } else if (iceState === 'failed') {
-          console.error(`[Viewer ${viewerIdRef.current}] ICE connection failed`);
+          console.error(`[Viewer ${viewerIdRef.current}] ICE connection failed - No route to peer. May need TURN server.`);
+          setError(`ICE failed: Network issue (ICE: ${iceState}, Sent: ${diagnostics.candidatesSent}, Received: ${diagnostics.candidatesReceived})`);
         }
       };
 
       pc.onicegatheringstatechange = () => {
-        console.log(`[Viewer ${viewerIdRef.current}] ICE gathering:`, pc.iceGatheringState);
+        const gatheringState = pc.iceGatheringState;
+        console.log(`[Viewer ${viewerIdRef.current}] ICE gathering:`, gatheringState);
+        setDiagnostics(prev => ({ ...prev, gatheringState }));
+        
+        if (gatheringState === 'complete') {
+          console.log(`[Viewer ${viewerIdRef.current}] ICE gathering complete. Total candidates sent: ${diagnostics.candidatesSent}`);
+        }
       };
 
       // Register as viewer
@@ -387,10 +438,12 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
         if (!candidates) return;
 
         Object.entries(candidates).forEach(([key, candidate]) => {
+          setDiagnostics(prev => ({ ...prev, candidatesReceived: prev.candidatesReceived + 1 }));
+          
           if (pc.remoteDescription) {
             pc.addIceCandidate(new RTCIceCandidate(candidate))
               .then(() => {
-                console.log(`[Viewer ${viewerIdRef.current}] Added ICE candidate successfully`);
+                console.log(`[Viewer ${viewerIdRef.current}] Added ICE candidate successfully (total: ${diagnostics.candidatesReceived})`);
               })
               .catch(error => {
                 if (pc.connectionState !== 'connected' && pc.connectionState !== 'completed') {
@@ -399,7 +452,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
               });
           } else {
             // Queue for later when remote description is set
-            console.log(`[Viewer ${viewerIdRef.current}] Queueing ICE candidate`);
+            console.log(`[Viewer ${viewerIdRef.current}] Queueing ICE candidate (queued: ${iceCandidateQueueRef.current.length})`);
             iceCandidateQueueRef.current.push(candidate);
           }
         });
@@ -537,14 +590,13 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           }}
           onCanPlay={() => {
             console.log(`[Viewer ${viewerIdRef.current}] Video can play`);
-            if (videoRef.current) {
-              // Ensure audio is enabled before playing
+            if (videoRef.current && !isPlayingRef.current) {
+              // Ensure audio is enabled
               videoRef.current.muted = false;
               videoRef.current.volume = 1;
               
-              videoRef.current.play().catch(e => {
-                console.error(`[Viewer ${viewerIdRef.current}] Auto-play failed:`, e);
-              });
+              // Note: Don't call play() here - let the ontrack handler manage playback
+              // to avoid concurrent play() calls causing AbortError
             }
           }}
           onVolumeChange={() => {
@@ -554,6 +606,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           }}
           onPlaying={() => {
             console.log(`[Viewer ${viewerIdRef.current}] Video is playing`);
+            isPlayingRef.current = false; // Reset flag once playing
           }}
           onError={(e) => {
             console.error(`[Viewer ${viewerIdRef.current}] Video error:`, e);
@@ -561,12 +614,14 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           }}
           onStalled={() => {
             console.warn(`[Viewer ${viewerIdRef.current}] Video stalled, attempting recovery...`);
-            if (videoRef.current && videoRef.current.readyState < 3) {
+            if (videoRef.current && videoRef.current.readyState < 3 && !isPlayingRef.current) {
+              isPlayingRef.current = true;
               setTimeout(() => {
                 if (videoRef.current) {
                   videoRef.current.load();
                   videoRef.current.play().catch(e => {
                     console.error(`[Viewer ${viewerIdRef.current}] Recovery play failed:`, e);
+                    isPlayingRef.current = false;
                   });
                 }
               }, 500);
@@ -590,7 +645,13 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
               {error ? (
                 <>
                   <FiVideoOff className="text-red-400 text-3xl mb-2" />
-                  <p className="text-red-400 text-sm mb-3">{error}</p>
+                  <p className="text-red-400 text-sm mb-2">{error}</p>
+                  {diagnostics && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-3 font-mono">
+                      <div>ICE: {diagnostics.iceState} | Gathering: {diagnostics.gatheringState}</div>
+                      <div>Sent: {diagnostics.candidatesSent} | Received: {diagnostics.candidatesReceived}</div>
+                    </div>
+                  )}
                   <button
                     onClick={retry}
                     className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm transition-colors"
