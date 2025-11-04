@@ -10,14 +10,27 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const videoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const [connectionState, setConnectionState] = useState('new');
-  const [isMuted, setIsMuted] = useState(false); // Unmuted by default to hear audio
+  const [isMuted, setIsMuted] = useState(true); // Muted by default to allow autoplay (browser policy)
   const [error, setError] = useState(null);
   const [diagnostics, setDiagnostics] = useState({ iceState: 'new', gatheringState: 'new', candidatesReceived: 0, candidatesSent: 0 });
   const listenersRef = useRef([]);
-  const viewerIdRef = useRef(`viewer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const iceCandidateQueueRef = useRef([]);
   const isSetupRef = useRef(false);
   const isPlayingRef = useRef(false);
+  const isCleaningUpRef = useRef(false);
+  
+  // Generate unique viewer ID on each mount (ensures fresh ID on page reload)
+  const [viewerId] = useState(() => {
+    const id = `viewer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[Viewer] Generated new viewer ID: ${id} for user ${userId}`);
+    return id;
+  });
+  const viewerIdRef = useRef(viewerId);
+  
+  // Update ref when viewerId changes
+  useEffect(() => {
+    viewerIdRef.current = viewerId;
+  }, [viewerId]);
 
   const rtcConfig = {
     iceServers: (() => {
@@ -50,6 +63,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const cleanup = useCallback(() => {
     console.log(`[Viewer ${viewerIdRef.current}] Cleaning up`);
     
+    isCleaningUpRef.current = true;
     isSetupRef.current = false;
     isPlayingRef.current = false;
     
@@ -94,14 +108,33 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
     // Clear ICE candidate queue
     iceCandidateQueueRef.current = [];
 
-    // Remove viewer registration from Firebase
-    remove(ref(database, `LiveStreams/${testid}/${userId}/viewers/${viewerIdRef.current}`))
-      .catch(e => console.error(`[Viewer ${viewerIdRef.current}] Error removing viewer:`, e));
-    
     setConnectionState('closed');
+    
+    // Remove viewer registration from Firebase asynchronously and track completion
+    (async () => {
+      try {
+        await remove(ref(database, `LiveStreams/${testid}/${userId}/viewers/${viewerIdRef.current}`));
+        console.log(`[Viewer ${viewerIdRef.current}] Viewer removed from Firebase`);
+        
+        // Wait a bit more for Firebase to propagate
+        await new Promise(resolve => setTimeout(resolve, 300));
+        isCleaningUpRef.current = false;
+        console.log(`[Viewer ${viewerIdRef.current}] Cleanup complete`);
+      } catch (e) {
+        console.error(`[Viewer ${viewerIdRef.current}] Error removing viewer:`, e);
+        isCleaningUpRef.current = false;
+      }
+    })();
   }, [testid, userId]);
 
   const setupConnection = useCallback(async () => {
+    // Wait for cleanup to complete if in progress
+    if (isCleaningUpRef.current) {
+      console.log(`[Viewer ${viewerIdRef.current}] Cleanup in progress, waiting...`);
+      setTimeout(() => setupConnection(), 150);
+      return;
+    }
+    
     if (isSetupRef.current) {
       console.log(`[Viewer ${viewerIdRef.current}] Already setting up`);
       return;
@@ -183,9 +216,9 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           // Set video properties
           videoRef.current.playbackRate = 1.0;
           videoRef.current.volume = 1; // Full volume
-          videoRef.current.muted = false; // Ensure not muted
+          videoRef.current.muted = true; // Keep muted for autoplay (user can unmute with button)
           
-          // Enable all audio tracks in the stream
+          // Enable all audio tracks in the stream (they're ready when user unmutes)
           const audioTracks = stream.getAudioTracks();
           audioTracks.forEach(track => {
             track.enabled = true;
@@ -469,15 +502,23 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
   // Initialize on mount
   useEffect(() => {
+    console.log(`[Viewer ${viewerIdRef.current}] Component mounted for user ${userId}`);
+    
+    // Reset flags to allow new connection
+    isSetupRef.current = false;
+    isPlayingRef.current = false;
+    isCleaningUpRef.current = false;
+    
     const initTimer = setTimeout(() => {
       setupConnection();
     }, 500);
 
     return () => {
+      console.log(`[Viewer ${viewerIdRef.current}] Component unmounting for user ${userId}`);
       clearTimeout(initTimer);
       cleanup();
     };
-  }, [setupConnection, cleanup]);
+  }, [userId, testid, setupConnection, cleanup]);
 
   const toggleMute = () => {
     if (videoRef.current) {
@@ -583,7 +624,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             if (e.target) {
               e.target.playbackRate = 1.0;
               e.target.volume = 1;
-              e.target.muted = false;
+              // Keep muted for autoplay - user can unmute with button
               console.log(`[Viewer ${viewerIdRef.current}] Video volume set to:`, e.target.volume);
               console.log(`[Viewer ${viewerIdRef.current}] Video muted:`, e.target.muted);
             }
@@ -591,8 +632,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           onCanPlay={() => {
             console.log(`[Viewer ${viewerIdRef.current}] Video can play`);
             if (videoRef.current && !isPlayingRef.current) {
-              // Ensure audio is enabled
-              videoRef.current.muted = false;
+              // Video is ready - keep muted for autoplay compliance
               videoRef.current.volume = 1;
               
               // Note: Don't call play() here - let the ontrack handler manage playback
@@ -672,6 +712,14 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
         {/* Status indicator */}
         <div className={`absolute top-3 right-3 w-3 h-3 rounded-full ${getStatusColor()}`}></div>
+        
+        {/* Muted indicator - show when connected and muted */}
+        {connectionState === 'connected' && isMuted && (
+          <div className="absolute bottom-3 left-3 bg-black bg-opacity-70 text-white px-3 py-1.5 rounded-md flex items-center gap-2 text-sm">
+            <FiVolumeX size={16} />
+            <span>Click to unmute</span>
+          </div>
+        )}
       </div>
 
       {/* Controls */}
@@ -899,7 +947,7 @@ const LiveStreamViewer = ({ testid }) => {
             const user = users[userId];
             return (
               <StudentStreamCard
-                key={userId}
+                key={`${testid}-${userId}`}
                 testid={testid}
                 userId={userId}
                 userName={user?.name || 'Unknown Student'}
