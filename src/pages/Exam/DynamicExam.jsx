@@ -314,17 +314,51 @@ const DynamicExam = () => {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Media devices not supported");
       }
+      
+      // Enhanced video constraints for better quality
+      const videoConstraints = selectedVideoDevice 
+        ? {
+            deviceId: { exact: selectedVideoDevice },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 30 }
+          }
+        : {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 30 }
+          };
+      
+      const audioConstraints = selectedAudioDevice
+        ? {
+            deviceId: { exact: selectedAudioDevice },
+            echoCancellation: true,
+            noiseSuppression: true
+          }
+        : {
+            echoCancellation: true,
+            noiseSuppression: true
+          };
+      
       const constraints = {
-        video: selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : true,
-        audio: selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : true
+        video: videoConstraints,
+        audio: audioConstraints
       };
+      
+      console.log('[Camera] Requesting media with constraints:', constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('[Camera] Got stream with tracks:', stream.getTracks().map(t => `${t.kind}:${t.label}`));
+      
       streamRef.current = stream;
       if (videoRef.current) {
         try { videoRef.current.srcObject = stream; } catch (_) {}
       }
       const vTrack = stream.getVideoTracks()[0];
       const aTrack = stream.getAudioTracks()[0];
+      
+      console.log('[Camera] Video track:', vTrack?.label, 'State:', vTrack?.readyState);
+      console.log('[Camera] Audio track:', aTrack?.label, 'State:', aTrack?.readyState);
+      
       setCamOK(Boolean(vTrack && vTrack.readyState === "live"));
       setMicOK(Boolean(aTrack && aTrack.readyState === "live"));
 
@@ -353,6 +387,7 @@ const DynamicExam = () => {
       };
       tick();
     } catch (e) {
+      console.error('[Camera] Error:', e);
       setPermError(e?.message || "Failed to access camera/microphone");
       setCamOK(false);
       setMicOK(false);

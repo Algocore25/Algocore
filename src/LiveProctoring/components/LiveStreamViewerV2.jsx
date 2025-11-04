@@ -10,7 +10,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const videoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const [connectionState, setConnectionState] = useState('new');
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false); // Unmuted by default to hear audio
   const [error, setError] = useState(null);
   const listenersRef = useRef([]);
   const viewerIdRef = useRef(`viewer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
@@ -38,6 +38,11 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
       return servers;
     })(),
     iceCandidatePoolSize: 10,
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all',
+    // Enable smooth video streaming
+    sdpSemantics: 'unified-plan'
   };
 
   const cleanup = useCallback(() => {
@@ -45,22 +50,50 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
     
     isSetupRef.current = false;
     
+    // Stop and remove all tracks from video element
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject;
+      stream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`[Viewer ${viewerIdRef.current}] Stopped track:`, track.kind);
+      });
+      videoRef.current.srcObject = null;
+    }
+    
+    // Close peer connection with all event handlers removed
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
+      try {
+        peerConnectionRef.current.ontrack = null;
+        peerConnectionRef.current.onicecandidate = null;
+        peerConnectionRef.current.oniceconnectionstatechange = null;
+        peerConnectionRef.current.onicegatheringstatechange = null;
+        peerConnectionRef.current.onconnectionstatechange = null;
+        peerConnectionRef.current.onsignalingstatechange = null;
+        peerConnectionRef.current.close();
+      } catch (e) {
+        console.error(`[Viewer ${viewerIdRef.current}] Error closing peer connection:`, e);
+      }
       peerConnectionRef.current = null;
     }
 
+    // Unsubscribe from all Firebase listeners
     listenersRef.current.forEach(unsub => {
-      if (typeof unsub === 'function') unsub();
+      if (typeof unsub === 'function') {
+        try {
+          unsub();
+        } catch (e) {
+          console.error(`[Viewer ${viewerIdRef.current}] Error unsubscribing:`, e);
+        }
+      }
     });
     listenersRef.current = [];
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    // Clear ICE candidate queue
+    iceCandidateQueueRef.current = [];
 
-    // Remove viewer registration
-    remove(ref(database, `LiveStreams/${testid}/${userId}/viewers/${viewerIdRef.current}`));
+    // Remove viewer registration from Firebase
+    remove(ref(database, `LiveStreams/${testid}/${userId}/viewers/${viewerIdRef.current}`))
+      .catch(e => console.error(`[Viewer ${viewerIdRef.current}] Error removing viewer:`, e));
     
     setConnectionState('closed');
   }, [testid, userId]);
@@ -83,56 +116,193 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
       // Handle incoming tracks
       pc.ontrack = (event) => {
-        console.log(`[Viewer ${viewerIdRef.current}] Received track:`, event.track.kind);
-        if (videoRef.current && event.streams[0]) {
-          videoRef.current.srcObject = event.streams[0];
+        console.log(`[Viewer ${viewerIdRef.current}] ===== TRACK RECEIVED =====`);
+        console.log(`[Viewer ${viewerIdRef.current}] Track kind:`, event.track.kind);
+        console.log(`[Viewer ${viewerIdRef.current}] Track readyState:`, event.track.readyState);
+        console.log(`[Viewer ${viewerIdRef.current}] Track enabled:`, event.track.enabled);
+        console.log(`[Viewer ${viewerIdRef.current}] Track muted:`, event.track.muted);
+        
+        if (!event.streams || event.streams.length === 0) {
+          console.error(`[Viewer ${viewerIdRef.current}] No streams in track event`);
+          return;
+        }
+
+        const stream = event.streams[0];
+        const tracks = stream.getTracks();
+        console.log(`[Viewer ${viewerIdRef.current}] Stream ID:`, stream.id);
+        console.log(`[Viewer ${viewerIdRef.current}] Stream tracks:`, tracks.map(t => `${t.kind}:${t.readyState}`));
+        console.log(`[Viewer ${viewerIdRef.current}] Stream active:`, stream.active);
+        
+        // Ensure track is enabled and not muted
+        event.track.enabled = true;
+        
+        // For audio tracks, ensure they're not muted
+        if (event.track.kind === 'audio') {
+          event.track.enabled = true;
+          console.log(`[Viewer ${viewerIdRef.current}] Audio track received and enabled`);
+        }
+        
+        if (videoRef.current) {
+          // Don't stop existing tracks if stream is already set - just update if needed
+          const currentStream = videoRef.current.srcObject;
+          
+          if (!currentStream || currentStream.id !== stream.id) {
+            console.log(`[Viewer ${viewerIdRef.current}] Setting new stream to video element`);
+            
+            // Stop old tracks
+            if (currentStream) {
+              currentStream.getTracks().forEach(track => {
+                track.stop();
+                console.log(`[Viewer ${viewerIdRef.current}] Stopped old track:`, track.kind);
+              });
+            }
+            
+            // Set new stream
+            videoRef.current.srcObject = stream;
+            console.log(`[Viewer ${viewerIdRef.current}] srcObject set to video element`);
+          } else {
+            console.log(`[Viewer ${viewerIdRef.current}] Stream already set, track will be added automatically`);
+          }
+          
+          // Set video properties
+          videoRef.current.playbackRate = 1.0;
+          videoRef.current.volume = 1; // Full volume
+          videoRef.current.muted = false; // Ensure not muted
+          
+          // Enable all audio tracks in the stream
+          const audioTracks = stream.getAudioTracks();
+          audioTracks.forEach(track => {
+            track.enabled = true;
+            console.log(`[Viewer ${viewerIdRef.current}] Enabled audio track:`, track.label);
+          });
+          
+          // Disable picture-in-picture
+          if (videoRef.current.disablePictureInPicture !== undefined) {
+            videoRef.current.disablePictureInPicture = true;
+          }
+          
+          // Wait a bit for the stream to be ready, then play
+          setTimeout(async () => {
+            if (!videoRef.current) return;
+            
+            try {
+              console.log(`[Viewer ${viewerIdRef.current}] Video element readyState:`, videoRef.current.readyState);
+              console.log(`[Viewer ${viewerIdRef.current}] Video element videoWidth:`, videoRef.current.videoWidth);
+              console.log(`[Viewer ${viewerIdRef.current}] Video element videoHeight:`, videoRef.current.videoHeight);
+              
+              await videoRef.current.play();
+              console.log(`[Viewer ${viewerIdRef.current}] ✅ Video playback started successfully`);
+              setConnectionState('connected');
+              setError(null);
+              
+              // Log dimensions after play
+              setTimeout(() => {
+                if (videoRef.current) {
+                  console.log(`[Viewer ${viewerIdRef.current}] After play - videoWidth:`, videoRef.current.videoWidth);
+                  console.log(`[Viewer ${viewerIdRef.current}] After play - videoHeight:`, videoRef.current.videoHeight);
+                  
+                  if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+                    console.error(`[Viewer ${viewerIdRef.current}] ⚠️ VIDEO HAS NO DIMENSIONS - BLACK SCREEN LIKELY`);
+                  }
+                }
+              }, 1000);
+            } catch (error) {
+              console.error(`[Viewer ${viewerIdRef.current}] Video play error:`, error);
+              if (error.name === 'NotAllowedError') {
+                setError('Autoplay blocked. Click retry to play.');
+              } else {
+                setError('Failed to start video playback');
+              }
+            }
+          }, 300);
         }
       };
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log(`[Viewer ${viewerIdRef.current}] ICE candidate:`, event.candidate.type);
           const candidateRef = ref(
             database,
             `LiveStreams/${testid}/${userId}/ice/${viewerIdRef.current}/viewer/${Date.now()}`
           );
-          set(candidateRef, event.candidate.toJSON());
+          set(candidateRef, event.candidate.toJSON())
+            .catch(error => {
+              console.error(`[Viewer ${viewerIdRef.current}] Error sending ICE candidate:`, error);
+            });
+        } else {
+          console.log(`[Viewer ${viewerIdRef.current}] All ICE candidates sent`);
         }
       };
 
       // Handle connection state
       let restartAttempted = false;
       pc.onconnectionstatechange = () => {
-        console.log(`[Viewer ${viewerIdRef.current}] Connection state:`, pc.connectionState);
-        setConnectionState(pc.connectionState);
+        const state = pc.connectionState;
+        console.log(`[Viewer ${viewerIdRef.current}] Connection state:`, state);
+        setConnectionState(state);
         
-        if (pc.connectionState === 'connected') {
+        if (state === 'connected') {
+          console.log(`[Viewer ${viewerIdRef.current}] Connection established successfully`);
           setError(null);
-        } else if (pc.connectionState === 'failed') {
-          // Try one-time ICE restart
+          restartAttempted = false;
+        } else if (state === 'failed') {
+          console.warn(`[Viewer ${viewerIdRef.current}] Connection failed`);
+          
+          // Try ICE restart first
           if (!restartAttempted && typeof pc.restartIce === 'function') {
-            console.warn(`[Viewer ${viewerIdRef.current}] Connection failed, attempting ICE restart`);
+            console.log(`[Viewer ${viewerIdRef.current}] Attempting ICE restart`);
             restartAttempted = true;
             try {
               pc.restartIce();
+              // Wait a bit before giving up
+              setTimeout(() => {
+                if (pc.connectionState === 'failed') {
+                  console.log(`[Viewer ${viewerIdRef.current}] ICE restart failed, recreating connection`);
+                  setError('Connection failed, retrying...');
+                  isSetupRef.current = false;
+                  cleanup();
+                  setTimeout(() => setupConnection(), 2000);
+                }
+              }, 3000);
             } catch (e) {
               console.error(`[Viewer ${viewerIdRef.current}] ICE restart error:`, e);
+              setError('Connection failed, retrying...');
+              isSetupRef.current = false;
+              cleanup();
+              setTimeout(() => setupConnection(), 2000);
             }
           } else {
-            setError('Connection failed');
+            setError('Connection failed, retrying...');
             isSetupRef.current = false;
-            // Fallback to retry after short delay
-            setTimeout(() => {
-              cleanup();
-              setupConnection();
-            }, 1000);
+            cleanup();
+            setTimeout(() => setupConnection(), 2000);
           }
+        } else if (state === 'disconnected') {
+          console.warn(`[Viewer ${viewerIdRef.current}] Connection disconnected, waiting for recovery...`);
+          // Wait a bit to see if it reconnects automatically
+          setTimeout(() => {
+            if (pc.connectionState === 'disconnected') {
+              console.log(`[Viewer ${viewerIdRef.current}] Still disconnected, attempting reconnection`);
+              setError('Reconnecting...');
+              isSetupRef.current = false;
+              cleanup();
+              setTimeout(() => setupConnection(), 1500);
+            }
+          }, 5000);
         }
       };
 
       // Handle ICE connection state
       pc.oniceconnectionstatechange = () => {
-        console.log(`[Viewer ${viewerIdRef.current}] ICE state:`, pc.iceConnectionState);
+        const iceState = pc.iceConnectionState;
+        console.log(`[Viewer ${viewerIdRef.current}] ICE state:`, iceState);
+        
+        if (iceState === 'connected' || iceState === 'completed') {
+          console.log(`[Viewer ${viewerIdRef.current}] ICE connection established`);
+        } else if (iceState === 'failed') {
+          console.error(`[Viewer ${viewerIdRef.current}] ICE connection failed`);
+        }
       };
 
       pc.onicegatheringstatechange = () => {
@@ -216,17 +386,20 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
         const candidates = snapshot.val();
         if (!candidates) return;
 
-        Object.values(candidates).forEach(async (candidate) => {
+        Object.entries(candidates).forEach(([key, candidate]) => {
           if (pc.remoteDescription) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (error) {
-              if (pc.connectionState !== 'connected') {
-                console.error(`[Viewer ${viewerIdRef.current}] Error adding ICE candidate:`, error);
-              }
-            }
+            pc.addIceCandidate(new RTCIceCandidate(candidate))
+              .then(() => {
+                console.log(`[Viewer ${viewerIdRef.current}] Added ICE candidate successfully`);
+              })
+              .catch(error => {
+                if (pc.connectionState !== 'connected' && pc.connectionState !== 'completed') {
+                  console.error(`[Viewer ${viewerIdRef.current}] Error adding ICE candidate:`, error);
+                }
+              });
           } else {
-            // Queue for later
+            // Queue for later when remote description is set
+            console.log(`[Viewer ${viewerIdRef.current}] Queueing ICE candidate`);
             iceCandidateQueueRef.current.push(candidate);
           }
         });
@@ -255,8 +428,20 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
   const toggleMute = () => {
     if (videoRef.current) {
-      videoRef.current.muted = !videoRef.current.muted;
-      setIsMuted(videoRef.current.muted);
+      const newMutedState = !isMuted;
+      videoRef.current.muted = newMutedState;
+      videoRef.current.volume = newMutedState ? 0 : 1;
+      setIsMuted(newMutedState);
+      
+      // Also control audio tracks
+      if (videoRef.current.srcObject) {
+        const audioTracks = videoRef.current.srcObject.getAudioTracks();
+        audioTracks.forEach(track => {
+          track.enabled = !newMutedState;
+        });
+      }
+      
+      console.log(`[Viewer ${viewerIdRef.current}] Audio ${newMutedState ? 'muted' : 'unmuted'}`);
     }
   };
 
@@ -267,10 +452,30 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   };
 
   const retry = () => {
-    cleanup();
-    setTimeout(() => {
-      setupConnection();
-    }, 1000);
+    setError(null);
+    
+    // If video already has a stream, try to play it
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.play()
+        .then(() => {
+          console.log(`[Viewer ${viewerIdRef.current}] Manual playback started`);
+          setConnectionState('connected');
+        })
+        .catch(error => {
+          console.error(`[Viewer ${viewerIdRef.current}] Manual play failed:`, error);
+          // If play fails, reconnect
+          cleanup();
+          setTimeout(() => {
+            setupConnection();
+          }, 1000);
+        });
+    } else {
+      // No stream, reconnect
+      cleanup();
+      setTimeout(() => {
+        setupConnection();
+      }, 1000);
+    }
   };
 
   const getStatusColor = () => {
@@ -311,7 +516,68 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           autoPlay
           playsInline
           muted={isMuted}
+          preload="auto"
           className="w-full h-full object-cover"
+          style={{
+            backgroundColor: '#000',
+            willChange: 'transform',
+            transform: 'translateZ(0)',
+            minWidth: '100%',
+            minHeight: '100%'
+          }}
+          onLoadedMetadata={(e) => {
+            console.log(`[Viewer ${viewerIdRef.current}] Video metadata loaded`);
+            if (e.target) {
+              e.target.playbackRate = 1.0;
+              e.target.volume = 1;
+              e.target.muted = false;
+              console.log(`[Viewer ${viewerIdRef.current}] Video volume set to:`, e.target.volume);
+              console.log(`[Viewer ${viewerIdRef.current}] Video muted:`, e.target.muted);
+            }
+          }}
+          onCanPlay={() => {
+            console.log(`[Viewer ${viewerIdRef.current}] Video can play`);
+            if (videoRef.current) {
+              // Ensure audio is enabled before playing
+              videoRef.current.muted = false;
+              videoRef.current.volume = 1;
+              
+              videoRef.current.play().catch(e => {
+                console.error(`[Viewer ${viewerIdRef.current}] Auto-play failed:`, e);
+              });
+            }
+          }}
+          onVolumeChange={() => {
+            if (videoRef.current) {
+              console.log(`[Viewer ${viewerIdRef.current}] Volume changed to:`, videoRef.current.volume, 'Muted:', videoRef.current.muted);
+            }
+          }}
+          onPlaying={() => {
+            console.log(`[Viewer ${viewerIdRef.current}] Video is playing`);
+          }}
+          onError={(e) => {
+            console.error(`[Viewer ${viewerIdRef.current}] Video error:`, e);
+            setError('Video playback error');
+          }}
+          onStalled={() => {
+            console.warn(`[Viewer ${viewerIdRef.current}] Video stalled, attempting recovery...`);
+            if (videoRef.current && videoRef.current.readyState < 3) {
+              setTimeout(() => {
+                if (videoRef.current) {
+                  videoRef.current.load();
+                  videoRef.current.play().catch(e => {
+                    console.error(`[Viewer ${viewerIdRef.current}] Recovery play failed:`, e);
+                  });
+                }
+              }, 500);
+            }
+          }}
+          onWaiting={() => {
+            console.log(`[Viewer ${viewerIdRef.current}] Video buffering...`);
+          }}
+          onSuspend={() => {
+            console.log(`[Viewer ${viewerIdRef.current}] Video suspended`);
+          }}
         />
         
         {/* Overlay when not connected */}

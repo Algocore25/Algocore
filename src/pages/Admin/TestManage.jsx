@@ -205,6 +205,88 @@ const TestManage = () => {
     }
   }, [testId, getQuestionCategories]);
 
+  // Real-time listener for proctorSettings changes
+  useEffect(() => {
+    if (!testId) return;
+
+    const proctorSettingsRef = ref(database, `Exam/${testId}/proctorSettings`);
+    const unsubscribe = onValue(proctorSettingsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const settings = snapshot.val();
+        console.log('[TestManage] ProctorSettings from Firebase:', settings);
+        
+        setEnableVideoProctoring(
+          settings.enableVideoProctoring === undefined 
+            ? true 
+            : settings.enableVideoProctoring
+        );
+        setBlockOnViolations(
+          settings.blockOnViolations === true
+        );
+        
+        // Update test state
+        setTest(prev => ({
+          ...prev,
+          proctorSettings: settings
+        }));
+      } else {
+        console.log('[TestManage] No proctorSettings found in Firebase, using defaults');
+        // Set defaults if no settings exist
+        setEnableVideoProctoring(true);
+        setBlockOnViolations(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [testId]);
+
+  // Real-time listener for duration changes
+  useEffect(() => {
+    if (!testId) return;
+
+    const durationRef = ref(database, `Exam/${testId}/duration`);
+    const unsubscribe = onValue(durationRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const durationValue = snapshot.val();
+        console.log('[TestManage] Duration from Firebase:', durationValue);
+        setDuration(durationValue);
+        
+        // Update test state
+        setTest(prev => ({
+          ...prev,
+          duration: durationValue
+        }));
+      } else {
+        console.log('[TestManage] No duration found in Firebase, using default');
+        setDuration(60); // Default 60 minutes
+      }
+    });
+
+    return () => unsubscribe();
+  }, [testId]);
+
+  // Real-time listener for test name changes
+  useEffect(() => {
+    if (!testId) return;
+
+    const nameRef = ref(database, `Exam/${testId}/name`);
+    const unsubscribe = onValue(nameRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const nameValue = snapshot.val();
+        console.log('[TestManage] Test name from Firebase:', nameValue);
+        setTestTitle(nameValue);
+        
+        // Update test state
+        setTest(prev => ({
+          ...prev,
+          name: nameValue
+        }));
+      }
+    });
+
+    return () => unsubscribe();
+  }, [testId]);
+
   // Save activeTab to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('testManageActiveTab', activeTab);

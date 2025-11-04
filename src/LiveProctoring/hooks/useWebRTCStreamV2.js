@@ -20,6 +20,7 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
       ];
       // Optional TURN via env if provided
       const turnUrl = process.env.REACT_APP_TURN_URL;
@@ -36,6 +37,10 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
       return servers;
     })(),
     iceCandidatePoolSize: 10,
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all',
+    sdpSemantics: 'unified-plan'
   };
 
   // Cleanup function
@@ -133,10 +138,27 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
       peerConnectionsRef.current.set(viewerId, pc);
       iceCandidateQueuesRef.current.set(viewerId, []);
 
-      // Add tracks
+      // Add tracks with transceiver for better control
       stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-        console.log('[WebRTC] Added track:', track.kind);
+        const sender = pc.addTrack(track, stream);
+        console.log('[WebRTC] Added track:', track.kind, 'with label:', track.label);
+        
+        // Set encoding parameters for better quality
+        if (track.kind === 'video') {
+          const parameters = sender.getParameters();
+          if (!parameters.encodings || parameters.encodings.length === 0) {
+            parameters.encodings = [{}];
+          }
+          
+          // Optimize video encoding
+          parameters.encodings[0].maxBitrate = 2000000; // 2 Mbps max
+          parameters.encodings[0].maxFramerate = 30;
+          parameters.encodings[0].scaleResolutionDownBy = 1; // No downscaling
+          
+          sender.setParameters(parameters)
+            .then(() => console.log('[WebRTC] Video encoding parameters set'))
+            .catch(e => console.error('[WebRTC] Failed to set encoding params:', e));
+        }
       });
 
       // Handle ICE candidates
@@ -189,33 +211,51 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
         console.log(`[WebRTC] ICE gathering [${viewerId}]:`, pc.iceGatheringState);
       };
 
-      // Create and send offer
+      // Create and send offer with optimal settings
       const offer = await pc.createOffer({
         offerToReceiveVideo: false,
         offerToReceiveAudio: false,
+        voiceActivityDetection: false,
+        iceRestart: false
       });
-      // Prefer H.264 for Safari compatibility
-      const preferH264 = (sdp) => {
+      
+      // Optimize SDP for better video quality and compatibility
+      const optimizeSDP = (sdp) => {
         try {
-          const lines = sdp.split('\n');
+          let lines = sdp.split('\n');
+          
+          // Prefer H.264 for better compatibility
           const mLineIndex = lines.findIndex(l => l.startsWith('m=video'));
-          if (mLineIndex === -1) return sdp;
-          const h264Pt = lines
-            .filter(l => l.startsWith('a=rtpmap:'))
-            .map(l => ({ pt: l.match(/a=rtpmap:(\d+)/)?.[1], codec: l.toLowerCase() }))
-            .find(x => x.codec.includes('h264'))?.pt;
-          if (!h264Pt) return sdp;
-          const parts = lines[mLineIndex].split(' ');
-          const header = parts.slice(0, 3);
-          const pts = parts.slice(3).filter(Boolean);
-          const reordered = [h264Pt, ...pts.filter(p => p !== h264Pt)];
-          lines[mLineIndex] = [...header, ...reordered].join(' ');
+          if (mLineIndex !== -1) {
+            const h264Pt = lines
+              .filter(l => l.startsWith('a=rtpmap:'))
+              .map(l => ({ pt: l.match(/a=rtpmap:(\d+)/)?.[1], codec: l.toLowerCase() }))
+              .find(x => x.codec.includes('h264'))?.pt;
+            
+            if (h264Pt) {
+              const parts = lines[mLineIndex].split(' ');
+              const header = parts.slice(0, 3);
+              const pts = parts.slice(3).filter(Boolean);
+              const reordered = [h264Pt, ...pts.filter(p => p !== h264Pt)];
+              lines[mLineIndex] = [...header, ...reordered].join(' ');
+            }
+            
+            // Add bandwidth constraints for smooth streaming
+            const insertAfter = mLineIndex + 1;
+            lines.splice(insertAfter, 0, 
+              'b=AS:2000',
+              'b=TIAS:2000000'
+            );
+          }
+          
           return lines.join('\n');
-        } catch (_) {
+        } catch (e) {
+          console.error('[WebRTC] SDP optimization error:', e);
           return sdp;
         }
       };
-      const mungedOffer = { ...offer, sdp: preferH264(offer.sdp) };
+      
+      const mungedOffer = { ...offer, sdp: optimizeSDP(offer.sdp) };
       await pc.setLocalDescription(mungedOffer);
 
       console.log('[WebRTC] Sending offer to viewer:', viewerId);
