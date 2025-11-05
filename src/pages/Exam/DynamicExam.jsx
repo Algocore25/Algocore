@@ -6,6 +6,7 @@ import { useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { usePersonDetection } from "../../LiveProctoring/hooks/usePersonDetection";
 import { useWebRTCStream } from "../../LiveProctoring/hooks/useWebRTCStreamV2";
+import { useAdminAudioReceiver } from "../../LiveProctoring/hooks/useAdminAudioReceiver";
 import { VideoCanvas } from "../../LiveProctoring/components/VideoCanvas";
 
 import FullscreenTracker from "../FullscreenTracker";
@@ -67,6 +68,13 @@ const DynamicExam = () => {
     user?.uid,
     proctorStream,
     stage === "exam" && proctorSettings.enableVideoProctoring
+  );
+
+  // Admin audio receiver - allows admin to speak to this student
+  const { isReceivingAudio, adminConnectionStatus } = useAdminAudioReceiver(
+    testid,
+    user?.uid,
+    stage === "exam" // Only receive admin audio during exam
   );
 
   const [examName, setExamName] = useState(null);

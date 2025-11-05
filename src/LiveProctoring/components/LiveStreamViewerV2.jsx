@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ref, onValue, set, remove, onDisconnect, get } from 'firebase/database';
 import { database } from '../../firebase';
-import { FiVideo, FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw, FiUser, FiSearch, FiFilter, FiGrid, FiList } from 'react-icons/fi';
+import { FiVideo, FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw, FiUser, FiSearch, FiFilter, FiGrid, FiList, FiMic, FiMicOff } from 'react-icons/fi';
 
 /**
  * Redesigned Student Stream Card - Simplified architecture
@@ -18,6 +18,13 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const isSetupRef = useRef(false);
   const isPlayingRef = useRef(false);
   const isCleaningUpRef = useRef(false);
+  
+  // Admin audio streaming state
+  const [isSpeakingToStudent, setIsSpeakingToStudent] = useState(false);
+  const adminAudioStreamRef = useRef(null);
+  const adminPeerConnectionRef = useRef(null);
+  const adminListenersRef = useRef([]);
+  const isAdminSetupRef = useRef(false);
   
   // Generate unique viewer ID on each mount (ensures fresh ID on page reload)
   const [viewerId] = useState(() => {
@@ -572,6 +579,196 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
     }
   };
 
+  // Cleanup admin audio connection
+  const cleanupAdminAudio = useCallback(() => {
+    console.log(`[Admin Audio ${viewerIdRef.current}] Cleaning up admin audio`);
+    
+    // Stop admin audio stream
+    if (adminAudioStreamRef.current) {
+      adminAudioStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log(`[Admin Audio ${viewerIdRef.current}] Stopped admin audio track`);
+      });
+      adminAudioStreamRef.current = null;
+    }
+    
+    // Close admin peer connection
+    if (adminPeerConnectionRef.current) {
+      try {
+        adminPeerConnectionRef.current.onicecandidate = null;
+        adminPeerConnectionRef.current.oniceconnectionstatechange = null;
+        adminPeerConnectionRef.current.onconnectionstatechange = null;
+        adminPeerConnectionRef.current.close();
+      } catch (e) {
+        console.error(`[Admin Audio ${viewerIdRef.current}] Error closing admin peer connection:`, e);
+      }
+      adminPeerConnectionRef.current = null;
+    }
+
+    // Unsubscribe from admin listeners
+    adminListenersRef.current.forEach(unsub => {
+      if (typeof unsub === 'function') {
+        try {
+          unsub();
+        } catch (e) {
+          console.error(`[Admin Audio ${viewerIdRef.current}] Error unsubscribing:`, e);
+        }
+      }
+    });
+    adminListenersRef.current = [];
+
+    // Remove admin audio registration from Firebase
+    (async () => {
+      try {
+        await remove(ref(database, `AdminAudio/${testid}/${userId}/admin/${viewerIdRef.current}`));
+        console.log(`[Admin Audio ${viewerIdRef.current}] Admin audio removed from Firebase`);
+      } catch (e) {
+        console.error(`[Admin Audio ${viewerIdRef.current}] Error removing admin audio:`, e);
+      }
+    })();
+
+    isAdminSetupRef.current = false;
+  }, [testid, userId]);
+
+  // Toggle admin speaking to this student
+  const toggleAdminAudio = async () => {
+    if (isSpeakingToStudent) {
+      // Stop speaking
+      setIsSpeakingToStudent(false);
+      cleanupAdminAudio();
+    } else {
+      // Start speaking
+      try {
+        console.log(`[Admin Audio ${viewerIdRef.current}] Starting admin audio to student ${userId}`);
+        
+        // Request microphone access
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        });
+        adminAudioStreamRef.current = stream;
+        console.log(`[Admin Audio ${viewerIdRef.current}] Admin microphone captured`);
+
+        // Create peer connection for admin audio
+        const pc = new RTCPeerConnection(rtcConfig);
+        adminPeerConnectionRef.current = pc;
+
+        // Add admin audio tracks to peer connection
+        stream.getTracks().forEach(track => {
+          pc.addTrack(track, stream);
+          console.log(`[Admin Audio ${viewerIdRef.current}] Added admin audio track to peer connection`);
+        });
+
+        // Handle ICE candidates
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log(`[Admin Audio ${viewerIdRef.current}] Admin ICE candidate:`, event.candidate.type);
+            const candidateRef = ref(
+              database,
+              `AdminAudio/${testid}/${userId}/ice/${viewerIdRef.current}/admin/${Date.now()}`
+            );
+            set(candidateRef, event.candidate.toJSON())
+              .catch(error => {
+                console.error(`[Admin Audio ${viewerIdRef.current}] Error sending admin ICE candidate:`, error);
+              });
+          }
+        };
+
+        // Handle connection state
+        pc.onconnectionstatechange = () => {
+          const state = pc.connectionState;
+          console.log(`[Admin Audio ${viewerIdRef.current}] Admin audio connection state:`, state);
+          
+          if (state === 'failed' || state === 'disconnected') {
+            console.error(`[Admin Audio ${viewerIdRef.current}] Admin audio connection ${state}`);
+            setIsSpeakingToStudent(false);
+            cleanupAdminAudio();
+          }
+        };
+
+        // Register admin audio
+        const adminAudioRef = ref(database, `AdminAudio/${testid}/${userId}/admin/${viewerIdRef.current}`);
+        await set(adminAudioRef, {
+          active: true,
+          timestamp: Date.now(),
+        });
+        onDisconnect(adminAudioRef).remove();
+
+        // Create and send offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        console.log(`[Admin Audio ${viewerIdRef.current}] Sending admin audio offer`);
+        await set(ref(database, `AdminAudio/${testid}/${userId}/offers/${viewerIdRef.current}`), {
+          sdp: offer.sdp,
+          type: offer.type,
+          timestamp: Date.now(),
+        });
+
+        // Listen for answer from student
+        const answerRef = ref(database, `AdminAudio/${testid}/${userId}/answers/${viewerIdRef.current}`);
+        const unsubscribeAnswer = onValue(answerRef, async (snapshot) => {
+          const answer = snapshot.val();
+          if (!answer || !answer.sdp) return;
+
+          console.log(`[Admin Audio ${viewerIdRef.current}] Received answer from student`);
+
+          if (pc.signalingState !== 'have-local-offer') {
+            console.log(`[Admin Audio ${viewerIdRef.current}] Skipping answer, wrong signaling state:`, pc.signalingState);
+            return;
+          }
+
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            console.log(`[Admin Audio ${viewerIdRef.current}] Admin audio connection established`);
+          } catch (error) {
+            console.error(`[Admin Audio ${viewerIdRef.current}] Error handling answer:`, error);
+          }
+        });
+
+        adminListenersRef.current.push(unsubscribeAnswer);
+
+        // Listen for ICE candidates from student
+        const studentIceRef = ref(database, `AdminAudio/${testid}/${userId}/ice/${viewerIdRef.current}/student`);
+        const unsubscribeIce = onValue(studentIceRef, (snapshot) => {
+          const candidates = snapshot.val();
+          if (!candidates) return;
+
+          Object.entries(candidates).forEach(async ([key, candidate]) => {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              console.log(`[Admin Audio ${viewerIdRef.current}] Added student ICE candidate for admin audio`);
+            } catch (error) {
+              console.error(`[Admin Audio ${viewerIdRef.current}] Error adding student ICE candidate:`, error);
+            }
+          });
+        });
+
+        adminListenersRef.current.push(unsubscribeIce);
+
+        setIsSpeakingToStudent(true);
+        isAdminSetupRef.current = true;
+        
+      } catch (error) {
+        console.error(`[Admin Audio ${viewerIdRef.current}] Error setting up admin audio:`, error);
+        alert('Failed to access microphone. Please grant microphone permission and try again.');
+        cleanupAdminAudio();
+      }
+    }
+  };
+
+  // Cleanup admin audio on unmount
+  useEffect(() => {
+    return () => {
+      if (isSpeakingToStudent) {
+        cleanupAdminAudio();
+      }
+    };
+  }, [cleanupAdminAudio, isSpeakingToStudent]);
+
   const getStatusColor = () => {
     switch (connectionState) {
       case 'connected':
@@ -731,6 +928,18 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           </div>
           
           <div className="flex items-center gap-2 ml-3">
+            <button
+              onClick={toggleAdminAudio}
+              className={`p-2 rounded-md transition-colors ${
+                isSpeakingToStudent
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+              title={isSpeakingToStudent ? 'Stop speaking to student' : 'Speak to student'}
+            >
+              {isSpeakingToStudent ? <FiMicOff size={16} /> : <FiMic size={16} />}
+            </button>
+            
             <button
               onClick={toggleMute}
               className="p-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-md transition-colors"
