@@ -143,8 +143,11 @@ export const useWebRTCStream = (testid, userId, localStream, screenStream = null
       // Add camera tracks first
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => {
+          // IMPORTANT: Ensure track is enabled before adding
+          track.enabled = true;
+          
           const sender = pc.addTrack(track, cameraStream);
-          console.log('[WebRTC] Added CAMERA track:', track.kind, 'with label:', track.label);
+          console.log('[WebRTC] Added CAMERA track:', track.kind, 'with label:', track.label, 'enabled:', track.enabled, 'muted:', track.muted, 'readyState:', track.readyState);
           
           // Set encoding parameters for better quality
           if (track.kind === 'video') {
@@ -161,6 +164,19 @@ export const useWebRTCStream = (testid, userId, localStream, screenStream = null
             sender.setParameters(parameters)
               .then(() => console.log('[WebRTC] Camera video encoding parameters set'))
               .catch(e => console.error('[WebRTC] Failed to set camera encoding params:', e));
+          } else if (track.kind === 'audio') {
+            // Optimize audio encoding for clarity
+            const parameters = sender.getParameters();
+            if (!parameters.encodings || parameters.encodings.length === 0) {
+              parameters.encodings = [{}];
+            }
+            
+            // Set audio bitrate for clear voice
+            parameters.encodings[0].maxBitrate = 128000; // 128 kbps for audio
+            
+            sender.setParameters(parameters)
+              .then(() => console.log('[WebRTC] Camera audio encoding parameters set'))
+              .catch(e => console.error('[WebRTC] Failed to set audio encoding params:', e));
           }
         });
       }

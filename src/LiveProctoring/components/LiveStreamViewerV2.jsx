@@ -6,7 +6,7 @@ import { FiVideo, FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw, Fi
 /**
  * Redesigned Student Stream Card - Simplified architecture
  */
-const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
+const StudentStreamCard = ({ testid, userId, userName, userEmail, globalViewMode }) => {
   const videoRef = useRef(null);
   const screenVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
@@ -21,8 +21,11 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const isCleaningUpRef = useRef(false);
   
   // Screen share state
-  const [viewMode, setViewMode] = useState('camera'); // 'camera' or 'screen'
+  const [localViewMode, setLocalViewMode] = useState(null); // null means follow global, 'camera' or 'screen' for override
   const [hasScreenShare, setHasScreenShare] = useState(false);
+  
+  // Determine effective view mode: local override or global
+  const viewMode = localViewMode !== null ? localViewMode : globalViewMode;
   const isScreenPlayingRef = useRef(false);
   const videoTrackCountRef = useRef(0); // Track number of video tracks received
   
@@ -250,10 +253,27 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
         // Ensure track is enabled and not muted
         event.track.enabled = true;
         
-        // For audio tracks, ensure they're not muted
+        // For audio tracks, ensure they're not muted and log detailed info
         if (event.track.kind === 'audio') {
           event.track.enabled = true;
-          console.log(`[Viewer ${viewerIdRef.current}] Audio track received and enabled`);
+          console.log(`[Viewer ${viewerIdRef.current}] 🔊 AUDIO TRACK RECEIVED:`);
+          console.log(`  - Label: ${event.track.label}`);
+          console.log(`  - ID: ${event.track.id}`);
+          console.log(`  - Enabled: ${event.track.enabled}`);
+          console.log(`  - Muted: ${event.track.muted}`);
+          console.log(`  - ReadyState: ${event.track.readyState}`);
+          console.log(`  - Settings:`, event.track.getSettings ? event.track.getSettings() : 'N/A');
+          
+          // Listen for track state changes
+          event.track.onended = () => {
+            console.warn(`[Viewer ${viewerIdRef.current}] ⚠️ Audio track ENDED`);
+          };
+          event.track.onmute = () => {
+            console.warn(`[Viewer ${viewerIdRef.current}] ⚠️ Audio track MUTED`);
+          };
+          event.track.onunmute = () => {
+            console.log(`[Viewer ${viewerIdRef.current}] ✅ Audio track UNMUTED`);
+          };
         }
         
         // Route to appropriate video element based on stream type
@@ -295,12 +315,29 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           
           // Enable all audio tracks in the stream (they're ready when user unmutes)
           const audioTracks = stream.getAudioTracks();
-          console.log(`[Viewer ${viewerIdRef.current}] Found ${audioTracks.length} audio track(s)`);
-          audioTracks.forEach(track => {
+          console.log(`[Viewer ${viewerIdRef.current}] 🔊 Found ${audioTracks.length} audio track(s) in stream`);
+          audioTracks.forEach((track, idx) => {
             track.enabled = true;
-            console.log(`[Viewer ${viewerIdRef.current}] ✅ Enabled audio track:`, track.label, 'State:', track.readyState, 'Muted:', track.muted);
+            console.log(`[Viewer ${viewerIdRef.current}] ✅ Audio Track ${idx + 1}:`);
+            console.log(`    - Label: ${track.label}`);
+            console.log(`    - ID: ${track.id}`);
+            console.log(`    - Enabled: ${track.enabled}`);
+            console.log(`    - Muted: ${track.muted}`);
+            console.log(`    - ReadyState: ${track.readyState}`);
+            console.log(`    - ContentHint: ${track.contentHint}`);
+            
+            // Test if we can get audio data
+            if (track.readyState === 'live' && !track.muted) {
+              console.log(`[Viewer ${viewerIdRef.current}] 🎵 Audio track is LIVE and NOT MUTED - should have sound!`);
+            } else {
+              console.warn(`[Viewer ${viewerIdRef.current}] ⚠️ Audio track issue - ReadyState: ${track.readyState}, Muted: ${track.muted}`);
+            }
           });
           console.log(`[Viewer ${viewerIdRef.current}] Video element muted state:`, targetVideoRef.current.muted, 'Volume:', targetVideoRef.current.volume);
+          
+          if (audioTracks.length === 0) {
+            console.error(`[Viewer ${viewerIdRef.current}] ❌ NO AUDIO TRACKS IN STREAM! Student is not sending audio.`);
+          }
           
           // Disable picture-in-picture
           if (targetVideoRef.current.disablePictureInPicture !== undefined) {
@@ -321,6 +358,9 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
               console.log(`[Viewer ${viewerIdRef.current}] ✅ ${isScreenShare ? 'Screen share' : 'Camera'} playback started successfully`);
               setConnectionState('connected');
               setError(null);
+              
+              // Removed auto-unmute - admin must manually unmute to hear student audio
+              // Student audio remains muted by default
               
               // Log dimensions after play
               setTimeout(() => {
@@ -601,24 +641,42 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   }, [userId, testid, setupConnection, cleanup]);
 
   const toggleMute = () => {
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    
+    // Apply to camera video
     if (videoRef.current) {
-      const newMutedState = !isMuted;
       videoRef.current.muted = newMutedState;
       videoRef.current.volume = newMutedState ? 0 : 1;
-      setIsMuted(newMutedState);
       
-      // Also control audio tracks
+      // Control audio tracks in camera stream
       if (videoRef.current.srcObject) {
         const audioTracks = videoRef.current.srcObject.getAudioTracks();
-        console.log(`[Viewer ${viewerIdRef.current}] ${newMutedState ? 'Muting' : 'Unmuting'} ${audioTracks.length} audio track(s)`);
+        console.log(`[Viewer ${viewerIdRef.current}] ${newMutedState ? 'Muting' : 'Unmuting'} camera ${audioTracks.length} audio track(s)`);
         audioTracks.forEach(track => {
           track.enabled = !newMutedState;
-          console.log(`[Viewer ${viewerIdRef.current}] Track ${track.label} enabled:`, track.enabled);
+          console.log(`[Viewer ${viewerIdRef.current}] Camera track ${track.label} enabled:`, track.enabled);
         });
       }
-      
-      console.log(`[Viewer ${viewerIdRef.current}] ✅ Student audio ${newMutedState ? 'MUTED' : 'UNMUTED'} (video.muted: ${videoRef.current.muted}, volume: ${videoRef.current.volume})`);
     }
+    
+    // Apply to screen share video (audio might be present if system audio is captured)
+    if (screenVideoRef.current) {
+      screenVideoRef.current.muted = newMutedState;
+      screenVideoRef.current.volume = newMutedState ? 0 : 1;
+      
+      // Control audio tracks in screen stream
+      if (screenVideoRef.current.srcObject) {
+        const audioTracks = screenVideoRef.current.srcObject.getAudioTracks();
+        console.log(`[Viewer ${viewerIdRef.current}] ${newMutedState ? 'Muting' : 'Unmuting'} screen ${audioTracks.length} audio track(s)`);
+        audioTracks.forEach(track => {
+          track.enabled = !newMutedState;
+          console.log(`[Viewer ${viewerIdRef.current}] Screen track ${track.label} enabled:`, track.enabled);
+        });
+      }
+    }
+    
+    console.log(`[Viewer ${viewerIdRef.current}] ✅ Student audio ${newMutedState ? 'MUTED' : 'UNMUTED'}`);
   };
 
   const toggleFullscreen = () => {
@@ -722,6 +780,12 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
       // Start speaking
       try {
         console.log(`[Admin Audio ${viewerIdRef.current}] Starting admin audio to student ${userId}`);
+        
+        // Warn if student is muted - admin won't hear their response
+        if (isMuted) {
+          console.warn(`[Admin Audio ${viewerIdRef.current}] ⚠️ WARNING: Student is MUTED! Admin won't hear student's response. Click unmute button first.`);
+          alert('⚠️ REMINDER: Student audio is MUTED!\n\nYou are speaking to the student, but you won\'t hear their response.\n\nClick the UNMUTE button (🔇) to hear the student.');
+        }
         
         // Request microphone access
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -1039,11 +1103,24 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           </div>
         )}
         
-        {/* Muted indicator - show when connected and muted */}
-        {connectionState === 'connected' && isMuted && (
-          <div className="absolute bottom-3 left-3 bg-black bg-opacity-70 text-white px-3 py-1.5 rounded-md flex items-center gap-2 text-sm">
-            <FiVolumeX size={16} />
-            <span>Click to unmute</span>
+        {/* Audio status indicator - show when connected */}
+        {connectionState === 'connected' && (
+          <div className={`absolute bottom-3 left-3 px-3 py-1.5 rounded-md flex items-center gap-2 text-sm font-medium ${
+            isMuted 
+              ? 'bg-red-500 bg-opacity-90 text-white animate-pulse' 
+              : 'bg-green-500 bg-opacity-90 text-white'
+          }`}>
+            {isMuted ? (
+              <>
+                <FiVolumeX size={16} />
+                <span>🔇 MUTED - Click unmute button</span>
+              </>
+            ) : (
+              <>
+                <FiVolume2 size={16} />
+                <span>🔊 Audio ON</span>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1071,8 +1148,12 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             
             <button
               onClick={toggleMute}
-              className="p-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-md transition-colors"
-              title={isMuted ? 'Unmute' : 'Mute'}
+              className={`p-2 rounded-md transition-colors ${
+                isMuted 
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                  : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
+              title={isMuted ? '🔇 Click to UNMUTE student audio' : '🔊 Click to mute student audio'}
             >
               {isMuted ? <FiVolumeX size={16} /> : <FiVolume2 size={16} />}
             </button>
@@ -1093,7 +1174,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">View:</span>
             <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-900 p-1 rounded-md">
               <button
-                onClick={() => setViewMode('camera')}
+                onClick={() => setLocalViewMode('camera')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
                   viewMode === 'camera'
                     ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
@@ -1105,7 +1186,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
                 Camera
               </button>
               <button
-                onClick={() => setViewMode('screen')}
+                onClick={() => setLocalViewMode('screen')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
                   viewMode === 'screen'
                     ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
@@ -1117,6 +1198,15 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
                 Screen
               </button>
             </div>
+            {localViewMode !== null && (
+              <button
+                onClick={() => setLocalViewMode(null)}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                title="Reset to follow global toggle"
+              >
+                Reset
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1134,6 +1224,7 @@ const LiveStreamViewer = ({ testid }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [viewMode, setViewMode] = useState('grid');
+  const [globalStreamView, setGlobalStreamView] = useState('camera'); // Global toggle for camera/screen
 
   useEffect(() => {
     if (!testid) return;
@@ -1263,6 +1354,34 @@ const LiveStreamViewer = ({ testid }) => {
               </select>
             </div>
 
+            {/* Global Camera/Screen Toggle */}
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-300 dark:border-gray-600">
+              <button
+                onClick={() => setGlobalStreamView('camera')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors ${
+                  globalStreamView === 'camera'
+                    ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Show all cameras"
+              >
+                <FiVideo size={16} />
+                <span className="text-xs font-medium hidden sm:inline">All Cameras</span>
+              </button>
+              <button
+                onClick={() => setGlobalStreamView('screen')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors ${
+                  globalStreamView === 'screen'
+                    ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Show all screen shares"
+              >
+                <FiMonitor size={16} />
+                <span className="text-xs font-medium hidden sm:inline">All Screens</span>
+              </button>
+            </div>
+
             {/* View Mode Toggle */}
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-300 dark:border-gray-600">
               <button
@@ -1323,6 +1442,7 @@ const LiveStreamViewer = ({ testid }) => {
                 userId={userId}
                 userName={user?.name || 'Unknown Student'}
                 userEmail={user?.email || 'No email'}
+                globalViewMode={globalStreamView}
               />
             );
           })}
