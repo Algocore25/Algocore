@@ -223,14 +223,17 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           // Set video properties
           videoRef.current.playbackRate = 1.0;
           videoRef.current.volume = 1; // Full volume
-          videoRef.current.muted = true; // Keep muted for autoplay (user can unmute with button)
+          // Respect current mute state - don't force mute if user has already unmuted
+          videoRef.current.muted = isMuted;
           
           // Enable all audio tracks in the stream (they're ready when user unmutes)
           const audioTracks = stream.getAudioTracks();
+          console.log(`[Viewer ${viewerIdRef.current}] Found ${audioTracks.length} audio track(s)`);
           audioTracks.forEach(track => {
             track.enabled = true;
-            console.log(`[Viewer ${viewerIdRef.current}] Enabled audio track:`, track.label);
+            console.log(`[Viewer ${viewerIdRef.current}] ✅ Enabled audio track:`, track.label, 'State:', track.readyState, 'Muted:', track.muted);
           });
+          console.log(`[Viewer ${viewerIdRef.current}] Video element muted state:`, videoRef.current.muted, 'Volume:', videoRef.current.volume);
           
           // Disable picture-in-picture
           if (videoRef.current.disablePictureInPicture !== undefined) {
@@ -537,12 +540,14 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
       // Also control audio tracks
       if (videoRef.current.srcObject) {
         const audioTracks = videoRef.current.srcObject.getAudioTracks();
+        console.log(`[Viewer ${viewerIdRef.current}] ${newMutedState ? 'Muting' : 'Unmuting'} ${audioTracks.length} audio track(s)`);
         audioTracks.forEach(track => {
           track.enabled = !newMutedState;
+          console.log(`[Viewer ${viewerIdRef.current}] Track ${track.label} enabled:`, track.enabled);
         });
       }
       
-      console.log(`[Viewer ${viewerIdRef.current}] Audio ${newMutedState ? 'muted' : 'unmuted'}`);
+      console.log(`[Viewer ${viewerIdRef.current}] ✅ Student audio ${newMutedState ? 'MUTED' : 'UNMUTED'} (video.muted: ${videoRef.current.muted}, volume: ${videoRef.current.volume})`);
     }
   };
 
