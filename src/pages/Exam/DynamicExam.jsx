@@ -43,6 +43,8 @@ const DynamicExam = () => {
   const detectionIntervalRef = useRef(null);
   const proctorStreamRef = useRef(null);
   const [proctorStream, setProctorStream] = useState(null);
+  const screenStreamRef = useRef(null);
+  const [screenStream, setScreenStream] = useState(null);
   const noPersonStartTime = useRef(null);
   const multiPersonStartTime = useRef(null);
   const violationTriggered = useRef({ noPerson: false, multiPerson: false });
@@ -62,11 +64,12 @@ const DynamicExam = () => {
 
   const { user } = useAuth();
 
-  // WebRTC livestream to admin - use state instead of ref
+  // WebRTC livestream to admin - use state instead of ref with dual streams (camera + screen)
   const { isStreaming, connectionStatus, activeConnections } = useWebRTCStream(
     testid,
     user?.uid,
     proctorStream,
+    screenStream,
     stage === "exam" && proctorSettings.enableVideoProctoring
   );
 
@@ -307,7 +310,89 @@ const DynamicExam = () => {
       if (videoRef.current) {
         try { videoRef.current.srcObject = null; } catch (_) {}
       }
+      // Cleanup screen share
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(t => t.stop());
+        screenStreamRef.current = null;
+      }
     } catch (_) {}
+  };
+
+  const startScreenShare = async () => {
+    try {
+      console.log('[ScreenShare] Requesting FULLSCREEN capture (entire monitor required)...');
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: 'monitor', // Prefer entire monitor
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
+          frameRate: { ideal: 30, max: 30 }
+        },
+        audio: false,
+        preferCurrentTab: false // Don't allow just current tab
+      });
+      
+      console.log('[ScreenShare] Got screen stream with tracks:', stream.getTracks().map(t => `${t.kind}:${t.label}`));
+      
+      // Validate that user shared entire screen/monitor, not just a window or tab
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && videoTrack.getSettings) {
+        const settings = videoTrack.getSettings();
+        console.log('[ScreenShare] Track settings:', settings);
+        
+        const displaySurface = settings.displaySurface;
+        console.log('[ScreenShare] Display surface:', displaySurface);
+        
+        // Check if it's a monitor (entire screen) share
+        if (displaySurface === 'window' || displaySurface === 'browser') {
+          console.error('[ScreenShare] User shared window/tab instead of full screen. Rejecting...');
+          stream.getTracks().forEach(track => track.stop());
+          setPermError('❌ You must share your ENTIRE SCREEN (not just a window or tab). Please try again and select "Entire Screen" or "Screen".');
+          return false;
+        }
+        
+        if (displaySurface !== 'monitor') {
+          console.warn('[ScreenShare] Display surface is not "monitor", but continuing:', displaySurface);
+          // Some browsers might not report 'monitor' exactly, so we'll allow if not window/browser
+        }
+      }
+      
+      screenStreamRef.current = stream;
+      setScreenStream(stream);
+      
+      // Handle when user stops sharing via browser UI
+      stream.getVideoTracks()[0].addEventListener('ended', () => {
+        console.log('[ScreenShare] User stopped screen sharing');
+        screenStreamRef.current = null;
+        setScreenStream(null);
+        
+        // If screen sharing stops during exam, show warning and potentially block
+        if (stage === 'exam') {
+          setToastMsg('⚠️ Screen sharing stopped! You must share your screen to continue the exam.');
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 5000);
+          
+          // Optionally force user back to permission screen
+          setStage('warning');
+        }
+      });
+      
+      console.log('[ScreenShare] ✅ Fullscreen sharing validated and started');
+      return true;
+    } catch (error) {
+      console.error('[ScreenShare] Error:', error);
+      // User cancelled or error occurred
+      if (error.name === 'NotAllowedError') {
+        console.log('[ScreenShare] User denied screen share permission');
+        setPermError('❌ Screen sharing is REQUIRED for this exam. Please grant permission to share your entire screen.');
+      } else if (error.name === 'NotSupportedError') {
+        setPermError('❌ Screen sharing is not supported in your browser. Please use Chrome, Edge, or Firefox.');
+      } else {
+        console.error('[ScreenShare] Screen share error:', error);
+        setPermError('❌ Failed to start screen sharing. Please try again.');
+      }
+      return false;
+    }
   };
 
   const enumerateDevices = async () => {
@@ -441,10 +526,23 @@ const DynamicExam = () => {
         return;
       }
     }
-    setPermVerified(true);
     // Save stream for proctoring but DON'T stop tracks
     proctorStreamRef.current = streamRef.current;
     setProctorStream(streamRef.current); // Update state to trigger WebRTC hook
+    
+    // Request screen sharing (REQUIRED for video proctoring - must share full screen)
+    if (proctorSettings.enableVideoProctoring) {
+      const screenShareSuccess = await startScreenShare();
+      if (!screenShareSuccess) {
+        // Screen share failed or user didn't share full screen - don't allow exam entry
+        setPermError('❌ You must share your ENTIRE SCREEN to proceed with this exam. Click "Start Permission Check" to try again.');
+        return; // Block exam entry
+      }
+    }
+    
+    // All permissions verified
+    setPermVerified(true);
+    
     // Keep video reference but don't cleanup
     setShowPermModal(false);
     
@@ -1454,56 +1552,82 @@ const DynamicExam = () => {
       )}
 
       {showPermModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden my-4 sm:my-8 max-h-[95vh] flex flex-col">
             {/* Header */}
-            <div className="px-6 py-5 bg-blue-600 dark:bg-blue-700 border-b border-blue-700 dark:border-blue-800">
-              <h2 className="text-xl font-semibold text-white">Device Verification</h2>
-              <p className="text-blue-100 text-sm mt-1">Verify your camera, microphone, and AI model</p>
+            <div className="px-4 sm:px-6 py-4 sm:py-5 bg-blue-600 dark:bg-blue-700 border-b border-blue-700 dark:border-blue-800 flex-shrink-0">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Device Verification & Screen Sharing</h2>
+              <p className="text-blue-100 text-xs sm:text-sm mt-1">Verify your camera, microphone, AI model, and enable full screen sharing</p>
             </div>
 
-            {/* Progress Steps */}
-            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-center gap-8 max-w-xl mx-auto">
-                <div className="flex items-center gap-2">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${camOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                    {camOK ? '✓' : '1'}
-                  </div>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Camera</span>
-                </div>
-                <div className={`h-0.5 w-16 ${camOK ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${micOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                    {micOK ? '✓' : '2'}
-                  </div>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Microphone</span>
-                </div>
-                <div className={`h-0.5 w-16 ${modelReady ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${modelReady ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
-                    {modelReady ? '✓' : '3'}
-                  </div>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">AI Model</span>
+            {/* Important Notice */}
+            <div className="px-4 sm:px-6 py-3 bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 flex-shrink-0">
+              <div className="flex items-start gap-2 sm:gap-3">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-orange-800 dark:text-orange-300">
+                    ⚠️ IMPORTANT: Share ENTIRE SCREEN
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-orange-700 dark:text-orange-400 mt-1">
+                    Select "Entire Screen" or "Screen". Window/tab sharing will be rejected.
+                  </p>
                 </div>
               </div>
             </div>
 
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Camera Section */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Camera</label>
-                    <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${camOK ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : camOK === false ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
-                      {camOK ? '✓ Connected' : camOK === false ? '✗ Blocked' : 'Checking...'}
-                    </span>
+            {/* Progress Steps */}
+            <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 overflow-x-auto">
+              <div className="flex items-center justify-center gap-2 sm:gap-4 min-w-max mx-auto">
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-semibold ${camOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                    {camOK ? '✓' : '1'}
                   </div>
+                  <span className="text-[10px] sm:text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">Camera</span>
+                </div>
+                <div className={`h-0.5 w-4 sm:w-8 ${camOK ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-semibold ${micOK ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                    {micOK ? '✓' : '2'}
+                  </div>
+                  <span className="text-[10px] sm:text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">Mic</span>
+                </div>
+                <div className={`h-0.5 w-4 sm:w-8 ${modelReady ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-semibold ${modelReady ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                    {modelReady ? '✓' : '3'}
+                  </div>
+                  <span className="text-[10px] sm:text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">AI</span>
+                </div>
+                <div className={`h-0.5 w-4 sm:w-8 ${screenStream ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-semibold ${screenStream ? 'bg-green-500 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}>
+                    {screenStream ? '✓' : '4'}
+                  </div>
+                  <span className="text-[10px] sm:text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">Screen</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4 sm:p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  {/* Camera Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">Camera</label>
+                      <span className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium ${camOK ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : camOK === false ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
+                        {camOK ? '✓ Connected' : camOK === false ? '✗ Blocked' : 'Checking...'}
+                      </span>
+                    </div>
                   
                   {videoDevices.length > 0 && (
                     <select 
                       value={selectedVideoDevice} 
                       onChange={(e) => { setSelectedVideoDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       {videoDevices.map((device, idx) => (
                         <option key={device.deviceId} value={device.deviceId}>
@@ -1526,20 +1650,20 @@ const DynamicExam = () => {
                   </div>
                 </div>
 
-                {/* Microphone Section */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Microphone</label>
-                    <span className={`px-2.5 py-0.5 rounded text-xs font-medium ${micOK ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : micOK === false ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
-                      {micOK ? '✓ Connected' : micOK === false ? '✗ Blocked' : 'Checking...'}
-                    </span>
-                  </div>
+                  {/* Microphone Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">Microphone</label>
+                      <span className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium ${micOK ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : micOK === false ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
+                        {micOK ? '✓ Connected' : micOK === false ? '✗ Blocked' : 'Checking...'}
+                      </span>
+                    </div>
 
                   {audioDevices.length > 0 && (
                     <select 
                       value={selectedAudioDevice} 
                       onChange={(e) => { setSelectedAudioDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       {audioDevices.map((device, idx) => (
                         <option key={device.deviceId} value={device.deviceId}>
@@ -1550,82 +1674,83 @@ const DynamicExam = () => {
                   )}
 
                   <div className="space-y-3">
-                    <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-4 border border-gray-200 dark:border-gray-700">
-                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Audio Level</p>
-                      <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden relative">
+                    <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] sm:text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Audio Level</p>
+                      <div className="h-8 sm:h-10 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden relative">
                         <div className="absolute inset-y-0 left-0 bg-green-500 transition-all duration-150" style={{ width: `${audioLevel}%` }}></div>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Speak to test microphone</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-2">Speak to test microphone</p>
                     </div>
 
                     {/* AI Model Status */}
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-md p-4 border border-blue-200 dark:border-blue-800">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">AI Proctoring Model</p>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-md p-3 sm:p-4 border border-blue-200 dark:border-blue-800">
+                      <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">AI Proctoring Model</p>
                       <div className="flex items-center gap-2">
                         {aiLoading && (
                           <>
-                            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                            <span className="text-sm text-gray-700 dark:text-gray-300">Loading model...</span>
+                            <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+                            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Loading model...</span>
                           </>
                         )}
                         {aiError && (
                           <>
-                            <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                             </svg>
-                            <span className="text-sm text-red-600">Error: {aiError}</span>
+                            <span className="text-xs sm:text-sm text-red-600">Error: {aiError}</span>
                           </>
                         )}
                         {modelReady && (
                           <>
-                            <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                             </svg>
-                            <span className="text-sm text-green-600 font-medium">Model Ready</span>
+                            <span className="text-xs sm:text-sm text-green-600 font-medium">Model Ready</span>
                           </>
                         )}
                       </div>
                     </div>
+                    </div>
                   </div>
                 </div>
+
+                {/* Error Message */}
+                {permError && (
+                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-red-700 dark:text-red-300">
+                    <p className="text-xs sm:text-sm">{permError}</p>
+                  </div>
+                )}
+
+                {/* Success Message */}
+                {camOK && micOK && modelReady && (
+                  <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                    <p className="text-xs sm:text-sm font-medium text-green-800 dark:text-green-200">✓ All devices ready</p>
+                  </div>
+                )}
               </div>
-
-              {/* Error Message */}
-              {permError && (
-                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-red-700 dark:text-red-300">
-                  <p className="text-sm">{permError}</p>
-                </div>
-              )}
-
-              {/* Success Message */}
-              {camOK && micOK && modelReady && (
-                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-                  <p className="text-sm font-medium text-green-800 dark:text-green-200">✓ All devices ready</p>
-                </div>
-              )}
             </div>
 
             {/* Footer Actions */}
-            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center gap-3">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 flex-shrink-0">
               <button 
                 onClick={startPermissionCheck} 
                 disabled={isChecking} 
-                className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto px-4 py-2 text-xs sm:text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isChecking ? "Testing..." : "Retest"}
               </button>
               
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                 <button 
                   onClick={closePermissionModal} 
-                  className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600"
+                  className="w-full sm:w-auto px-4 py-2 text-xs sm:text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancel
                 </button>
                 <button 
                   onClick={continueAfterPermissions} 
                   disabled={proctorSettings.enableVideoProctoring && (!camOK || !micOK || !modelReady)} 
-                  className="px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full sm:w-auto px-5 py-2 text-xs sm:text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Start Exam
                 </button>

@@ -5,8 +5,9 @@ import { database } from '../../firebase';
 /**
  * Redesigned WebRTC streaming hook - Simplified and more robust
  * Architecture: Student creates persistent offer, Admin creates answer
+ * Supports dual stream: camera + screen share
  */
-export const useWebRTCStream = (testid, userId, localStream, isActive = false) => {
+export const useWebRTCStream = (testid, userId, localStream, screenStream = null, isActive = false) => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [activeConnections, setActiveConnections] = useState(0);
   const peerConnectionsRef = useRef(new Map());
@@ -110,7 +111,7 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
         }
 
         console.log('[WebRTC] Setting up connection for viewer:', viewerId);
-        await setupPeerConnection(viewerId, localStream);
+        await setupPeerConnection(viewerId, localStream, screenStream);
       }
     });
 
@@ -121,12 +122,13 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
 
     // Cleanup on unmount
     return cleanup;
-  }, [isActive, localStream, testid, userId]);
+  }, [isActive, localStream, screenStream, testid, userId]);
 
   // Setup individual peer connection
-  const setupPeerConnection = async (viewerId, stream) => {
+  const setupPeerConnection = async (viewerId, cameraStream, screenStream = null) => {
     try {
       console.log('[WebRTC] Creating peer connection for:', viewerId);
+      console.log('[WebRTC] Camera stream:', !!cameraStream, 'Screen stream:', !!screenStream);
 
       // Close existing connection if any
       const existingPc = peerConnectionsRef.current.get(viewerId);
@@ -138,28 +140,55 @@ export const useWebRTCStream = (testid, userId, localStream, isActive = false) =
       peerConnectionsRef.current.set(viewerId, pc);
       iceCandidateQueuesRef.current.set(viewerId, []);
 
-      // Add tracks with transceiver for better control
-      stream.getTracks().forEach(track => {
-        const sender = pc.addTrack(track, stream);
-        console.log('[WebRTC] Added track:', track.kind, 'with label:', track.label);
-        
-        // Set encoding parameters for better quality
-        if (track.kind === 'video') {
-          const parameters = sender.getParameters();
-          if (!parameters.encodings || parameters.encodings.length === 0) {
-            parameters.encodings = [{}];
+      // Add camera tracks first
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => {
+          const sender = pc.addTrack(track, cameraStream);
+          console.log('[WebRTC] Added CAMERA track:', track.kind, 'with label:', track.label);
+          
+          // Set encoding parameters for better quality
+          if (track.kind === 'video') {
+            const parameters = sender.getParameters();
+            if (!parameters.encodings || parameters.encodings.length === 0) {
+              parameters.encodings = [{}];
+            }
+            
+            // Optimize video encoding
+            parameters.encodings[0].maxBitrate = 2000000; // 2 Mbps max
+            parameters.encodings[0].maxFramerate = 30;
+            parameters.encodings[0].scaleResolutionDownBy = 1; // No downscaling
+            
+            sender.setParameters(parameters)
+              .then(() => console.log('[WebRTC] Camera video encoding parameters set'))
+              .catch(e => console.error('[WebRTC] Failed to set camera encoding params:', e));
           }
+        });
+      }
+      
+      // Add screen share tracks if available
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => {
+          const sender = pc.addTrack(track, screenStream);
+          console.log('[WebRTC] Added SCREEN SHARE track:', track.kind, 'with label:', track.label);
           
-          // Optimize video encoding
-          parameters.encodings[0].maxBitrate = 2000000; // 2 Mbps max
-          parameters.encodings[0].maxFramerate = 30;
-          parameters.encodings[0].scaleResolutionDownBy = 1; // No downscaling
-          
-          sender.setParameters(parameters)
-            .then(() => console.log('[WebRTC] Video encoding parameters set'))
-            .catch(e => console.error('[WebRTC] Failed to set encoding params:', e));
-        }
-      });
+          // Set encoding parameters for screen share (higher quality for screen content)
+          if (track.kind === 'video') {
+            const parameters = sender.getParameters();
+            if (!parameters.encodings || parameters.encodings.length === 0) {
+              parameters.encodings = [{}];
+            }
+            
+            // Screen share needs higher bitrate and frame rate for clarity
+            parameters.encodings[0].maxBitrate = 3000000; // 3 Mbps for screen
+            parameters.encodings[0].maxFramerate = 30;
+            parameters.encodings[0].scaleResolutionDownBy = 1;
+            
+            sender.setParameters(parameters)
+              .then(() => console.log('[WebRTC] Screen share encoding parameters set'))
+              .catch(e => console.error('[WebRTC] Failed to set screen encoding params:', e));
+          }
+        });
+      }
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {

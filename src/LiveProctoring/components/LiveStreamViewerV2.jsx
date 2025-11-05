@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ref, onValue, set, remove, onDisconnect, get } from 'firebase/database';
 import { database } from '../../firebase';
-import { FiVideo, FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw, FiUser, FiSearch, FiFilter, FiGrid, FiList, FiMic, FiMicOff } from 'react-icons/fi';
+import { FiVideo, FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw, FiUser, FiSearch, FiFilter, FiGrid, FiList, FiMic, FiMicOff, FiMonitor } from 'react-icons/fi';
 
 /**
  * Redesigned Student Stream Card - Simplified architecture
  */
 const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const videoRef = useRef(null);
+  const screenVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const [connectionState, setConnectionState] = useState('new');
   const [isMuted, setIsMuted] = useState(true); // Muted by default to allow autoplay (browser policy)
@@ -18,6 +19,12 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
   const isSetupRef = useRef(false);
   const isPlayingRef = useRef(false);
   const isCleaningUpRef = useRef(false);
+  
+  // Screen share state
+  const [viewMode, setViewMode] = useState('camera'); // 'camera' or 'screen'
+  const [hasScreenShare, setHasScreenShare] = useState(false);
+  const isScreenPlayingRef = useRef(false);
+  const videoTrackCountRef = useRef(0); // Track number of video tracks received
   
   // Admin audio streaming state
   const [isSpeakingToStudent, setIsSpeakingToStudent] = useState(false);
@@ -73,6 +80,8 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
     isCleaningUpRef.current = true;
     isSetupRef.current = false;
     isPlayingRef.current = false;
+    isScreenPlayingRef.current = false;
+    videoTrackCountRef.current = 0; // Reset track counter
     
     // Stop and remove all tracks from video element
     if (videoRef.current && videoRef.current.srcObject) {
@@ -82,6 +91,16 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
         console.log(`[Viewer ${viewerIdRef.current}] Stopped track:`, track.kind);
       });
       videoRef.current.srcObject = null;
+    }
+    
+    // Stop and remove all tracks from screen share video element
+    if (screenVideoRef.current && screenVideoRef.current.srcObject) {
+      const stream = screenVideoRef.current.srcObject;
+      stream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`[Viewer ${viewerIdRef.current}] Stopped screen track:`, track.kind);
+      });
+      screenVideoRef.current.srcObject = null;
     }
     
     // Close peer connection with all event handlers removed
@@ -114,6 +133,9 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
     // Clear ICE candidate queue
     iceCandidateQueueRef.current = [];
+    
+    // Reset screen share state
+    setHasScreenShare(false);
 
     setConnectionState('closed');
     
@@ -174,6 +196,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
       pc.ontrack = (event) => {
         console.log(`[Viewer ${viewerIdRef.current}] ===== TRACK RECEIVED =====`);
         console.log(`[Viewer ${viewerIdRef.current}] Track kind:`, event.track.kind);
+        console.log(`[Viewer ${viewerIdRef.current}] Track label:`, event.track.label);
         console.log(`[Viewer ${viewerIdRef.current}] Track readyState:`, event.track.readyState);
         console.log(`[Viewer ${viewerIdRef.current}] Track enabled:`, event.track.enabled);
         console.log(`[Viewer ${viewerIdRef.current}] Track muted:`, event.track.muted);
@@ -188,6 +211,41 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
         console.log(`[Viewer ${viewerIdRef.current}] Stream ID:`, stream.id);
         console.log(`[Viewer ${viewerIdRef.current}] Stream tracks:`, tracks.map(t => `${t.kind}:${t.readyState}`));
         console.log(`[Viewer ${viewerIdRef.current}] Stream active:`, stream.active);
+        console.log(`[Viewer ${viewerIdRef.current}] Track label:`, event.track.label);
+        console.log(`[Viewer ${viewerIdRef.current}] Track ID:`, event.track.id);
+        
+        // Detect if this is a screen share stream based on multiple indicators
+        let isScreenShare = false;
+        
+        if (event.track.kind === 'video') {
+          // Count video tracks - first one is camera, second is screen share
+          const currentVideoTrackCount = videoTrackCountRef.current;
+          videoTrackCountRef.current += 1;
+          
+          console.log(`[Viewer ${viewerIdRef.current}] Video track #${currentVideoTrackCount + 1}`);
+          
+          // Check multiple indicators
+          const trackLabel = event.track.label.toLowerCase();
+          const labelIndicatesScreen = trackLabel.includes('screen') || 
+                                       trackLabel.includes('window') ||
+                                       trackLabel.includes('monitor') ||
+                                       trackLabel.includes('display') ||
+                                       trackLabel.includes('web contents') ||
+                                       trackLabel.includes('chrome') ||
+                                       stream.id.includes('screen');
+          
+          const hasDisplaySurface = event.track.getSettings && 
+                                   event.track.getSettings().displaySurface !== undefined;
+          
+          // Primary: If this is the second video track, it's likely screen share
+          // Secondary: Check label and settings
+          isScreenShare = (currentVideoTrackCount >= 1) || labelIndicatesScreen || hasDisplaySurface;
+          
+          console.log(`[Viewer ${viewerIdRef.current}] Detection - Count: ${currentVideoTrackCount}, Label: ${labelIndicatesScreen}, DisplaySurface: ${hasDisplaySurface}`);
+        }
+        
+        console.log(`[Viewer ${viewerIdRef.current}] Stream type:`, isScreenShare ? 'SCREEN SHARE' : 'CAMERA');
+        console.log(`[Viewer ${viewerIdRef.current}] Track settings:`, event.track.getSettings ? event.track.getSettings() : 'N/A');
         
         // Ensure track is enabled and not muted
         event.track.enabled = true;
@@ -198,12 +256,21 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
           console.log(`[Viewer ${viewerIdRef.current}] Audio track received and enabled`);
         }
         
-        if (videoRef.current) {
+        // Route to appropriate video element based on stream type
+        const targetVideoRef = isScreenShare ? screenVideoRef : videoRef;
+        const targetPlayingRef = isScreenShare ? isScreenPlayingRef : isPlayingRef;
+        
+        if (isScreenShare) {
+          setHasScreenShare(true);
+          console.log(`[Viewer ${viewerIdRef.current}] Screen share detected and available`);
+        }
+        
+        if (targetVideoRef.current) {
           // Don't stop existing tracks if stream is already set - just update if needed
-          const currentStream = videoRef.current.srcObject;
+          const currentStream = targetVideoRef.current.srcObject;
           
           if (!currentStream || currentStream.id !== stream.id) {
-            console.log(`[Viewer ${viewerIdRef.current}] Setting new stream to video element`);
+            console.log(`[Viewer ${viewerIdRef.current}] Setting new ${isScreenShare ? 'screen' : 'camera'} stream to video element`);
             
             // Stop old tracks
             if (currentStream) {
@@ -214,17 +281,17 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             }
             
             // Set new stream
-            videoRef.current.srcObject = stream;
-            console.log(`[Viewer ${viewerIdRef.current}] srcObject set to video element`);
+            targetVideoRef.current.srcObject = stream;
+            console.log(`[Viewer ${viewerIdRef.current}] srcObject set to ${isScreenShare ? 'screen' : 'camera'} video element`);
           } else {
             console.log(`[Viewer ${viewerIdRef.current}] Stream already set, track will be added automatically`);
           }
           
           // Set video properties
-          videoRef.current.playbackRate = 1.0;
-          videoRef.current.volume = 1; // Full volume
+          targetVideoRef.current.playbackRate = 1.0;
+          targetVideoRef.current.volume = 1; // Full volume
           // Respect current mute state - don't force mute if user has already unmuted
-          videoRef.current.muted = isMuted;
+          targetVideoRef.current.muted = isMuted;
           
           // Enable all audio tracks in the stream (they're ready when user unmutes)
           const audioTracks = stream.getAudioTracks();
@@ -233,42 +300,42 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             track.enabled = true;
             console.log(`[Viewer ${viewerIdRef.current}] ✅ Enabled audio track:`, track.label, 'State:', track.readyState, 'Muted:', track.muted);
           });
-          console.log(`[Viewer ${viewerIdRef.current}] Video element muted state:`, videoRef.current.muted, 'Volume:', videoRef.current.volume);
+          console.log(`[Viewer ${viewerIdRef.current}] Video element muted state:`, targetVideoRef.current.muted, 'Volume:', targetVideoRef.current.volume);
           
           // Disable picture-in-picture
-          if (videoRef.current.disablePictureInPicture !== undefined) {
-            videoRef.current.disablePictureInPicture = true;
+          if (targetVideoRef.current.disablePictureInPicture !== undefined) {
+            targetVideoRef.current.disablePictureInPicture = true;
           }
           
           // Wait a bit for the stream to be ready, then play
           setTimeout(async () => {
-            if (!videoRef.current || isPlayingRef.current) return;
+            if (!targetVideoRef.current || targetPlayingRef.current) return;
             
             try {
-              console.log(`[Viewer ${viewerIdRef.current}] Video element readyState:`, videoRef.current.readyState);
-              console.log(`[Viewer ${viewerIdRef.current}] Video element videoWidth:`, videoRef.current.videoWidth);
-              console.log(`[Viewer ${viewerIdRef.current}] Video element videoHeight:`, videoRef.current.videoHeight);
+              console.log(`[Viewer ${viewerIdRef.current}] ${isScreenShare ? 'Screen' : 'Camera'} element readyState:`, targetVideoRef.current.readyState);
+              console.log(`[Viewer ${viewerIdRef.current}] ${isScreenShare ? 'Screen' : 'Camera'} element videoWidth:`, targetVideoRef.current.videoWidth);
+              console.log(`[Viewer ${viewerIdRef.current}] ${isScreenShare ? 'Screen' : 'Camera'} element videoHeight:`, targetVideoRef.current.videoHeight);
               
-              isPlayingRef.current = true;
-              await videoRef.current.play();
-              console.log(`[Viewer ${viewerIdRef.current}] ✅ Video playback started successfully`);
+              targetPlayingRef.current = true;
+              await targetVideoRef.current.play();
+              console.log(`[Viewer ${viewerIdRef.current}] ✅ ${isScreenShare ? 'Screen share' : 'Camera'} playback started successfully`);
               setConnectionState('connected');
               setError(null);
               
               // Log dimensions after play
               setTimeout(() => {
-                if (videoRef.current) {
-                  console.log(`[Viewer ${viewerIdRef.current}] After play - videoWidth:`, videoRef.current.videoWidth);
-                  console.log(`[Viewer ${viewerIdRef.current}] After play - videoHeight:`, videoRef.current.videoHeight);
+                if (targetVideoRef.current) {
+                  console.log(`[Viewer ${viewerIdRef.current}] After play - videoWidth:`, targetVideoRef.current.videoWidth);
+                  console.log(`[Viewer ${viewerIdRef.current}] After play - videoHeight:`, targetVideoRef.current.videoHeight);
                   
-                  if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+                  if (targetVideoRef.current.videoWidth === 0 || targetVideoRef.current.videoHeight === 0) {
                     console.error(`[Viewer ${viewerIdRef.current}] ⚠️ VIDEO HAS NO DIMENSIONS - BLACK SCREEN LIKELY`);
                   }
                 }
               }, 1000);
             } catch (error) {
-              console.error(`[Viewer ${viewerIdRef.current}] Video play error:`, error);
-              isPlayingRef.current = false;
+              console.error(`[Viewer ${viewerIdRef.current}] ${isScreenShare ? 'Screen' : 'Camera'} play error:`, error);
+              targetPlayingRef.current = false;
               if (error.name === 'NotAllowedError') {
                 setError('Autoplay blocked. Click retry to play.');
               } else if (error.name !== 'AbortError') {
@@ -518,6 +585,9 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
     isSetupRef.current = false;
     isPlayingRef.current = false;
     isCleaningUpRef.current = false;
+    isScreenPlayingRef.current = false;
+    videoTrackCountRef.current = 0;
+    setHasScreenShare(false);
     
     const initTimer = setTimeout(() => {
       setupConnection();
@@ -812,15 +882,18 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
   return (
     <div id={`stream-${userId}`} className="relative bg-white dark:bg-gray-900 rounded-lg overflow-hidden shadow-lg border border-gray-200 dark:border-gray-700 transition-colors scroll-mt-4">
-      {/* Video element */}
+      {/* Video elements - Camera and Screen Share */}
       <div className="relative aspect-video bg-gray-100 dark:bg-black transition-colors">
+        {/* Camera Video */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={isMuted}
           preload="auto"
-          className="w-full h-full object-cover"
+          className={`w-full h-full object-cover transition-opacity duration-300 ${
+            viewMode === 'camera' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'
+          }`}
           style={{
             backgroundColor: '#000',
             willChange: 'transform',
@@ -829,47 +902,42 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             minHeight: '100%'
           }}
           onLoadedMetadata={(e) => {
-            console.log(`[Viewer ${viewerIdRef.current}] Video metadata loaded`);
+            console.log(`[Viewer ${viewerIdRef.current}] Camera metadata loaded`);
             if (e.target) {
               e.target.playbackRate = 1.0;
               e.target.volume = 1;
-              // Keep muted for autoplay - user can unmute with button
-              console.log(`[Viewer ${viewerIdRef.current}] Video volume set to:`, e.target.volume);
-              console.log(`[Viewer ${viewerIdRef.current}] Video muted:`, e.target.muted);
+              console.log(`[Viewer ${viewerIdRef.current}] Camera volume set to:`, e.target.volume);
+              console.log(`[Viewer ${viewerIdRef.current}] Camera muted:`, e.target.muted);
             }
           }}
           onCanPlay={() => {
-            console.log(`[Viewer ${viewerIdRef.current}] Video can play`);
+            console.log(`[Viewer ${viewerIdRef.current}] Camera can play`);
             if (videoRef.current && !isPlayingRef.current) {
-              // Video is ready - keep muted for autoplay compliance
               videoRef.current.volume = 1;
-              
-              // Note: Don't call play() here - let the ontrack handler manage playback
-              // to avoid concurrent play() calls causing AbortError
             }
           }}
           onVolumeChange={() => {
             if (videoRef.current) {
-              console.log(`[Viewer ${viewerIdRef.current}] Volume changed to:`, videoRef.current.volume, 'Muted:', videoRef.current.muted);
+              console.log(`[Viewer ${viewerIdRef.current}] Camera volume changed to:`, videoRef.current.volume, 'Muted:', videoRef.current.muted);
             }
           }}
           onPlaying={() => {
-            console.log(`[Viewer ${viewerIdRef.current}] Video is playing`);
-            isPlayingRef.current = false; // Reset flag once playing
+            console.log(`[Viewer ${viewerIdRef.current}] Camera is playing`);
+            isPlayingRef.current = false;
           }}
           onError={(e) => {
-            console.error(`[Viewer ${viewerIdRef.current}] Video error:`, e);
-            setError('Video playback error');
+            console.error(`[Viewer ${viewerIdRef.current}] Camera error:`, e);
+            if (viewMode === 'camera') setError('Camera playback error');
           }}
           onStalled={() => {
-            console.warn(`[Viewer ${viewerIdRef.current}] Video stalled, attempting recovery...`);
+            console.warn(`[Viewer ${viewerIdRef.current}] Camera stalled, attempting recovery...`);
             if (videoRef.current && videoRef.current.readyState < 3 && !isPlayingRef.current) {
               isPlayingRef.current = true;
               setTimeout(() => {
                 if (videoRef.current) {
                   videoRef.current.load();
                   videoRef.current.play().catch(e => {
-                    console.error(`[Viewer ${viewerIdRef.current}] Recovery play failed:`, e);
+                    console.error(`[Viewer ${viewerIdRef.current}] Camera recovery play failed:`, e);
                     isPlayingRef.current = false;
                   });
                 }
@@ -877,10 +945,51 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             }
           }}
           onWaiting={() => {
-            console.log(`[Viewer ${viewerIdRef.current}] Video buffering...`);
+            console.log(`[Viewer ${viewerIdRef.current}] Camera buffering...`);
           }}
           onSuspend={() => {
-            console.log(`[Viewer ${viewerIdRef.current}] Video suspended`);
+            console.log(`[Viewer ${viewerIdRef.current}] Camera suspended`);
+          }}
+        />
+        
+        {/* Screen Share Video */}
+        <video
+          ref={screenVideoRef}
+          autoPlay
+          playsInline
+          muted={isMuted}
+          preload="auto"
+          className={`w-full h-full object-contain transition-opacity duration-300 ${
+            viewMode === 'screen' ? 'opacity-100' : 'opacity-0 absolute inset-0 pointer-events-none'
+          }`}
+          style={{
+            backgroundColor: '#000',
+            willChange: 'transform',
+            transform: 'translateZ(0)',
+            minWidth: '100%',
+            minHeight: '100%'
+          }}
+          onLoadedMetadata={(e) => {
+            console.log(`[Viewer ${viewerIdRef.current}] Screen metadata loaded`);
+            if (e.target) {
+              e.target.playbackRate = 1.0;
+              e.target.volume = 1;
+              console.log(`[Viewer ${viewerIdRef.current}] Screen volume set to:`, e.target.volume);
+            }
+          }}
+          onCanPlay={() => {
+            console.log(`[Viewer ${viewerIdRef.current}] Screen can play`);
+            if (screenVideoRef.current && !isScreenPlayingRef.current) {
+              screenVideoRef.current.volume = 1;
+            }
+          }}
+          onPlaying={() => {
+            console.log(`[Viewer ${viewerIdRef.current}] Screen is playing`);
+            isScreenPlayingRef.current = false;
+          }}
+          onError={(e) => {
+            console.error(`[Viewer ${viewerIdRef.current}] Screen error:`, e);
+            if (viewMode === 'screen') setError('Screen share playback error');
           }}
         />
         
@@ -922,6 +1031,14 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
         {/* Status indicator */}
         <div className={`absolute top-3 right-3 w-3 h-3 rounded-full ${getStatusColor()}`}></div>
         
+        {/* Screen share indicator - show when screen share is available */}
+        {hasScreenShare && connectionState === 'connected' && (
+          <div className="absolute top-3 left-3 bg-green-500 bg-opacity-90 text-white px-2 py-1 rounded-md flex items-center gap-1.5 text-xs font-medium">
+            <FiMonitor size={12} />
+            <span>Screen Available</span>
+          </div>
+        )}
+        
         {/* Muted indicator - show when connected and muted */}
         {connectionState === 'connected' && isMuted && (
           <div className="absolute bottom-3 left-3 bg-black bg-opacity-70 text-white px-3 py-1.5 rounded-md flex items-center gap-2 text-sm">
@@ -933,7 +1050,7 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
 
       {/* Controls */}
       <div className="p-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 transition-colors">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex-1 min-w-0">
             <p className="text-gray-900 dark:text-white font-medium text-sm truncate">{userName}</p>
             <p className="text-gray-600 dark:text-gray-400 text-xs truncate">{userEmail}</p>
@@ -969,6 +1086,39 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
             </button>
           </div>
         </div>
+        
+        {/* Camera/Screen Toggle */}
+        {hasScreenShare && (
+          <div className="flex items-center gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">View:</span>
+            <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-900 p-1 rounded-md">
+              <button
+                onClick={() => setViewMode('camera')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  viewMode === 'camera'
+                    ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Show camera"
+              >
+                <FiVideo size={14} />
+                Camera
+              </button>
+              <button
+                onClick={() => setViewMode('screen')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  viewMode === 'screen'
+                    ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Show screen share"
+              >
+                <FiMonitor size={14} />
+                Screen
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
