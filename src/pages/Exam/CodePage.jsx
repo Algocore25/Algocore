@@ -30,6 +30,7 @@ import { setItemWithExpiry, getItemWithExpiry } from "../../utils/storageWithExp
 
 function CodePage({ question }) {
   const [code, setCode] = useState("");
+  const [showResetModal, setShowResetModal] = useState(false);
   const [activeTab, setActiveTab] = useState('description');
   const [output, setOutput] = useState(null);
   const [testResults, setTestResults] = useState([]);
@@ -557,6 +558,15 @@ function CodePage({ question }) {
     // Note: loadCode will be called in useEffect when selectedLanguage changes
   }, []);
 
+  // Reset code to the original template for the selected language
+  const handleResetCode = useCallback(async () => {
+    const template = languageTemplates[selectedLanguage] || "";
+    setCode(template);
+    await saveCode(template);
+    toast.success('Code reset to default template');
+    setShowResetModal(false);
+  }, [selectedLanguage, saveCode]);
+
   // Load code when component mounts or language changes
   useEffect(() => {
     if (questionData && userId) { // Only load after question data is available
@@ -1026,6 +1036,14 @@ function CodePage({ question }) {
           </div>
           {/* Right: Run/Submit/Stats */}
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowResetModal(true)}
+              className="bg-gray-200 hover:bg-gray-300 dark:bg-dark-tertiary dark:hover:bg-dark-tertiary/80 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors duration-150"
+              title="Reset to default template"
+            >
+              <Icons.History />
+              Reset Code
+            </button>
 
             <button
               onClick={runCode}
@@ -1068,6 +1086,32 @@ function CodePage({ question }) {
           />
         </div>
       </div>
+      {showResetModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Reset Code</h3>
+          </div>
+          <div className="px-6 py-5 text-sm text-gray-700 dark:text-gray-300">
+            This will replace your current code with the default template for the selected language. This action cannot be undone.
+          </div>
+          <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+            <button
+              onClick={() => setShowResetModal(false)}
+              className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleResetCode}
+              className="px-5 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-md"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+      )}
     </div>
   );
 }

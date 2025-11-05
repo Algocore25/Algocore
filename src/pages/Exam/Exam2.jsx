@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useTheme } from '../../context/ThemeContext';
 
 import { languageTemplates } from '../constants';
 
@@ -25,7 +26,9 @@ import {
     FiXCircle,
     FiMaximize,
     FiMinimize,
-    FiRadio
+    FiRadio,
+    FiSun,
+    FiMoon
 } from 'react-icons/fi';
 import DynamicComponent from './DynamicComponent';
 import { useParams } from 'react-router-dom';
@@ -35,6 +38,7 @@ import { useAuth } from '../../context/AuthContext';
 const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setviolation, setIsViolationReady, videoRef, detections, isProctoringActive }) => {
 
     const { testid } = useParams();
+    const { theme, toggleTheme } = useTheme();
     const [answeredQuestions, setAnsweredQuestions] = useState({});
     const [activeTab, setActiveTab] = useState('description');
 
@@ -560,6 +564,19 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                 />
                             </div>
                         </div>
+
+                        {/* Theme toggle */}
+                        <button
+                            onClick={toggleTheme}
+                            className="group flex items-center justify-center w-9 h-9 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200"
+                            title="Toggle theme"
+                        >
+                            {theme === 'dark' ? (
+                                <FiSun className="w-4 h-4" />
+                            ) : (
+                                <FiMoon className="w-4 h-4" />
+                            )}
+                        </button>
 
                         {/* Navigation buttons */}
                         <div className="flex items-center space-x-2">

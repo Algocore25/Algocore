@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import PageLayout from './components/PageLayout';
@@ -28,12 +28,44 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
 
+// Route-aware guard to disable copy/paste except on admin-required routes
+const CopyPasteGuard = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const requiresAdmin = /^\/(admin(|monitor|results)|testedit|exammonitor|adminresults)(\/|$)/i.test(pathname);
+    if (requiresAdmin) {
+      return;
+    }
+
+    const prevent = (event) => event.preventDefault();
+    document.addEventListener('contextmenu', prevent);
+    document.addEventListener('copy', prevent);
+    document.addEventListener('cut', prevent);
+    document.addEventListener('paste', prevent);
+    document.addEventListener('selectstart', prevent);
+    document.addEventListener('dragstart', prevent);
+
+    return () => {
+      document.removeEventListener('contextmenu', prevent);
+      document.removeEventListener('copy', prevent);
+      document.removeEventListener('cut', prevent);
+      document.removeEventListener('paste', prevent);
+      document.removeEventListener('selectstart', prevent);
+      document.removeEventListener('dragstart', prevent);
+    };
+  }, [pathname]);
+
+  return null;
+};
+
 function App() {
   return (
     <BrowserRouter basename='/'>
       <ActivityTracker> {/* Wrap everything with ActivityTracker */}
         <Toaster position="top-center" reverseOrder={false} />
         <PageLayout>
+          <CopyPasteGuard />
           <Suspense fallback={<LoadingPage message="Loading page, please wait..." />}>
             <Routes>
               <Route path="/" element={<HomePage />} />

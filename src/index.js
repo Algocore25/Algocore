@@ -43,8 +43,9 @@ const disableCopyPaste = () => {
   document.addEventListener("dragstart", (event) => event.preventDefault());
 };
 
-// Call function to disable actions
-disableCopyPaste();
+
+ // disableCopyPaste();
+
 
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
