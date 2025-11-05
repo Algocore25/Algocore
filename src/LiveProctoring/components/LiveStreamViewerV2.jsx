@@ -617,11 +617,18 @@ const StudentStreamCard = ({ testid, userId, userName, userEmail }) => {
     });
     adminListenersRef.current = [];
 
-    // Remove admin audio registration from Firebase
+    // Clean up Firebase data for this admin audio session
     (async () => {
       try {
+        // Remove admin registration
         await remove(ref(database, `AdminAudio/${testid}/${userId}/admin/${viewerIdRef.current}`));
         console.log(`[Admin Audio ${viewerIdRef.current}] Admin audio removed from Firebase`);
+        
+        // Clean up signaling data (offers, answers, ICE candidates)
+        await remove(ref(database, `AdminAudio/${testid}/${userId}/offers/${viewerIdRef.current}`));
+        await remove(ref(database, `AdminAudio/${testid}/${userId}/answers/${viewerIdRef.current}`));
+        await remove(ref(database, `AdminAudio/${testid}/${userId}/ice/${viewerIdRef.current}`));
+        console.log(`[Admin Audio ${viewerIdRef.current}] Cleaned up Firebase signaling data`);
       } catch (e) {
         console.error(`[Admin Audio ${viewerIdRef.current}] Error removing admin audio:`, e);
       }

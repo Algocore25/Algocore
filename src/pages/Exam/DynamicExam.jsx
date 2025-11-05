@@ -71,10 +71,11 @@ const DynamicExam = () => {
   );
 
   // Admin audio receiver - allows admin to speak to this student
+  // Active at any time after permissions are granted (not just during exam)
   const { isReceivingAudio, adminConnectionStatus } = useAdminAudioReceiver(
     testid,
     user?.uid,
-    stage === "exam" // Only receive admin audio during exam
+    permVerified && (stage === "exam" || stage === "instructions" || stage === "resume") // Allow admin audio after permissions granted
   );
 
   const [examName, setExamName] = useState(null);
@@ -96,6 +97,18 @@ const DynamicExam = () => {
       enableVideoProctoring: proctorSettings.enableVideoProctoring
     });
   }, [isStreaming, connectionStatus, activeConnections, proctorStream, stage, proctorSettings.enableVideoProctoring]);
+
+  // Debug logging for admin audio
+  useEffect(() => {
+    console.log('[DynamicExam] Admin audio status:', {
+      isReceivingAudio,
+      adminConnectionStatus,
+      permVerified,
+      stage,
+      userId: user?.uid,
+      testid
+    });
+  }, [isReceivingAudio, adminConnectionStatus, permVerified, stage, user?.uid, testid]);
 
   // Function to check exam status
   const checkExamStatus = async (allowResume = true) => {
@@ -1084,28 +1097,17 @@ const DynamicExam = () => {
             detections={detections}
             isProctoringActive={proctorSettings.enableVideoProctoring && !!proctorStreamRef.current}
           />
-          {/* Streaming Status Indicator */}
-          {/* {proctorSettings.enableVideoProctoring && (
-            <div className="fixed bottom-4 right-4 z-50">
-              <div className={`flex flex-col items-end gap-1 px-3 py-2 rounded-lg shadow-lg ${
-                connectionStatus === 'streaming' 
-                  ? 'bg-green-600 text-white' 
-                  : connectionStatus === 'ready'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-yellow-600 text-white'
-              }`}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${connectionStatus === 'streaming' ? 'bg-white animate-pulse' : 'bg-white opacity-50'}`}></div>
-                  <span className="text-xs font-medium">
-                    {connectionStatus === 'streaming' ? 'Streaming' : connectionStatus === 'ready' ? 'Ready' : 'Initializing...'}
-                  </span>
-                </div>
-                {activeConnections > 0 && (
-                  <span className="text-[10px] opacity-90">{activeConnections} viewer{activeConnections > 1 ? 's' : ''}</span>
-                )}
+          {/* Admin Audio Indicator - shows when admin is speaking */}
+          {isReceivingAudio && (
+            <div className="fixed top-4 right-4 z-50">
+              <div className="flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg bg-blue-600 text-white animate-pulse">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm font-medium">Admin is speaking</span>
               </div>
             </div>
-          )} */}
+          )}
         </>
       )}
 
