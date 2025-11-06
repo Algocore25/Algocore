@@ -50,7 +50,7 @@ function CodePage({ question }) {
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [pendingCopyText, setPendingCopyText] = useState("");
 
-    // Open modal before copy
+  // Open modal before copy
   const openCopyModal = (text) => {
     setPendingCopyText(text);
     setShowCopyModal(true);
@@ -69,7 +69,7 @@ function CodePage({ question }) {
 
 
 
-    const handleCopy = useCallback(async (text) => {
+  const handleCopy = useCallback(async (text) => {
     try {
       setCode(text);
       await setCode(text);
@@ -81,7 +81,7 @@ function CodePage({ question }) {
     setPendingCopyText("");
   }, []);
 
-  
+
 
   const logSubmission = async (status, submittedCode, marks) => {
     console.log("logging submission");
@@ -1130,91 +1130,91 @@ function CodePage({ question }) {
           )}
 
           {activeTab === 'submissions' && (
-  <div className="space-y-4">
-    {submissions.length === 0 ? (
-      <p className="text-gray-600 dark:text-gray-300">
-        No submissions yet for this question.
-      </p>
-    ) : (
-      // ✅ Scrollable container for dynamic width
-      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-tertiary">
-        <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-dark-tertiary">
-          <thead className="bg-gray-50 dark:bg-dark-secondary">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Time</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Language</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Status</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Marks</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-dark-tertiary">
-            {submissions.map((s, idx) => (
-              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-dark-hover transition">
-                {/* Formatted Time */}
-                <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                  {(() => {
-                    const fixed = s.timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})_(\d{3})Z/, 'T$1:$2:$3.$4Z');
-                    const date = new Date(fixed);
-                    return isNaN(date.getTime())
-                      ? 'N/A'
-                      : date.toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        });
-                  })()}
-                </td>
+            <div className="space-y-4">
+              {submissions.length === 0 ? (
+                <p className="text-gray-600 dark:text-gray-300">
+                  No submissions yet for this question.
+                </p>
+              ) : (
+                // ✅ Scrollable container for dynamic width
+                <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-tertiary">
+                  <table className="min-w-full table-auto divide-y divide-gray-200 dark:divide-dark-tertiary">
+                    <thead className="bg-gray-50 dark:bg-dark-secondary">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Time</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Language</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Status</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Marks</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-dark-tertiary">
+                      {submissions.map((s, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-dark-hover transition">
+                          {/* Formatted Time */}
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                            {(() => {
+                              const fixed = s.timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})_(\d{3})Z/, 'T$1:$2:$3.$4Z');
+                              const date = new Date(fixed);
+                              return isNaN(date.getTime())
+                                ? 'N/A'
+                                : date.toLocaleString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                });
+                            })()}
+                          </td>
 
-                {/* Language */}
-                <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                  {s.language}
-                </td>
+                          {/* Language */}
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                            {s.language}
+                          </td>
 
-                {/* Status Badge */}
-                <td className="px-4 py-2 text-sm font-medium text-center whitespace-nowrap">
-                  {s.marks === 0 ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">
-                      Failed
-                    </span>
-                  ) : s.marks === 100 ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold">
-                      Passed
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 font-semibold">
-                      Partial
-                    </span>
-                  )}
-                </td>
+                          {/* Status Badge */}
+                          <td className="px-4 py-2 text-sm font-medium text-center whitespace-nowrap">
+                            {s.marks === 0 ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">
+                                Failed
+                              </span>
+                            ) : s.marks*100 === 100  ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold">
+                                Passed
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 font-semibold">
+                                Partial 
+                              </span>
+                            )}
+                          </td>
 
-                {/* Marks */}
-                <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 text-center whitespace-nowrap">
-                  {s.marks * 100}
-                </td>
+                          {/* Marks */}
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 text-center whitespace-nowrap">
+                            {s.marks * 100}/100
+                          </td>
 
 
-                {/* Copy Code Action */}
-                <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                  <button
-                  onClick={() => openCopyModal(s.code)}
-                    className="text-gray-400 hover:text-blue-500 transition"
-                    title="Copy code"
-                  >
-                    <Copy size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </div>
-)}
+                          {/* Copy Code Action */}
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                            <button
+                              onClick={() => openCopyModal(s.code)}
+                              className="text-gray-400 hover:text-blue-500 transition"
+                              title="Copy code"
+                            >
+                              <Copy size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </div>
@@ -1330,34 +1330,45 @@ function CodePage({ question }) {
           </div>
         </div>
       )}
-      
-      {/* 🔹 Confirmation Modal */}
+
       {showCopyModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg w-80 text-center">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">
-              Confirm Copy
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
-              Are you sure you want to copy this code snippet to clipboard?
-            </p>
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={() => handleCopy(pendingCopyText)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-              >
-                Yes, Copy
-              </button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Confirm Copy
+              </h3>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 text-sm text-gray-700 dark:text-gray-300">
+              Are you sure you want to copy this code snippet to your clipboard?
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
               <button
                 onClick={() => setShowCopyModal(false)}
-                className="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-600 transition"
+                className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600"
               >
                 Cancel
+              </button>
+              <button
+                onClick={() => handleCopy(pendingCopyText)}
+                className="px-5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md"
+              >
+                Confirm Copy
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
