@@ -25,6 +25,7 @@ import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry
 
 function CodePage({ data, navigation }) {
   const [code, setCode] = useState("");
+  const [runsubmit, setRunSubmit] = useState('none');
   
   // Prevent copy, cut, and paste
   useEffect(() => {
@@ -234,6 +235,7 @@ function CodePage({ data, navigation }) {
     setTestResults(initialResults);
     setOutput(null);
     setActiveTab('output');
+    setRunSubmit('submit');
 
     const updatedResults = [...initialResults];
 
@@ -348,6 +350,7 @@ function CodePage({ data, navigation }) {
       setTestResults(initialResults);
       setOutput(null);
       setActiveTab('output');
+      setRunSubmit('run');
 
       const updatedResults = [...initialResults];
       let firstFailureShown = false;
@@ -1051,7 +1054,7 @@ function CodePage({ data, navigation }) {
                 <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
               ) : (
                 <>
-                  <AnimatedTestResults testResults={testResults} />
+                  <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
                 </>
               )}
             </div>

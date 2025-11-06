@@ -70,8 +70,8 @@ const Navbar = () => {
     !isAdmin && user && { label: 'Tests', href: '/test' },
     isAdmin && { label: 'Admin', href: '/admin' },
     isAdmin && { label: 'Students', href: '/adminmonitor' },
-    { label: 'Compiler', href: '/compiler' },
-    { label: 'Proctoring', href: '/proctoring' },
+    { label: 'Compiler', href: '/compiler' }
+    // { label: 'Proctoring', href: '/proctoring' },
   ].filter(Boolean); // This will remove any falsy values (like null or false)
 
 
