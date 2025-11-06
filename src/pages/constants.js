@@ -82,6 +82,7 @@ export const languageTemplates = {
     }
 }`,
   cpp: `
+#include<stdio.h>
 int main() {
     // Write your solution here
     return 0;

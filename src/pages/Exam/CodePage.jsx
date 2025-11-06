@@ -43,6 +43,8 @@ function CodePage({ question }) {
   const [allowlanguages, setallowlanguages] = useState([]);
   const [questionData, setQuestionData] = useState(null); // Initialize questionData state
 
+  const [runsubmit, setRunSubmit] = useState('none');
+
   const { testid } = useParams();
   const { user } = useAuth();
   const userId = user?.uid;
@@ -203,6 +205,7 @@ function CodePage({ question }) {
       console.error('Question data not loaded');
       return;
     }
+    setRunSubmit('submit');
     const testCases = questionData.testcases;
     const initialResults = testCases.map(tc => ({
       input: tc.input,
@@ -298,7 +301,30 @@ function CodePage({ question }) {
     }
 
     const allPassed = updatedResults.every(tc => tc.passed);
-    const mark = updatedResults.filter(tc => tc.passed).length;
+    // const mark = updatedResults.filter(tc => tc.passed).length;
+
+    let vm = 0;
+    let hm = 0;
+    let tclen = updatedResults.length;
+
+    updatedResults.forEach((tc, index) => {
+      if (tc.passed) {
+        if (index < 2) {
+          vm += 1;  // first two test cases
+        } else {
+          hm += 1;  // remaining test cases
+        }
+      }
+    });
+
+    let marks = (vm / 2) * 0.3 + (hm / (tclen - 2)) * 0.7;
+
+   toast.success('Submitted', {
+  autoClose: 1000, // 3 seconds
+});
+
+
+
 
     const finalResult = allPassed ? 'true' : 'false';
 
@@ -308,8 +334,12 @@ function CodePage({ question }) {
     const resultRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/${question}/`); // 'submissions' node, new entry
     const markRef = ref(database, `Marks/${testid}/${user.uid}/${question}/`); // 'submissions' node, new entry
 
+    const prevmark = await get(markRef);
+    if(prevmark.exists() && prevmark.val() >= (marks*100)){
+      return;
+    }
     await set(resultRef, finalResult);
-    await set(markRef, (mark / updatedResults.length) * 100);
+    await set(markRef, (marks) * 100);
 
     setSubmissionStatus(allPassed ? 'correct' : 'wrong');
 
@@ -327,6 +357,7 @@ function CodePage({ question }) {
       console.error('No test cases available');
       return;
     }
+    setRunSubmit('run');
     const testCases = testCasesrun;
     console.log('Running test cases:', testCases);
 
@@ -761,7 +792,7 @@ function CodePage({ question }) {
 
 
   return (
-    <div className="min-h-screen h-screen w-full flex bg-white dark:bg-dark-primary select-none">
+    <div className="h-[calc(100vh-6rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">      {/* Left Panel */}
       <ToastContainer />
       {/* Left Panel */}
       <div
@@ -850,13 +881,16 @@ function CodePage({ question }) {
                 <div className="mt-6">
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
                   <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
-                    <li>{questionData?.constraints[0]}</li>
-                    <li>{questionData?.constraints[1]}</li>
+                    {
+                      questionData?.constraints.map((element) => (
+                        <li>{element}</li>
+                      ))
+                    }
+
                   </ul>
                 </div>
 
-                {/* empty div for spacing */}
-                <div className="h-10"></div>
+
 
               </div>
             </div>
@@ -993,7 +1027,7 @@ function CodePage({ question }) {
                 <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
               ) : (
                 <>
-                  <AnimatedTestResults testResults={testResults} />
+                  <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
                 </>
               )}
             </div>
@@ -1087,30 +1121,30 @@ function CodePage({ question }) {
         </div>
       </div>
       {showResetModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Reset Code</h3>
-          </div>
-          <div className="px-6 py-5 text-sm text-gray-700 dark:text-gray-300">
-            This will replace your current code with the default template for the selected language. This action cannot be undone.
-          </div>
-          <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-            <button
-              onClick={() => setShowResetModal(false)}
-              className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleResetCode}
-              className="px-5 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-md"
-            >
-              Reset
-            </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Reset Code</h3>
+            </div>
+            <div className="px-6 py-5 text-sm text-gray-700 dark:text-gray-300">
+              This will replace your current code with the default template for the selected language. This action cannot be undone.
+            </div>
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => setShowResetModal(false)}
+                className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetCode}
+                className="px-5 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-md"
+              >
+                Reset
+              </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
     </div>
   );

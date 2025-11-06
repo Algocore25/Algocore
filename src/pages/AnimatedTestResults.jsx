@@ -2,34 +2,38 @@ import React, { useEffect, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
 
-export default function AnimatedTestResults({ testResults = [] }) {
+export default function AnimatedTestResults({ testResults = [] , runsubmit  }) {
   const [isTesting, setIsTesting] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [testStatus, setTestStatus] = useState('not-started'); // 'not-started', 'running', 'passed', 'failed'
   const [firstFailedTest, setFirstFailedTest] = useState(null);
+  const [firstFailedTestIndex, setFirstFailedTestIndex] = useState(null);
   const { theme } = useTheme();
 
   useEffect(() => {
     const running = testResults.some(test => test.status === 'running');
     const allPassed = testResults.length > 0 && testResults.every(test => test.passed);
-    
+
     if (running) {
       setTestStatus('running');
       setShowResults(false);
     } else if (testResults.length > 0) {
       const failedTest = testResults.find(test => !test.passed);
+      const firstFailedTestIndex = testResults.findIndex(t => !t.passed);
+
       if (failedTest) {
         setFirstFailedTest(failedTest);
+        setFirstFailedTestIndex(firstFailedTestIndex);
         setTestStatus('failed');
       } else {
         setTestStatus('passed');
       }
-      
+
       // Show results after a short delay
       const timer = setTimeout(() => {
         setShowResults(true);
       }, 300);
-      
+
       return () => clearTimeout(timer);
     }
   }, [testResults]);
@@ -129,35 +133,52 @@ export default function AnimatedTestResults({ testResults = [] }) {
             </p>
           </div>
 
-          {firstFailedTest && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className={`px-4 py-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'} border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h4 className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>First Failed Test Case</h4>
-              </div>
-              
-              <div className="p-4 space-y-4">
-                <div>
-                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Input</div>
-                  <div className={`${theme === 'dark' ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-800'} p-3 rounded border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} font-mono text-sm max-h-40 overflow-y-auto`}>
-                    {formatText(firstFailedTest.input) || 'No input provided'}
+          {
+
+          }
+
+          {(firstFailedTestIndex === 0 || firstFailedTestIndex === 1) || runsubmit==='run' ? (
+            <div>
+              {firstFailedTest && (
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className={`px-4 py-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-50'} border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <h4 className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>First Failed Test Case</h4>
                   </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex flex-col h-full">
-                    <div className={`text-sm font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'} mb-1`}>Expected Output</div>
-                    <div className={`flex-1 ${theme === 'dark' ? 'bg-green-900/10 text-green-100' : 'bg-green-50 text-gray-800'} p-3 rounded border ${theme === 'dark' ? 'border-green-900' : 'border-green-200'} font-mono text-sm overflow-y-auto`}>
-                      {formatText(firstFailedTest.expected) || 'No expected output provided'}
+
+                  <div className="p-4 space-y-4">
+                    <div>
+                      <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Input</div>
+                      <div className={`${theme === 'dark' ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-800'} p-3 rounded border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} font-mono text-sm max-h-40 overflow-y-auto`}>
+                        {formatText(firstFailedTest.input) || 'No input provided'}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col h-full">
+                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-green-400' : 'text-green-600'} mb-1`}>Expected Output</div>
+                        <div className={`flex-1 ${theme === 'dark' ? 'bg-green-900/10 text-green-100' : 'bg-green-50 text-gray-800'} p-3 rounded border ${theme === 'dark' ? 'border-green-900' : 'border-green-200'} font-mono text-sm overflow-y-auto`}>
+                          {formatText(firstFailedTest.expected) || 'No expected output provided'}
+                        </div>
+                      </div>
+                      <div className="flex flex-col h-full">
+                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-red-400' : 'text-red-600'} mb-1`}>Your Output</div>
+                        <div className={`flex-1 ${theme === 'dark' ? 'bg-red-900/10 text-red-100' : 'bg-red-50 text-gray-800'} p-3 rounded border ${theme === 'dark' ? 'border-red-900' : 'border-red-200'} font-mono text-sm overflow-y-auto`}>
+                          {formatText(firstFailedTest.output) || 'No output'}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-col h-full">
-                    <div className={`text-sm font-medium ${theme === 'dark' ? 'text-red-400' : 'text-red-600'} mb-1`}>Your Output</div>
-                    <div className={`flex-1 ${theme === 'dark' ? 'bg-red-900/10 text-red-100' : 'bg-red-50 text-gray-800'} p-3 rounded border ${theme === 'dark' ? 'border-red-900' : 'border-red-200'} font-mono text-sm overflow-y-auto`}>
-                      {formatText(firstFailedTest.output) || 'No output'}
-                    </div>
-                  </div>
                 </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <div className="text-lg font-medium text-red-600 dark:text-red-400">
+                Hidden test case failed
               </div>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">
+                Specific details are hidden for this test case
+              </p>
             </div>
           )}
         </div>

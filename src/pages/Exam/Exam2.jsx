@@ -502,38 +502,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                     </div>
 
                     <div className="flex items-center space-x-4">
-                        {/* Network Status */}
-                        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-                            {isOnline ? (
-                                <>
-                                    <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                    <div className="flex flex-col">
-                                        {networkSpeed !== null ? (
-                                            <>
-                                                <span className="text-xs font-semibold">
-                                                    {networkSpeed >= 1 ? (
-                                                        <span className="text-green-600 dark:text-green-400">
-                                                            {networkSpeed.toFixed(1)} Mbps
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-yellow-600 dark:text-yellow-400">
-                                                            {(networkSpeed * 1024).toFixed(0)} Kbps
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </>
-                                        ) : (
-                                            <span className="text-xs font-medium text-green-600 dark:text-green-400">Online</span>
-                                        )}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
-                                    <span className="text-xs font-medium text-red-600 dark:text-red-400">Offline</span>
-                                </>
-                            )}
-                        </div>
+                        
                         {/* Timer with better styling */}
                         <div className="flex items-center space-x-2 px-3 py-1.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                             <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -565,18 +534,6 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                             </div>
                         </div>
 
-                        {/* Theme toggle */}
-                        <button
-                            onClick={toggleTheme}
-                            className="group flex items-center justify-center w-9 h-9 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200"
-                            title="Toggle theme"
-                        >
-                            {theme === 'dark' ? (
-                                <FiSun className="w-4 h-4" />
-                            ) : (
-                                <FiMoon className="w-4 h-4" />
-                            )}
-                        </button>
 
                         {/* Navigation buttons */}
                         <div className="flex items-center space-x-2">
@@ -598,6 +555,51 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                 <span className="hidden md:inline">Next</span>
                                 <FiChevronRight className="w-4 h-4" />
                             </button>
+                            {/* Network Status */}
+                        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                            {isOnline ? (
+                                <>
+                                    <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                    <div className="flex flex-col">
+                                        {networkSpeed !== null ? (
+                                            <>
+                                                <span className="text-xs font-semibold">
+                                                    {networkSpeed >= 1 ? (
+                                                        <span className="text-green-600 dark:text-green-400">
+                                                            {networkSpeed.toFixed(1)} Mbps
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-yellow-600 dark:text-yellow-400">
+                                                            {(networkSpeed * 1024).toFixed(0)} Kbps
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span className="text-xs font-medium text-green-600 dark:text-green-400">Online</span>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                    <span className="text-xs font-medium text-red-600 dark:text-red-400">Offline</span>
+                                </>
+                            )}
+                        </div>
+                        
+                        {/* Theme toggle */}
+                        <button
+                            onClick={toggleTheme}
+                            className="group flex items-center justify-center w-9 h-9 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200"
+                            title="Toggle theme"
+                        >
+                            {theme === 'dark' ? (
+                                <FiSun className="w-4 h-4" />
+                            ) : (
+                                <FiMoon className="w-4 h-4" />
+                            )}
+                        </button>
                         </div>
                     </div>
                 </nav>
