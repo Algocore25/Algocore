@@ -14,6 +14,13 @@ import { database } from '../firebase';
 
 const AuthContext = createContext(null);
 
+
+// List of emails allowed to have multiple sessions
+const MULTI_SESSION_ALLOWED = [
+  '99220041106@klu.ac.in'
+];
+
+
 // Session configuration
 const SESSION_CONFIG = {
   HEARTBEAT_INTERVAL: 30000, // 30 seconds
@@ -370,6 +377,16 @@ export const AuthProvider = ({ children }) => {
     if (!user?.uid || !sessionEnforced || loading) {
       return;
     }
+
+
+    const isMultiSessionUser = MULTI_SESSION_ALLOWED.includes(user.email);
+
+    if (isMultiSessionUser) {
+    console.log(`Multi-session allowed for ${user.email}. Skipping single-session enforcement.`);
+    return; // ✅ Skip session enforcement entirely
+  }
+
+
 
     console.log('Starting session enforcement for user:', user.uid);
     
