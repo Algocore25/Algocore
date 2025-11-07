@@ -83,7 +83,7 @@ function CodePage({ question }) {
 
 
 
-  const logSubmission = async (status, submittedCode, marks) => {
+  const logSubmission = async (status, submittedCode, marks , updatedResults) => {
     console.log("logging submission");
     console.log(user?.email);
 
@@ -99,7 +99,8 @@ function CodePage({ question }) {
         language: selectedLanguage,
         status,
         code: submittedCode,
-        marks: marks,
+        marks: marks * 100 || 0,
+        testResults: updatedResults || [],
       });
       console.log("Submission logged successfully.");
       setSubmissionTrigger(prev => prev + 1); // Trigger submission refresh
@@ -386,7 +387,7 @@ function CodePage({ question }) {
     }
 
     const allPassed = updatedResults.every(tc => tc.passed);
-    // const mark = updatedResults.filter(tc => tc.passed).length;
+    const mark = updatedResults.filter(tc => tc.passed).length;
 
     let vm = 0;
     let hm = 0;
@@ -404,7 +405,14 @@ function CodePage({ question }) {
 
     let marks = (vm / 2) * 0.3 + (hm / (tclen - 2)) * 0.7;
 
-    await logSubmission(allPassed ? 'correct' : 'wrong', code, marks);
+    if( updatedResults.length <=2  )
+    {
+      marks = (vm / 2) * 1.0 ;
+    }
+    
+
+
+    await logSubmission(allPassed ? 'correct' : 'wrong', code, marks , updatedResults);
 
     toast.success('Submitted', {
       autoClose: 1000, // 3 seconds
