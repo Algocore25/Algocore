@@ -18,6 +18,7 @@ import {
 } from 'chart.js';
 import LoadingPage from "./LoadingPage";
 import useUserActivityTime from '../hooks/useUserActivityTime';
+import ActivityCalendar from './ActivityCalendar';
 
 ChartJS.register(
   CategoryScale,
@@ -629,7 +630,7 @@ function ProfilePage() {
               {activeTab === "overview" && (
                 <div className="space-y-8">
                   {/* Activity Graph */}
-                  <div>
+                  {/* <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
                         Activity
@@ -729,6 +730,14 @@ function ProfilePage() {
                         />
                       )}
                     </div>
+                  </div> */}
+
+                  {/* Activity Calendar */}
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                      Activity Calendar (Last 6 Months)
+                    </h3>
+                    <ActivityCalendar submissions={profileData.allSubmissions} />
                   </div>
                 </div>
               )}
