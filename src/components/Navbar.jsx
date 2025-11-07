@@ -1,54 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { database } from '../firebase';
 import { ref, get } from 'firebase/database';
-import { matchPath } from 'react-router-dom';
-
-import { Wifi, WifiOff } from "lucide-react";
-
-
-
+import { Wifi, WifiOff } from 'lucide-react';
 import { FaSun as SunIcon, FaMoon as MoonIcon, FaUserCircle as UserCircleIcon } from 'react-icons/fa';
 import logoLight from '../assets/LOGO.png';
 import logoDark from '../assets/LOGO-1.png';
 
 const pathMappings = [
-  {
-    pattern: "/problem/:course/:subcourse/:questionId",
-    label: "course/os",
-  },
-  {
-    pattern: "/course/:courseId",
-    label: "course",
-  }
+  { pattern: "/problem/:course/:subcourse/:questionId", label: "course/os" },
+  { pattern: "/course/:courseId", label: "course" },
 ];
-
-
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [questionData, setQuestionData] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
+  const [progressMap, setProgressMap] = useState({});
+  const [match, setMatch] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { user, loading, logout } = useAuth();
 
-  const [isAdmin, setIsAdmin] = useState(false);
-
   const authDropdownRef = useRef(null);
   const authButtonRef = useRef(null);
 
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
-
+  // 🟢 Online/Offline listener
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
@@ -64,31 +54,38 @@ const Navbar = () => {
     })
     .find(Boolean);
 
+  // 🟣 Menu items
   const menuItems = [
     { label: 'Home', href: '/' },
     { label: 'Courses', href: '/courses' },
     !isAdmin && user && { label: 'Tests', href: '/test' },
     isAdmin && { label: 'Admin', href: '/admin' },
     isAdmin && { label: 'Students', href: '/adminmonitor' },
-    { label: 'Compiler', href: '/compiler' }
-    // { label: 'Proctoring', href: '/proctoring' },
-  ].filter(Boolean); // This will remove any falsy values (like null or false)
+    { label: 'Compiler', href: '/compiler' },
+  ].filter(Boolean);
 
+  // 🟠 Fetch admin status
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user) return setIsAdmin(false);
+      try {
+        const userRef = ref(database, `Admins/${user.uid}`);
+        const snapshot = await get(userRef);
+        setIsAdmin(snapshot.exists());
+      } catch (error) {
+        console.error("Error checking admin:", error);
+        setIsAdmin(false);
+      }
+    };
+    checkAdminStatus();
+  }, [user]);
 
-
-  const [questionData, setQuestionData] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(-1);
-  const [progressMap, setProgressMap] = useState({}); // { [questionName]: true }
-  const [match, setMatch] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-
+  // 🟡 Fetch question progress for navbar dots
   useEffect(() => {
     let isMounted = true;
-
-    const fetchQuestionData = async () => {
+    const fetchData = async () => {
       const pathMatch = matchPath("/problem/:course/:subcourse/:questionId", location.pathname);
       setMatch(pathMatch);
-
       if (!pathMatch) {
         if (isMounted) {
           setQuestionData([]);
@@ -98,125 +95,60 @@ const Navbar = () => {
       }
 
       const { course, subcourse, questionId } = pathMatch.params;
-
-      if (isMounted) {
-        setIsLoading(true);
-      }
-
-
+      if (isMounted) setIsLoading(true);
       try {
         const questionRef = ref(database, `AlgoCore/${course}`);
         const snapshot = await get(questionRef);
-        console.log(snapshot.val()["lessons"][subcourse.replaceAll("%20", " ")]["questions"]);
-        console.log(subcourse);
+        if (!snapshot.exists()) return;
+
+        const lessons = snapshot.val()?.["lessons"];
+        const questionsArray = lessons[subcourse.replaceAll("%20", " ")]?.["questions"] || [];
 
         if (!isMounted) return;
+        setQuestionData(questionsArray);
 
-        if (snapshot.exists()) {
-          const questions = snapshot.val() || [];
-          // Convert to array if it's an object
-          const questionsArray = questions["lessons"][subcourse.replaceAll("%20", " ")]["questions"];
+        const index = questionsArray.findIndex(q => q === questionId || q === questionId.replaceAll("%20", " "));
+        setCurrentIndex(index);
 
-          setQuestionData(questionsArray);
-
-          // Find the index of the current question
-          const index = questionsArray.findIndex(q => q === questionId || (q && q === questionId.replaceAll("%20", " ")));
-          setCurrentIndex(index);
-
-          // Fetch user progress for this subcourse to color dots
-          try {
-            if (user) {
-              const decodedSub = subcourse.replaceAll("%20", " ");
-              const progressRef = ref(database, `userprogress/${user.uid}/${course}/${decodedSub}`);
-              const progressSnap = await get(progressRef);
-              const prog = progressSnap.exists() ? (progressSnap.val() || {}) : {};
-              if (isMounted) setProgressMap(prog);
-            } else {
-              if (isMounted) setProgressMap({});
-            }
-          } catch (e) {
-            console.error('Error fetching user progress for navbar dots:', e);
-            if (isMounted) setProgressMap({});
-          }
-
-          console.log('Questions:', questionsArray);
-          console.log('Current Question ID:', questionId);
-          console.log('Found at index:', index);
-        } else {
-          setQuestionData([]);
-          setCurrentIndex(-1);
-          setProgressMap({});
+        if (user) {
+          const decodedSub = subcourse.replaceAll("%20", " ");
+          const progressRef = ref(database, `userprogress/${user.uid}/${course}/${decodedSub}`);
+          const progressSnap = await get(progressRef);
+          setProgressMap(progressSnap.exists() ? progressSnap.val() : {});
         }
-      } catch (error) {
-        console.error("Error fetching questions:", error);
-        if (isMounted) {
-          setQuestionData([]);
-          setCurrentIndex(-1);
-          setProgressMap({});
-        }
+      } catch (err) {
+        console.error("Navbar question fetch error:", err);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
-
-    fetchQuestionData();
-
-    // Cleanup function to prevent state updates after unmount
-    return () => {
-      isMounted = false;
-    };
+    fetchData();
+    return () => (isMounted = false);
   }, [location.pathname, user]);
 
-
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-
-      try {
-        const userRef = ref(database, `Admins/${user.uid}`);
-        const snapshot = await get(userRef);
-
-        if (snapshot.exists()) {
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
-      } catch (error) {
-        console.error("Error fetching user admin status:", error);
-        setIsAdmin(false);
-      }
-    };
-
-    checkAdminStatus();
-  }, [user]);
-
-
-
-
+  // 🧠 Handle outside clicks properly
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (isAuthOpen &&
+      if (
+        isAuthOpen &&
         authDropdownRef.current &&
         !authDropdownRef.current.contains(event.target) &&
         authButtonRef.current &&
-        !authButtonRef.current.contains(event.target)) {
+        !authButtonRef.current.contains(event.target)
+      ) {
         setIsAuthOpen(false);
       }
 
-      if (isMenuOpen && !event.target.closest('.mobile-menu-button')) {
+      if (
+        isMenuOpen &&
+        !event.target.closest('.mobile-menu-button') &&
+        !event.target.closest('.mobile-menu')
+      ) {
         setIsMenuOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isAuthOpen, isMenuOpen]);
 
   useEffect(() => {
@@ -227,6 +159,7 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-dark-secondary border-b border-gray-200 dark:border-dark-tertiary z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+        {/* Left: Logo + Menu */}
         <div className="flex items-center gap-6">
           <Link to={matched?.label || '/'} className="flex items-center gap-2">
             <img src={theme === 'dark' ? logoDark : logoLight} alt="AlgoCore Logo" className="h-8 w-auto" />
@@ -234,14 +167,15 @@ const Navbar = () => {
           </Link>
 
           <div className="hidden md:flex items-center gap-6">
-            {menuItems.map((item, index) => (
+            {menuItems.map((item, i) => (
               <Link
-                key={index}
+                key={i}
                 to={item.href}
-                className={`text-sm font-medium transition-colors ${location.pathname === item.href
-                  ? 'text-[#4285F4]'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
-                  }`}
+                className={`text-sm font-medium transition-colors ${
+                  location.pathname === item.href
+                    ? 'text-[#4285F4]'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
+                }`}
               >
                 {item.label}
               </Link>
@@ -249,8 +183,9 @@ const Navbar = () => {
           </div>
         </div>
 
+        {/* Right: Controls */}
         <div className="flex items-center gap-4">
-
+          {/* Question progress dots */}
           {match && questionData.length > 0 && currentIndex >= 0 && (
             <div className="mr-4 max-w-xs">
               <div className="flex items-center gap-2">
@@ -262,18 +197,16 @@ const Navbar = () => {
                     <button
                       key={i}
                       type="button"
-                      className={`w-2.5 h-2.5 rounded-full transition-colors flex-shrink-0 ${i === currentIndex
-                        ? 'bg-blue-500'
-                        : (progressMap && progressMap[q] === true)
+                      className={`w-2.5 h-2.5 rounded-full transition-colors flex-shrink-0 ${
+                        i === currentIndex
+                          ? 'bg-blue-500'
+                          : progressMap[q]
                           ? 'bg-green-500'
                           : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
-                        }`}
-                      aria-label={`Go to question ${i + 1}`}
-                      title={`Question ${i + 1}`}
+                      }`}
                       onClick={() => {
                         const { course, subcourse } = match.params;
-                        const target = encodeURIComponent(q);
-                        navigate(`/problem/${course}/${subcourse}/${target}`);
+                        navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(q)}`);
                       }}
                     />
                   ))}
@@ -282,32 +215,32 @@ const Navbar = () => {
             </div>
           )}
 
-         <div className="flex items-center space-x-2">
-      {isOnline ? (
-        <div className="flex items-center text-green-600">
-          <Wifi className="w-5 h-5 mr-1" />
-        </div>
-      ) : (
-        <div className="flex items-center text-red-600">
-          <WifiOff className="w-5 h-5 mr-1" />
-        </div>
-      )}
-    </div>
+          {/* Online indicator */}
+          <div className="flex items-center space-x-2">
+            {isOnline ? (
+              <Wifi className="w-5 h-5 text-green-600" />
+            ) : (
+              <WifiOff className="w-5 h-5 text-red-600" />
+            )}
+          </div>
 
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-dark-tertiary"
-          >
-            {theme === 'dark' ? <SunIcon className="w-5 h-5 text-yellow-400" /> : <MoonIcon className="w-5 h-5 text-gray-700" />}
+          {/* Theme toggle */}
+          <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-dark-tertiary">
+            {theme === 'dark' ? (
+              <SunIcon className="w-5 h-5 text-yellow-400" />
+            ) : (
+              <MoonIcon className="w-5 h-5 text-gray-700" />
+            )}
           </button>
 
+          {/* Auth menu */}
           <div className="relative">
             {user ? (
               <>
                 <button
                   ref={authButtonRef}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-dark-tertiary rounded-full"
                   onClick={() => setIsAuthOpen(!isAuthOpen)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-dark-tertiary rounded-full"
                 >
                   {user.photoURL ? (
                     <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full" />
@@ -323,9 +256,7 @@ const Navbar = () => {
                   >
                     <div
                       className="px-4 py-2 border-b border-gray-100 dark:border-dark-tertiary cursor-pointer"
-                      onClick={() => {
-                        navigate('/profile');
-                      }}
+                      onClick={() => navigate('/profile')}
                     >
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name || 'User'}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
@@ -353,6 +284,7 @@ const Navbar = () => {
             )}
           </div>
 
+          {/* Mobile menu button */}
           <button
             className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-dark-tertiary rounded-full relative mobile-menu-button"
             onClick={() => {
@@ -372,16 +304,20 @@ const Navbar = () => {
             )}
           </button>
 
+          {/* Mobile dropdown */}
           {isMenuOpen && (
-            <div className="absolute top-16 right-4 w-64 bg-white dark:bg-dark-secondary rounded-lg shadow-lg border border-gray-200 dark:border-dark-tertiary py-2 animate-fadeIn">
+            <div
+              className="absolute top-16 right-4 w-64 bg-white dark:bg-dark-secondary rounded-lg shadow-lg border border-gray-200 dark:border-dark-tertiary py-2 animate-fadeIn mobile-menu transition-all duration-300"
+            >
               {menuItems.map((item, index) => (
                 <Link
                   key={index}
                   to={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${location.pathname === item.href
-                    ? 'bg-[#4285F4]/10 text-[#4285F4]'
-                    : 'text-gray-700 dark:text-gray-200'
-                    }`}
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${
+                    location.pathname === item.href
+                      ? 'bg-[#4285F4]/10 text-[#4285F4]'
+                      : 'text-gray-700 dark:text-gray-200'
+                  }`}
                   onClick={() => setIsMenuOpen(false)}
                 >
                   <span>{item.label}</span>
@@ -394,27 +330,5 @@ const Navbar = () => {
     </nav>
   );
 };
-
-function PercentageBar({ label = '', percentage = 0, color = '#3b82f6', height = '8px' }) {
-  const safePercentage = Math.min(Math.max(percentage, 0), 100); // Clamp 0–100
-  const displayPercentage = Math.round(safePercentage);
-
-  return (
-    <div className="w-full">
-      {label && <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">{label}</div>}
-      <div className="relative w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden" style={{ height }}>
-        <div
-          className="h-full flex items-center justify-end pr-2 text-xs font-medium text-white transition-all duration-300 ease-out"
-          style={{
-            width: `${safePercentage}%`,
-            backgroundColor: color,
-          }}>
-          {/* {displayPercentage}% */}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 
 export default Navbar;

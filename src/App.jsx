@@ -28,6 +28,10 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
 
+
+import DesktopOnlyPage from './context/DesktopOnlyPage';
+
+
 // Route-aware guard to disable copy/paste except on admin-required routes
 const CopyPasteGuard = () => {
   const { pathname } = useLocation();
@@ -85,8 +89,8 @@ function App() {
 
               <Route path="/proctoring" element={<VideoProctor />} />
 
-              <Route path="/test" element={<ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>} />
-              <Route path="/examwindow/:testid" element={<ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute>} />
+              <Route path="/test" element={ <DesktopOnlyPage>  <ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>     </DesktopOnlyPage> } />
+              <Route path="/examwindow/:testid" element={  <DesktopOnlyPage> <ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute> </DesktopOnlyPage> } />
               <Route path="/exammonitor/:testid" element={<ProtectedRoute requireAdmin={true}><ExamMonitor /></ProtectedRoute>} />
               <Route path="/adminresults/:testid" element={<ProtectedRoute requireAdmin={true}><AdminResult /></ProtectedRoute>} />
               <Route path="/studentresults/:testid" element={<ProtectedRoute requireUser={true}><StudentResult /></ProtectedRoute>} />
