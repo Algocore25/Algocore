@@ -17,7 +17,7 @@ const TestsPage = () => {
 
 
   return (
-        <div className="flex h-[calc(100vh-4rem)] bg-gray-50 dark:bg-dark-primary overflow-hidden">
+        <div className="flex h-[calc(100vh)] bg-gray-50 dark:bg-dark-primary overflow-hidden">
       <TestsSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <main className="flex-1 p-8 overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
