@@ -8,6 +8,84 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { X, Code as CodeIcon, List, Download, ChevronUp, ChevronDown } from 'lucide-react';
 
+const StatusBadge = ({ status }) => {
+  const styles = {
+    Correct: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    Wrong: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+    'Not Attended': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+  };
+  
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${styles[status]} mb-2`}>
+      {status}
+    </span>
+  );
+};
+
+const QuestionTypeBadge = ({ type }) => {
+  const typeStyles = {
+    MCQ: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    Programming: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    SQL: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+    default: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+  };
+  
+  const style = typeStyles[type] || typeStyles.default;
+  
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${style} mb-2`}>
+      {type}
+    </span>
+  );
+};
+
+const ResultsTable = ({ children }) => (
+  <div className="overflow-x-auto shadow-md rounded-lg">
+    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      {children}
+    </table>
+  </div>
+);
+
+const TableHeader = ({ children, onClick, sortDirection }) => (
+  <th 
+    scope="col" 
+    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+    onClick={onClick}
+  >
+    <div className="flex items-center">
+      {children}
+      {sortDirection && (
+        <span className="ml-2">
+          {sortDirection === 'asc' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </span>
+      )}
+    </div>
+  </th>
+);
+
+const TableRow = ({ children, isSelected, onClick }) => (
+  <tr 
+    className={`${isSelected ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800'} ${onClick ? 'cursor-pointer' : ''}`}
+    onClick={onClick}
+  >
+    {children}
+  </tr>
+);
+
+const TableCell = ({ children, className = '' }) => (
+  <td className={`px-6 py-4 whitespace-nowrap text-base text-gray-900 dark:text-gray-200 ${className}`}>
+    {children}
+  </td>
+);
+
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center py-12">
+    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+    <span className="ml-4 text-lg font-medium text-gray-600 dark:text-gray-400">Loading...</span>
+  </div>
+);
+
 export default function AdminResult() {
   const { testid } = useParams();
   const [results, setResults] = useState([]);
@@ -42,6 +120,8 @@ export default function AdminResult() {
   const [genProgress, setGenProgress] = useState(0);
   const [genStatus, setGenStatus] = useState('');
 
+  const [ ExamcodeSubmissions, setExamcodeSubmissions ] = useState({});
+
   useEffect(() => {
     const fetchreultdata = async () => {
       try {
@@ -52,7 +132,8 @@ export default function AdminResult() {
           resultsSnapshot,
           testInfoSnapshot,
           examQuestionsSnapshot,
-          marksSnapshot
+          marksSnapshot,
+          examCodeSubmissionsSnapshot
         ] = await Promise.all([
           get(ref(database, `Exam/${testid}/Eligible`)),
           get(ref(database, 'users')),
@@ -60,6 +141,7 @@ export default function AdminResult() {
           get(ref(database, `Exam/${testid}/name`)),
           get(ref(database, `Exam/${testid}/questions`)),
           get(ref(database, `Marks/${testid}`)),
+          get(ref(database, `ExamCodeSubmissions/${testid}`)) // Unused but reserved for future use,
         ]);
 
         // Process basic data
@@ -69,6 +151,10 @@ export default function AdminResult() {
         const examQuestions = examQuestionsSnapshot.val() || {};
         const marksData = marksSnapshot.val() || {};
         setTestName(testInfoSnapshot.val() || '');
+
+        setExamcodeSubmissions(examCodeSubmissionsSnapshot.val() || {});
+
+        console.log('Exam Code Submissions:', examCodeSubmissionsSnapshot.val() || {});
 
         // Load weightage config
         try {
@@ -461,23 +547,27 @@ export default function AdminResult() {
     let yPosition = margin;
     // Track current tint (RGB) for student pages; null for summary/TOC
     let currentTint = null;
-    const tintPalette = [
-      [250, 252, 255], // very light blue
-      [255, 250, 252], // very light pink
-      [252, 255, 250], // very light green
-      [248, 250, 255], // light bluish
-      [255, 252, 248], // light warm
-      [248, 255, 252], // light cyan
-      [252, 248, 255], // light violet
-      [255, 248, 252], // light rose
-      [246, 251, 255],
-      [251, 255, 246],
-      [255, 246, 251],
-      [246, 255, 252]
-    ];
+   const tintPalette = [
+  [230, 240, 255], // soft blue
+  [255, 230, 240], // soft pink
+  [240, 255, 230], // soft green
+  [225, 235, 255], // bluish tint
+  [255, 240, 225], // warm tint
+  [225, 255, 240], // cyan tint
+  [240, 225, 255], // violet tint
+  [255, 225, 235], // rose tint
+  [220, 245, 255], // sky blue
+  [240, 255, 220], // spring green
+  [255, 220, 245], // lilac pink
+  [220, 255, 235]  // mint tint
+];
+
 
     // Page header for each page
-    const drawHeader = () => {
+    const drawHeader = ( studentName ) => {
+      if( studentName === undefined ) {
+        studentName = 'Detailed';
+      }
       pdf.setFillColor(245, 248, 255);
       pdf.rect(0, 0, pageWidth, 14, 'F');
       pdf.setFontSize(10);
@@ -486,7 +576,7 @@ export default function AdminResult() {
       pdf.text(`${testName || testid}`, margin, 9);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(100, 100, 100);
-      pdf.text('Detailed Report', pageWidth - margin, 9, { align: 'right' });
+      pdf.text(`${studentName} Report`, pageWidth - margin, 9, { align: 'right' });
       pdf.setDrawColor(220, 220, 220);
       pdf.line(margin, 14, pageWidth - margin, 14);
       yPosition = 18;
@@ -528,7 +618,7 @@ export default function AdminResult() {
       // Title
       pdf.setFontSize(18);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Detailed Test Report', pageWidth / 2, yPosition, { align: 'center' });
+      pdf.text('AlgoCore Test Report', pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 10;
       pdf.setFontSize(12);
       pdf.setFont('helvetica', 'normal');
@@ -580,13 +670,9 @@ export default function AdminResult() {
         const currentTocPage = pdf.internal.getNumberOfPages();
 
         // zebra row background
-        if (index % 2 === 1) {
-          pdf.setFillColor(245, 245, 245);
-          pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 7, 'F');
-        }
-
-        pdf.text(`${index + 1}`, margin + 2, yPosition);
+        if (index % 2 === 1) { pdf.setFillColor(245, 245, 245); pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 7, 'F'); }
         const studentName = result.studentId.length > 20 ? result.studentId.substring(0, 20) + '...' : result.studentId;
+        pdf.text(`${index + 1}`, margin + 2, yPosition);
         pdf.text(studentName, margin + 8, yPosition);
         const nameWidth = pdf.getTextWidth(studentName);
         const email = result.mail.length > 25 ? result.mail.substring(0, 25) + '...' : result.mail;
@@ -618,7 +704,9 @@ export default function AdminResult() {
         pageForStudent[r.uid] = studentPageNumber;
         // Assign unique very light background tint for this student
         currentTint = tintPalette[i % tintPalette.length];
-        drawHeader();
+        const studentName = r.studentId ;
+
+        drawHeader(studentName);
         pdf.setFillColor(...currentTint);
         pdf.rect(0, 14, pageWidth, pageHeight - 14, 'F');
         // Back to Summary link
@@ -653,9 +741,9 @@ export default function AdminResult() {
         pdf.rect(margin, yPosition - 4, w, 22, 'S');
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(9);
-        pdf.text('Score', margin + 4, yPosition + 2);
-        pdf.text('Correct', margin + 4 + colW, yPosition + 2);
-        pdf.text('Accuracy', margin + 4 + 2 * colW, yPosition + 2);
+        pdf.text('Score', margin + 4, yPosition);
+        pdf.text('Correct', margin + 4 + colW, yPosition);
+        pdf.text('Accuracy', margin + 4 + 2 * colW, yPosition);
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(11);
         pdf.text(isNaN(sc) ? 'N/A' : `${sc.toFixed(1)}%`, margin + 4, yPosition + 12);
@@ -689,7 +777,7 @@ export default function AdminResult() {
           presentCats.forEach((c, idx) => {
             if (yPosition + 8 > pageHeight - margin) { 
               pdf.addPage(); 
-              drawHeader(); 
+              drawHeader() ; 
               if (currentTint) { pdf.setFillColor(...currentTint); pdf.rect(0, 14, pageWidth, pageHeight - 14, 'F'); }
             }
             if (idx % 2 === 1) { pdf.setFillColor(245, 245, 245); pdf.rect(margin, yPosition - 5, w, 7, 'F'); }
@@ -749,41 +837,54 @@ export default function AdminResult() {
           // Header row
           pdf.setFillColor(240, 240, 240);
           pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
+          
+          pdf.setFontSize(11);
           pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(10);
-          pdf.setTextColor(0,0,0);
           pdf.text(`Question ${qi + 1} [${type}] - ${(Number(q.marks)||0).toFixed(2)} pts`, margin + 2, yPosition);
+          
+          // Status badge
           pdf.setTextColor(...statusColor);
           pdf.text(status, pageWidth - margin - 25, yPosition);
           pdf.setTextColor(0,0,0);
+          
           yPosition += 8;
 
           // Question text
+          pdf.setFontSize(10);
           pdf.setFont('helvetica', 'bold');
-          const qTitle = qData.questionname || qData.question || q.id;
+          const qTitle = qData.questionname || q.id;
           const titleH = addText(qTitle, margin + 2, yPosition, pageWidth - 2 * margin - 4, 10);
           yPosition += titleH + 3;
 
-          if (qData.description) {
-            pdf.setFont('helvetica', 'normal');
-            const descH = addText(qData.description, margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
+          // Question description
+          if (qData.question) {
+            pdf.setFont('helvetica', 'italic');
+            pdf.setFontSize(9);
+            const descH = addText(qData.question , margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
             yPosition += descH + 3;
+            pdf.setFont('helvetica', 'normal');
           }
 
           // MCQ-like questions
           if (q.type !== 'Programming' && qData.options) {
             checkNewPage(8);
-            pdf.setFont('helvetica', 'bold');
+            
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(9);
             pdf.text('Options:', margin + 2, yPosition);
             yPosition += 5;
+            
             pdf.setFont('helvetica', 'normal');
             const entries = Object.entries(qData.options);
             for (const [optKey, optValue] of entries) {
               checkNewPage(7);
+              
               const isCorrectAnswer = optKey === qData.correctAnswer;
               const isStudentAnswer = studentAnswerIndex !== null
                 ? String(optKey) === String(studentAnswerIndex)
                 : String(optKey) === String(studentAnswer);
+              
+              // Highlight boxes
               if (isCorrectAnswer) {
                 pdf.setFillColor(200, 255, 200);
                 pdf.rect(margin + 4, yPosition - 4, pageWidth - 2 * margin - 8, 6, 'F');
@@ -791,16 +892,32 @@ export default function AdminResult() {
                 pdf.setFillColor(255, 200, 200);
                 pdf.rect(margin + 4, yPosition - 4, pageWidth - 2 * margin - 8, 6, 'F');
               }
+              
               const optLabel = `${convertOptionKey(optKey)}. ${optValue}`;
               const textH = addText(optLabel, margin + 6, yPosition, pageWidth - 2 * margin - 12, 9);
+              
+              // Add badges
+              let badgeX = margin + 8 + pdf.getTextWidth(optLabel);
+              if (isCorrectAnswer) {
+                pdf.setTextColor(0, 128, 0);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(' [CORRECT]', badgeX, yPosition);
+              }
+              if (isStudentAnswer) {
+                pdf.setTextColor(0, 0, 255);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(' [SELECTED]', badgeX + (isCorrectAnswer ? 25 : 0), yPosition);
+              }
+              pdf.setTextColor(0, 0, 0);
+              
               yPosition += textH + 2;
             }
 
             // Student answer and correct answer
-            checkNewPage(10);
+            yPosition += 2;
             pdf.setFont('helvetica', 'bold');
-            if (studentAnswerIndex === null && (studentAnswer === null || studentAnswer === undefined)) {
-              pdf.setTextColor(150,150,150);
+            if (studentAnswer === null || studentAnswer === undefined) {
+              pdf.setTextColor(150, 150, 150);
               pdf.text(`Student's Answer: Not Attended`, margin + 2, yPosition);
             } else {
               const stIdx = studentAnswerIndex !== null ? studentAnswerIndex : null;
@@ -813,23 +930,29 @@ export default function AdminResult() {
                 pdf.text(`Student's Answer: ${infer}`, margin + 2, yPosition);
               }
             }
-            pdf.setTextColor(0,0,0);
+            pdf.setTextColor(0, 0, 0);
             yPosition += 5;
             pdf.text(`Correct Answer: Option ${qData.correctAnswer}`, margin + 2, yPosition);
-            yPosition += 6;
+            yPosition += 7;
           }
 
           // Programming code snippet
           if (q.type === 'Programming' && q.code) {
             checkNewPage(10);
+
+            yPosition += 14;
+
+            
             pdf.setFont('helvetica', 'bold');
             pdf.text('Code Submission:', margin + 2, yPosition);
             yPosition += 6;
+            
             pdf.setFont('courier', 'normal');
             pdf.setFontSize(7);
             const codeLines = String(q.code).split('\n');
             for (let li = 0; li < Math.min(codeLines.length, 60); li++) {
               checkNewPage(5);
+              
               const line = codeLines[li];
               const truncated = line.length > 95 ? line.substring(0, 95) + '...' : line;
               // Background for code line
@@ -845,20 +968,142 @@ export default function AdminResult() {
             yPosition += 2;
           }
 
-          // Explanation
-          if (qData.explanation) {
-            checkNewPage(12);
-            pdf.setFillColor(230, 240, 255);
-            const boxStart = yPosition - 3;
+          // Test cases
+          if (qData.testcases) {
+
+           
+            checkNewPage(10);
+            
             pdf.setFont('helvetica', 'bold');
+            pdf.text('Test Cases:', margin + 2, yPosition);
+            yPosition += 6;
+            
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(9);
+            const testCases = qData.testcases;
+            for (let tcIndex = 0; tcIndex < testCases.length; tcIndex++) {
+              const testCase = testCases[tcIndex];
+              checkNewPage(10);
+
+
+               const testcaseresult = ExamcodeSubmissions?.[r.uid]?.[q.id] || {};
+
+            // Find the highest mark object
+            const highest = Object.entries(testcaseresult).reduce((max, [key, value]) => {
+              return !max || value.marks > max[1].marks ? [key, value] : max;
+            }, null);
+
+
+              console.log('highest test case result', highest);
+              
+              // Test case header with status
+              const testCaseStatus = highest && highest[1]?.testResults?.[tcIndex]?.passed 
+                ? (highest[1].testResults[tcIndex].passed === true ? 'PASSED' : 'FAILED') 
+                : 'NOT RUN';
+
+
+              const statusColor = testCaseStatus === 'PASSED' 
+                ? [0, 128, 0] 
+                : testCaseStatus === 'FAILED' 
+                  ? [255, 0, 0] 
+                  : [150, 150, 150];
+              
+              pdf.setFillColor(240, 240, 240);
+              pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 8, 'F');
+              
+              pdf.setFontSize(9);
+              pdf.setFont('helvetica', 'bold');
+              pdf.text(`Test Case ${tcIndex + 1}`, margin + 2, yPosition);
+              
+              pdf.setTextColor(...statusColor);
+              pdf.text(testCaseStatus, pageWidth - margin - 20, yPosition);
+              pdf.setTextColor(0, 0, 0);
+              
+              yPosition += 8;
+              
+              // Input
+              pdf.setFont('helvetica', 'bold');
+              pdf.setFontSize(8);
+              pdf.text('Input:', margin + 4, yPosition);
+              yPosition += 4;
+              
+              pdf.setFont('courier', 'normal');
+              pdf.setFontSize(7);
+              const inputText = testCase.input || 'No input';
+              const inputLines = pdf.splitTextToSize(inputText, pageWidth - 2 * margin - 8);
+              pdf.text(inputLines, margin + 6, yPosition);
+              yPosition += inputLines.length * 3.5 + 2;
+              
+              // Expected Output
+              checkNewPage(15);
+              pdf.setFont('helvetica', 'bold');
+              pdf.setFontSize(8);
+              pdf.setTextColor(0, 128, 0);
+              pdf.text('Expected Output:', margin + 4, yPosition);
+              yPosition += 4;
+              
+              pdf.setFont('courier', 'normal');
+              pdf.setFontSize(7);
+              pdf.setTextColor(0, 0, 0);
+              const expectedText = testCase.expectedOutput || 'No expected output';
+              const expectedLines = pdf.splitTextToSize(expectedText, pageWidth - 2 * margin - 8);
+              pdf.text(expectedLines, margin + 6, yPosition);
+              yPosition += expectedLines.length * 3.5 + 2;
+              
+              // Actual Output (if available)
+              if (qData.codeSubmission && testCaseStatus === 'FAILED') {
+                checkNewPage(15);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(8);
+                pdf.setTextColor(255, 0, 0);
+                pdf.text('Actual Output:', margin + 4, yPosition);
+                yPosition += 4;
+                
+                pdf.setFont('courier', 'normal');
+                pdf.setFontSize(7);
+                pdf.setTextColor(0, 0, 0);
+                const actualText = 'Code execution output would be shown here'; // In real implementation, you'd need to store/re-run test results
+                const actualLines = pdf.splitTextToSize(actualText, pageWidth - 2 * margin - 8);
+                pdf.text(actualLines, margin + 6, yPosition);
+                yPosition += actualLines.length * 3.5 + 4;
+              }
+              
+              yPosition += 3; // Space between test cases
+            }
+          } else {
+            pdf.setFont('helvetica', 'italic');
+            pdf.setFontSize(9);
+            pdf.setTextColor(150, 150, 150);
+            pdf.text('No test cases available', margin + 4, yPosition);
+            pdf.setTextColor(0, 0, 0);
+            yPosition += 7;
+          }
+
+          yPosition += 5; // Extra space after test cases
+
+
+          // Explanation if exists
+          if (qData.explanation) {
+            checkNewPage(15);
+            pdf.setFillColor(230, 240, 255);
+            const explStartY = yPosition - 3;
+            
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(9);
             pdf.text('Explanation:', margin + 2, yPosition);
             yPosition += 5;
+            
             pdf.setFont('helvetica', 'normal');
-            const explH = addText(qData.explanation, margin + 2, yPosition, pageWidth - 2 * margin - 4, 8);
-            pdf.rect(margin, boxStart, pageWidth - 2 * margin, explH + 8, 'S');
-            yPosition += explH + 4;
+            const explHeight = addText(qData.explanation, margin + 2, yPosition, pageWidth - 2 * margin - 4, 8);
+            
+            // Draw explanation box
+            pdf.rect(margin, explStartY, pageWidth - 2 * margin, explHeight + 8, 'S');
+            yPosition += explHeight + 5;
           }
+
+          yPosition += 5; // Space between questions
         }
+        
 
         setGenProgress(Math.round(((i + 1) / total) * 100));
         setGenStatus(`Processed ${i + 1} of ${total} students`);
@@ -906,9 +1151,6 @@ export default function AdminResult() {
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 15;
     let yPosition = margin;
-
-    console.log(result);
-
     // Fetch all question details for this student
     const questionDetailsMap = {};
     
@@ -916,9 +1158,9 @@ export default function AdminResult() {
       for (const q of result.questions) {
         try {
           // Fetch question details from database
-          const questionRef = ref(database, `questions/${q.id}`);
-          const questionSnapshot = await get(questionRef);
-          const questionData = questionSnapshot.val() || {};
+          const questionDetailsRef = ref(database, `questions/${q.id}`);
+          const questionDetailsSnapshot = await get(questionDetailsRef);
+          const questionData = questionDetailsSnapshot.val() || {};
 
           // Fetch student's answer for MCQ
           const submissionRef = ref(database, `ExamSubmissions/${testid}/${result.uid}/${q.id}`);
@@ -928,21 +1170,38 @@ export default function AdminResult() {
           // Fetch code for programming questions
           let codeSubmission = null;
           if (q.type === 'Programming') {
-            const codeRef = ref(database, `ExamCode/${testid}/${result.uid}/${q.originalId}/cpp`);
+            const codeRef = ref(database, `ExamCode/${testid}/${result.uid}/${q.id}/cpp`);
+            console.log(`Attempting to fetch code from: ExamCode/${testid}/${result.uid}/${q.id}/cpp`);
             const codeSnapshot = await get(codeRef);
+
             if (codeSnapshot.exists()) {
-              codeSubmission = codeSnapshot.val();
+              const codeValue = codeSnapshot.val();
+              console.log('Found code with UID:', codeValue);
+              codeSubmission = {
+                code: codeValue,
+                language: 'cpp'
+              };
             }
           }
 
-          questionDetailsMap[q.id] = {
-            ...questionData,
-            studentAnswer: studentAnswer || null,
-            isCorrect: q.correct,
-            marks: q.marks,
+          console.log(codeSubmission);
+
+          // Format the question data for display
+          const questionDetails = {
+            id: q.id,
             type: q.type,
-            codeSubmission: codeSubmission
+            question: questionData.questionname || 'No question text available',
+            description: questionData.question || '',
+            options: questionData.options || {},
+            correctAnswer: questionData.correctAnswer,
+            explanation: questionData.explanation || '',
+            difficulty: questionData.difficulty || 'Not specified',
+            isCorrect: q.correct,
+            // Include any additional fields from your question data structure
+            ...questionData
           };
+
+          questionDetailsMap[q.id] = questionDetails;
         } catch (error) {
           console.error(`Error fetching details for question ${q.id}:`, error);
           questionDetailsMap[q.id] = {
@@ -1074,16 +1333,17 @@ export default function AdminResult() {
       // Question text
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
-      const questionText = qDetails.question;
-      const questionHeight = addText(questionText, margin + 2, yPosition, pageWidth - 2 * margin - 4, 10);
-      yPosition += questionHeight + 3;
+      const qTitle = qDetails.questionname || 'No question text available';
+      const titleH = addText(qTitle, margin + 2, yPosition, pageWidth - 2 * margin - 4, 10);
+      yPosition += titleH + 3;
 
-      // Description if exists
+      // Question description
       if (qDetails.description) {
         pdf.setFont('helvetica', 'italic');
         pdf.setFontSize(9);
-        const descHeight = addText(qDetails.description, margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
-        yPosition += descHeight + 3;
+        const descH = addText(qDetails.description, margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
+        yPosition += descH + 3;
+        pdf.setFont('helvetica', 'normal');
       }
 
       // For MCQ questions
@@ -1094,13 +1354,12 @@ export default function AdminResult() {
         pdf.setFontSize(9);
         pdf.text('Options:', margin + 2, yPosition);
         yPosition += 5;
-
-        // Display all options with converted keys (1,2,3,4)
-        const optionEntries = Object.entries(qDetails.options);
-        for (const [optKey, optValue] of optionEntries) {
+        
+        pdf.setFont('helvetica', 'normal');
+        const entries = Object.entries(qDetails.options);
+        for (const [optKey, optValue] of entries) {
           checkNewPage(8);
           
-          const displayKey = convertOptionKey(optKey);
           const isCorrectAnswer = optKey === qDetails.correctAnswer;
           const isStudentAnswer = optKey === qDetails.studentAnswer;
           
@@ -1115,7 +1374,7 @@ export default function AdminResult() {
 
           // Option text with converted key
           pdf.setFont('helvetica', 'normal');
-          const optionText = `${displayKey}. ${optValue}`;
+          const optionText = `${convertOptionKey(optKey)}. ${optValue}`;
           const optHeight = addText(optionText, margin + 6, yPosition, pageWidth - 2 * margin - 12, 9);
           
           // Add badges
@@ -1135,22 +1394,26 @@ export default function AdminResult() {
           yPosition += optHeight + 2;
         }
 
-        // Student's answer summary with converted key
+        // Student answer and correct answer
         yPosition += 2;
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(9);
         if (qDetails.studentAnswer === null || qDetails.studentAnswer === undefined) {
           pdf.setTextColor(150, 150, 150);
           pdf.text(`Student's Answer: Not Attended`, margin + 2, yPosition);
         } else {
-          const studentDisplayKey = convertOptionKey(q.mcqanswer);
-          pdf.text(`Student's Answer: ${q.mcqanswer+1}`, margin + 2, yPosition);
+          const stIdx = qDetails.studentAnswer !== null ? qDetails.studentAnswer : null;
+          if (stIdx !== null) {
+            const stLabel = convertOptionKey(String(stIdx));
+            pdf.text(`Student's Answer: Option ${stLabel}`, margin + 2, yPosition);
+          } else {
+            // Fallback: we only know correct/wrong
+            const infer = qDetails.studentAnswer === 'true' ? 'Correct' : (qDetails.studentAnswer === 'false' ? 'Wrong' : 'Unknown');
+            pdf.text(`Student's Answer: ${infer}`, margin + 2, yPosition);
+          }
         }
         pdf.setTextColor(0, 0, 0);
         yPosition += 5;
-
-        const correctDisplayKey = qDetails.correctAnswer;
-        pdf.text(`Correct Answer: Option ${correctDisplayKey}`, margin + 2, yPosition);
+        pdf.text(`Correct Answer: Option ${qDetails.correctAnswer}`, margin + 2, yPosition);
         yPosition += 7;
       }
 
@@ -1163,7 +1426,7 @@ export default function AdminResult() {
         pdf.text('Code Submission:', margin + 2, yPosition);
         yPosition += 6;
 
-        const codeToDisplay = q.code;
+        const codeToDisplay = qDetails.code;
 
         if (codeToDisplay) {
           pdf.setFont('courier', 'normal');
@@ -1201,91 +1464,98 @@ export default function AdminResult() {
         }
       }
 
-           // Get test cases from question data
-        const testCases = qDetails.testcases || [];
+      // Test cases
+      if (qDetails.testCases) {
+        checkNewPage(30);
         
-        if (testCases.length > 0) {
-          for (let tcIndex = 0; tcIndex < testCases.length; tcIndex++) {
-            const testCase = testCases[tcIndex];
-            checkNewPage(25);
-            
-            // Test case header with status
-            const testCaseStatus = q.correct ? 'PASSED' : 'FAILED'; // Simplified - in real implementation, you'd need individual test case results
-            const statusColor = q.correct ? [0, 128, 0] : [255, 0, 0];
-            
-            pdf.setFillColor(240, 240, 240);
-            pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 8, 'F');
-            
-            pdf.setFont('helvetica', 'bold');
-            pdf.setFontSize(9);
-            pdf.setTextColor(0, 0, 0);
-            pdf.text(`Test Case ${tcIndex + 1}`, margin + 2, yPosition);
-            
-            pdf.setTextColor(...statusColor);
-            pdf.text(testCaseStatus, pageWidth - margin - 20, yPosition);
-            pdf.setTextColor(0, 0, 0);
-            
-            yPosition += 8;
-            
-            // Input
-            pdf.setFont('helvetica', 'bold');
-            pdf.setFontSize(8);
-            pdf.text('Input:', margin + 4, yPosition);
-            yPosition += 4;
-            
-            pdf.setFont('courier', 'normal');
-            pdf.setFontSize(7);
-            const inputText = testCase.input || 'No input';
-            const inputLines = pdf.splitTextToSize(inputText, pageWidth - 2 * margin - 8);
-            pdf.text(inputLines, margin + 6, yPosition);
-            yPosition += inputLines.length * 3.5 + 2;
-            
-            // Expected Output
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text('Test Cases:', margin + 2, yPosition);
+        yPosition += 6;
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        const testCases = qDetails.testCases;
+        for (let tcIndex = 0; tcIndex < testCases.length; tcIndex++) {
+          const testCase = testCases[tcIndex];
+          checkNewPage(10);
+          
+          // Test case header with status
+          const testCaseStatus = q.correct ? 'PASSED' : 'FAILED'; // Simplified - in real implementation, you'd need individual test case results
+          const statusColor = q.correct ? [0, 128, 0] : [255, 0, 0];
+          
+          pdf.setFillColor(240, 240, 240);
+          pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 8, 'F');
+          
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`Test Case ${tcIndex + 1}`, margin + 2, yPosition);
+          
+          pdf.setTextColor(...statusColor);
+          pdf.text(testCaseStatus, pageWidth - margin - 20, yPosition);
+          pdf.setTextColor(0, 0, 0);
+          
+          yPosition += 8;
+          
+          // Input
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(8);
+          pdf.text('Input:', margin + 4, yPosition);
+          yPosition += 4;
+          
+          pdf.setFont('courier', 'normal');
+          pdf.setFontSize(7);
+          const inputText = testCase.input || 'No input';
+          const inputLines = pdf.splitTextToSize(inputText, pageWidth - 2 * margin - 8);
+          pdf.text(inputLines, margin + 6, yPosition);
+          yPosition += inputLines.length * 3.5 + 2;
+          
+          // Expected Output
+          checkNewPage(15);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(8);
+          pdf.setTextColor(0, 128, 0);
+          pdf.text('Expected Output:', margin + 4, yPosition);
+          yPosition += 4;
+          
+          pdf.setFont('courier', 'normal');
+          pdf.setFontSize(7);
+          pdf.setTextColor(0, 0, 0);
+          const expectedText = testCase.expectedOutput || 'No expected output';
+          const expectedLines = pdf.splitTextToSize(expectedText, pageWidth - 2 * margin - 8);
+          pdf.text(expectedLines, margin + 6, yPosition);
+          yPosition += expectedLines.length * 3.5 + 2;
+          
+          // Actual Output (if available)
+          if (qDetails.codeSubmission && testCaseStatus === 'FAILED') {
             checkNewPage(15);
             pdf.setFont('helvetica', 'bold');
             pdf.setFontSize(8);
-            pdf.setTextColor(0, 128, 0);
-            pdf.text('Expected Output:', margin + 4, yPosition);
+            pdf.setTextColor(255, 0, 0);
+            pdf.text('Actual Output:', margin + 4, yPosition);
             yPosition += 4;
             
             pdf.setFont('courier', 'normal');
             pdf.setFontSize(7);
             pdf.setTextColor(0, 0, 0);
-            const expectedText = testCase.expectedOutput || 'No expected output';
-            const expectedLines = pdf.splitTextToSize(expectedText, pageWidth - 2 * margin - 8);
-            pdf.text(expectedLines, margin + 6, yPosition);
-            yPosition += expectedLines.length * 3.5 + 2;
-            
-            // Actual Output (if available)
-            if (qDetails.codeSubmission && testCaseStatus === 'FAILED') {
-              checkNewPage(15);
-              pdf.setFont('helvetica', 'bold');
-              pdf.setFontSize(8);
-              pdf.setTextColor(255, 0, 0);
-              pdf.text('Actual Output:', margin + 4, yPosition);
-              yPosition += 4;
-              
-              pdf.setFont('courier', 'normal');
-              pdf.setFontSize(7);
-              pdf.setTextColor(0, 0, 0);
-              const actualText = 'Code execution output would be shown here'; // In real implementation, you'd need to store/re-run test results
-              const actualLines = pdf.splitTextToSize(actualText, pageWidth - 2 * margin - 8);
-              pdf.text(actualLines, margin + 6, yPosition);
-              yPosition += actualLines.length * 3.5 + 4;
-            }
-            
-            yPosition += 3; // Space between test cases
+            const actualText = 'Code execution output would be shown here'; // In real implementation, you'd need to store/re-run test results
+            const actualLines = pdf.splitTextToSize(actualText, pageWidth - 2 * margin - 8);
+            pdf.text(actualLines, margin + 6, yPosition);
+            yPosition += actualLines.length * 3.5 + 4;
           }
-        } else {
-          pdf.setFont('helvetica', 'italic');
-          pdf.setFontSize(9);
-          pdf.setTextColor(150, 150, 150);
-          pdf.text('No test cases available', margin + 4, yPosition);
-          pdf.setTextColor(0, 0, 0);
-          yPosition += 7;
+          
+          yPosition += 3; // Space between test cases
         }
+      } else {
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(9);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text('No test cases available', margin + 4, yPosition);
+        pdf.setTextColor(0, 0, 0);
+        yPosition += 7;
+      }
 
-        yPosition += 5; // Extra space after test cases
+      yPosition += 5; // Extra space after test cases
 
 
       // Explanation if exists
@@ -1349,7 +1619,7 @@ export default function AdminResult() {
 
     try {
       // Get full question details from Questions node
-      const questionDetailsRef = ref(database, `questions/${effectiveQuestionId}`);
+      const questionDetailsRef = ref(database, `questions/${questionId}`);
       const questionDetailsSnapshot = await get(questionDetailsRef);
       const questionData = questionDetailsSnapshot.val() || {};
 
@@ -1398,7 +1668,7 @@ export default function AdminResult() {
         id: questionId,
         type: questionType,
         question: questionData.questionname || 'No question text available',
-        description: questionData.description || '',
+        description: questionData.question || '',
         options: questionData.options || {},
         correctAnswer: questionData.correctAnswer,
         explanation: questionData.explanation || '',
@@ -1596,250 +1866,147 @@ export default function AdminResult() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-100 dark:bg-gray-700">
-                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    <button
-                      onClick={() => handleSort('studentId')}
-                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
+          <ResultsTable>
+            <thead>
+              <tr>
+                <TableHeader onClick={() => handleSort('studentId')} sortDirection={sortColumn === 'studentId' ? sortDirection : undefined}>
+                  Student ID
+                </TableHeader>
+                <TableHeader onClick={() => handleSort('mail')} sortDirection={sortColumn === 'mail' ? sortDirection : undefined}>
+                  Email
+                </TableHeader>
+                <TableHeader onClick={() => handleSort('totalMarks')} sortDirection={sortColumn === 'totalMarks' ? sortDirection : undefined}>
+                  Score
+                </TableHeader>
+                <TableHeader onClick={() => handleSort('correctCount')} sortDirection={sortColumn === 'correctCount' ? sortDirection : undefined}>
+                  Correct
+                </TableHeader>
+                <th className="p-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedResults.length > 0 ? (
+                sortedResults.map((result, index) => (
+                  <React.Fragment key={index}>
+                    <TableRow
+                      isSelected={selectedRow === index}
+                      onClick={() => setSelectedRow(selectedRow === index ? null : index)}
                     >
-                      <span>Student ID</span>
-                      <div className="flex flex-col">
-                        <ChevronUp
-                          size={12}
-                          className={`${sortColumn === 'studentId' && sortDirection === 'asc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400'
-                            }`}
-                        />
-                        <ChevronDown
-                          size={12}
-                          className={`${sortColumn === 'studentId' && sortDirection === 'desc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
-                            }`}
-                        />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    <button
-                      onClick={() => handleSort('mail')}
-                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
-                    >
-                      <span>Email</span>
-                      <div className="flex flex-col">
-                        <ChevronUp
-                          size={12}
-                          className={`${sortColumn === 'mail' && sortDirection === 'asc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400'
-                            }`}
-                        />
-                        <ChevronDown
-                          size={12}
-                          className={`${sortColumn === 'mail' && sortDirection === 'desc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
-                            }`}
-                        />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    <button
-                      onClick={() => handleSort('totalMarks')}
-                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
-                    >
-                      <span>Score</span>
-                      <div className="flex flex-col">
-                        <ChevronUp
-                          size={12}
-                          className={`${sortColumn === 'totalMarks' && sortDirection === 'asc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400'
-                            }`}
-                        />
-                        <ChevronDown
-                          size={12}
-                          className={`${sortColumn === 'totalMarks' && sortDirection === 'desc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
-                            }`}
-                        />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    <button
-                      onClick={() => handleSort('correctCount')}
-                      className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors group"
-                    >
-                      <span>Correct</span>
-                      <div className="flex flex-col">
-                        <ChevronUp
-                          size={12}
-                          className={`${sortColumn === 'correctCount' && sortDirection === 'asc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400'
-                            }`}
-                        />
-                        <ChevronDown
-                          size={12}
-                          className={`${sortColumn === 'correctCount' && sortDirection === 'desc'
-                            ? 'text-blue-600 dark:text-blue-400'
-                            : 'text-gray-400 group-hover:text-blue-400 -mt-1'
-                            }`}
-                        />
-                      </div>
-                    </button>
-                  </th>
-                  <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-600">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedResults.length > 0 ? (
-                  sortedResults.map((result, index) => (
-                    <React.Fragment key={index}>
-                      <tr
-                        className={`${selectedRow === index
-                          ? 'bg-blue-50 dark:bg-blue-900/20'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                          } transition-colors cursor-pointer border-b border-gray-200 dark:border-gray-700`}
-                        onClick={() => setSelectedRow(selectedRow === index ? null : index)}
-                      >
-                        <td className="p-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-semibold">
-                              {result.studentId.charAt(0).toUpperCase()}
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-semibold">
+                            {result.studentId.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900 dark:text-white">
+                              {result.studentId}
                             </div>
-                            <div>
-                              <div className="font-medium text-gray-900 dark:text-white">
-                                {result.studentId}
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                ID: {result.uid.substring(0, 6)}...
-                              </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              ID: {result.uid.substring(0, 6)}...
                             </div>
                           </div>
-                        </td>
-                        <td className="p-3">
-                          <div className="text-sm text-gray-600 dark:text-gray-300">
-                            {result.mail}
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          {(() => {
-                            const score = useWeightage ? result.weightedMarks : result.totalMarks;
-                            const badgeClass = isNaN(score)
-                              ? 'bg-gray-100 text-gray-800'
-                              : score >= 70
-                                ? 'bg-green-100 text-green-800'
-                                : score >= 50
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800';
-                            return (
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}>
-                                {isNaN(score) ? 'Not Attended' : `${score.toFixed(2)}%`}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="p-3">
-                          <div className="text-sm text-gray-900 dark:text-white font-medium">
-                            {result.correctCount} / {result.totalQuestions}
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadStudentPDF(result);
-                            }}
-                            className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-1.5 text-sm"
-                            title="Download detailed student report"
-                          >
-                            <Download size={16} />
-                            Download PDF
-                          </button>
-                        </td>
-                        {/* <td className="p-3">
-                          <div className="flex gap-1">
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {result.mail}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const score = useWeightage ? result.weightedMarks : result.totalMarks;
+                          const badgeClass = isNaN(score)
+                            ? 'bg-gray-100 text-gray-800'
+                            : score >= 70
+                              ? 'bg-green-100 text-green-800'
+                              : score >= 50
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800';
+                          return (
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${badgeClass}`}>
+                              {isNaN(score) ? 'Not Attended' : `${score.toFixed(2)}%`}
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm text-gray-900 dark:text-white font-medium">
+                          {result.correctCount} / {result.totalQuestions}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadStudentPDF(result);
+                          }}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-1.5 text-sm"
+                          title="Download detailed student report"
+                        >
+                          <Download size={16} />
+                          Download PDF
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                    {selectedRow === index && (
+                      <TableRow>
+                        <TableCell colSpan="5" className="p-6">
+                          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+                            Question Details:
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {result.questions.map((q, i) => (
                               <div
                                 key={i}
-                                className={`w-2 h-8 rounded ${q.correct ? 'bg-green-500' : 'bg-red-500'
-                                  }`}
-                                title={`${q.id}: ${q.marks} points`}
-                              />
+                                onClick={() =>
+                                  fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type, q.originalId, q.code)
+                                }
+                                className="bg-white p-4 rounded-lg border border-gray-200 shadow-xs hover:shadow-sm transition-shadow cursor-pointer"
+                              >
+                                <div className="flex justify-between items-start mb-2">
+                                  <h4 className="font-medium text-gray-900 text-sm">
+                                    {q.id || `Question ${i + 1}`}
+                                  </h4>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-xs font-medium ${q.marks > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                      }`}
+                                  >
+                                    {q.marks || 0} points
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-xs ${q.correct
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-red-100 text-red-800'
+                                      }`}
+                                  >
+                                    {q.correct ? '✓ Correct' : '✗ Wrong'}
+                                  </span>
+                                  {q.code && (
+                                    <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs flex items-center gap-1">
+                                      <CodeIcon size={12} />
+                                      Code
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             ))}
                           </div>
-                        </td> */}
-                      </tr>
-                      {selectedRow === index && (
-                        <tr className="bg-gray-50 dark:bg-gray-800">
-                          <td colSpan="6" className="p-6">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                              Question Details:
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {result.questions.map((q, i) => (
-                                <div
-                                  key={i}
-                                  onClick={() =>
-                                    fetchQuestionDetails(q.id, result.studentId, result.uid, q.correct, q.type, q.originalId, q.code)
-                                  }
-                                  className="bg-white p-4 rounded-lg border border-gray-200 shadow-xs hover:shadow-sm transition-shadow cursor-pointer"
-                                >
-                                  <div className="flex justify-between items-start mb-2">
-                                    <h4 className="font-medium text-gray-900 text-sm">
-                                      {q.id || `Question ${i + 1}`}
-                                    </h4>
-                                    <span
-                                      className={`px-2 py-0.5 rounded text-xs font-medium ${q.marks > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                                        }`}
-                                    >
-                                      {q.marks || 0} points
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className={`px-2 py-0.5 rounded-full text-xs ${q.correct
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-red-100 text-red-800'
-                                        }`}
-                                    >
-                                      {q.correct ? '✓ Correct' : '✗ Wrong'}
-                                    </span>
-                                    {q.code && (
-                                      <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs flex items-center gap-1">
-                                        <CodeIcon size={12} />
-                                        Code
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="6" className="p-8 text-center text-gray-500 dark:text-gray-400">
-                      No results found for this exam
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="p-8 text-center text-gray-500 dark:text-gray-400">
+                    No results found for this exam
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </ResultsTable>
         </div>
       </div>
 
@@ -1853,7 +2020,7 @@ export default function AdminResult() {
               </h3>
               <button
                 onClick={closeModal}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
               >
                 <X size={24} />
               </button>
@@ -1861,7 +2028,7 @@ export default function AdminResult() {
 
             {isLoadingQuestion ? (
               <div className="p-8 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
               </div>
             ) : (
               <div className="p-6">
@@ -1879,65 +2046,87 @@ export default function AdminResult() {
                       {questionDetails?.type || 'MCQ'}
                     </span>
                   </div>
-
                   <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    {questionDetails?.question}
+                    {questionDetails?.questionname}
                   </h4>
-
-                  {questionDetails?.description && (
-                    <p className="text-gray-600 dark:text-gray-300 mb-4">
-                      {questionDetails.description}
-                    </p>
+                  {questionDetails?.question && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Description</h4>
+                      <p className="mt-1 text-sm text-gray-900 dark:text-gray-200 whitespace-pre-wrap">
+                        {questionDetails?.question}
+                      </p>
+                    </div>
                   )}
                 </div>
 
-                {userCode && (
+                {userCode ? (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
+                      <CodeIcon className="mr-2" size={16} /> Code Submission
+                    </h4>
+                    <pre className="mt-2 p-4 bg-gray-50 dark:bg-gray-700 rounded-md text-sm text-gray-800 dark:text-gray-200 overflow-x-auto">
+                      {userCode}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-md text-sm text-gray-500 dark:text-gray-400">
+                    No code submission available
+                  </div>
+                )}
+                {questionDetails?.type === 'Programming' && questionDetails?.testCases && (
                   <div className="mb-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <CodeIcon size={18} className="text-purple-600" />
-                      <h4 className="font-medium text-gray-900 dark:text-white">
-                        Student's Code Submission
-                      </h4>
+                      <List size={18} className="text-purple-600" />
+                      <h4 className="font-medium text-gray-900 dark:text-white">Test Cases</h4>
                     </div>
-                    <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                      <pre className="text-sm text-gray-100">
-                        <code>{userCode.code}</code>
-                      </pre>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead className="bg-gray-50 dark:bg-gray-800">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Input</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Expected Output</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                          {Object.entries(questionDetails.testCases).map(([key, testCase]) => (
+                            <tr key={key}>
+                              <td className="px-4 py-2 whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-200">{testCase.input}</td>
+                              <td className="px-4 py-2 whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-200">{testCase.expectedOutput}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
-
-                <div className="space-y-4">
-                  {questionDetails?.options && Object.keys(questionDetails.options).length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 dark:text-white mb-2">Options:</h4>
-                      <div className="space-y-2">
-                        {Object.entries(questionDetails.options).map(([key, value]) => {
-                          const displayKey = parseInt(key);
-                          const displayLabel = isNaN(displayKey) ? key : (displayKey + 1).toString();
-                          
-                          return (
-                            <div
-                              key={key}
-                              className={`p-3 rounded-lg border ${key === questionDetails?.correctAnswer
-                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
-                                }`}
-                            >
-                              <span className="font-medium">{displayLabel}:</span> {value}
-                              {key === questionDetails?.correctAnswer && (
-                                <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                                  (Correct Answer)
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                {questionDetails?.options && Object.keys(questionDetails.options).length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-900 dark:text-white mb-2">Options:</h4>
+                    <div className="space-y-2">
+                      {Object.entries(questionDetails.options).map(([key, value]) => {
+                        const displayKey = parseInt(key);
+                        const displayLabel = isNaN(displayKey) ? key : (displayKey + 1).toString();
+                        
+                        return (
+                          <div
+                            key={key}
+                            className={`p-3 rounded-lg border ${key === questionDetails?.correctAnswer
+                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                              : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
+                              }`}
+                          >
+                            <span className="font-medium">{displayLabel}:</span> {value}
+                            {key === questionDetails?.correctAnswer && (
+                              <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                                (Correct Answer)
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
-
+                  </div>
+                )}
                 {questionDetails.explanation && (
                   <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
                     <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Explanation:</h4>
@@ -1946,7 +2135,6 @@ export default function AdminResult() {
                     </p>
                   </div>
                 )}
-
                 <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
                   <div className="text-sm text-gray-500">
                     <span className="font-medium">Status:</span> {
@@ -1967,7 +2155,6 @@ export default function AdminResult() {
           </div>
         </div>
       )}
-
       {isGeneratingReport && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
