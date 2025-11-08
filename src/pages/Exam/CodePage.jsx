@@ -887,7 +887,7 @@ function CodePage({ question }) {
 
 
   return (
-    <div className="h-[calc(100vh-6rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">      {/* Left Panel */}
+    <div className="h-[calc(100vh-5rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">      {/* Left Panel */}
       <ToastContainer />
       {/* Left Panel */}
       <div
