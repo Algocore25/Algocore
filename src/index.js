@@ -9,7 +9,9 @@ import DevToolsBlocker from './pages/DevToolsBlocker';
 
 
 // Flag to track if DevTools is active and blocking is required
+// Tracking for security violations
 let devToolsDetected = false;
+let detectedToolName = "";
 
 // Disable React DevTools in production
 if (process.env.NODE_ENV === 'production') {
@@ -25,6 +27,7 @@ if (process.env.NODE_ENV === 'production') {
           (window.__REACT_DEVTOOLS_GLOBAL_HOOK__.renderers.size > 0 ||
             window.__REACT_DEVTOOLS_GLOBAL_HOOK__.renderers.length > 0)) {
           devToolsDetected = true;
+          detectedToolName = "React Developer Tools";
         }
       }
     } else {
@@ -40,6 +43,7 @@ if (process.env.NODE_ENV === 'production') {
   } catch (e) {
     // If we can't set it, it's likely because the extension has already locked it
     devToolsDetected = true;
+    detectedToolName = "React Developer Tools";
   }
 }
 
@@ -49,7 +53,7 @@ const AuthLoadingWrapper = ({ children }) => {
   const { loading } = useAuth();
 
   if (devToolsDetected) {
-    return <DevToolsBlocker />;
+    return <DevToolsBlocker detectedTool={detectedToolName} />;
   }
 
   if (loading) {

@@ -6,7 +6,7 @@ import logoLight from '../assets/LOGO.png';
 import logoDark from '../assets/LOGO-1.png';
 import { FaSun as SunIcon, FaMoon as MoonIcon } from 'react-icons/fa';
 
-const DevToolsBlocker = () => {
+const DevToolsBlocker = ({ detectedTool }) => {
     const { theme, toggleTheme } = useTheme();
 
     const containerVariants = {
@@ -64,8 +64,8 @@ const DevToolsBlocker = () => {
                     initial="hidden"
                     animate="visible"
                     className={`max-w-xl w-full max-h-[calc(100vh-6rem)] p-6 md:p-8 rounded-3xl shadow-2xl border backdrop-blur-md relative z-10 overflow-y-auto hide-scrollbar flex flex-col items-center justify-center ${theme === 'dark'
-                            ? 'bg-[#141414]/90 border-white/10 shadow-black'
-                            : 'bg-white/90 border-black/5 shadow-gray-200'
+                        ? 'bg-[#141414]/90 border-white/10 shadow-black'
+                        : 'bg-white/90 border-black/5 shadow-gray-200'
                         }`}
                 >
                     {/* Developer Animation */}
@@ -122,15 +122,15 @@ const DevToolsBlocker = () => {
                     </motion.div>
 
                     <motion.p variants={itemVariants} className={`text-base text-center mb-6 leading-relaxed shrink-0 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Our security system has detected <span className="text-red-500 font-semibold italic">Developer Tools</span> active.
+                        Our security system has detected <span className="text-red-500 font-semibold italic">{detectedTool || "Developer Tools"}</span> active.
                         Please disable them to maintain the integrity of your session.
                     </motion.p>
 
                     {/* Action List */}
                     <motion.div variants={itemVariants} className={`w-full space-y-3 mb-6 p-5 rounded-2xl border shrink-0 ${theme === 'dark' ? 'bg-black/40 border-white/5' : 'bg-white border-black/5'}`}>
                         {[
-                            "Close all developer tool windows (F12 / Inspect)",
-                            "Disable the React DevTools browser extension",
+                            detectedTool ? `Disable or uninstall the ${detectedTool} extension` : "Close all developer tool windows (F12 / Inspect)",
+                            "Disable any remaining code-inspecting browser extensions",
                             "Refresh this page to verify and continue"
                         ].map((action, idx) => (
                             <div key={idx} className="flex items-start space-x-3">
