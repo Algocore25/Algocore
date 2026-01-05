@@ -171,11 +171,10 @@ const Navbar = () => {
               <Link
                 key={i}
                 to={item.href}
-                className={`text-sm font-medium transition-colors ${
-                  location.pathname === item.href
-                    ? 'text-[#4285F4]'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
-                }`}
+                className={`text-sm font-medium transition-colors ${location.pathname === item.href
+                  ? 'text-[#4285F4]'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
+                  }`}
               >
                 {item.label}
               </Link>
@@ -184,26 +183,25 @@ const Navbar = () => {
         </div>
 
         {/* Right: Controls */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {/* Question progress dots */}
           {match && questionData.length > 0 && currentIndex >= 0 && (
-            <div className="mr-4 max-w-xs">
+            <div className="mr-2 sm:mr-4 max-w-[100px] sm:max-w-xs">
               <div className="flex items-center gap-2">
-                <div className="text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
                   {currentIndex + 1}/{questionData.length}
                 </div>
-                <div className="flex items-center gap-1 overflow-x-auto">
+                <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
                   {questionData.map((q, i) => (
                     <button
                       key={i}
                       type="button"
-                      className={`w-2.5 h-2.5 rounded-full transition-colors flex-shrink-0 ${
-                        i === currentIndex
-                          ? 'bg-blue-500'
-                          : progressMap[q]
+                      className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-colors flex-shrink-0 ${i === currentIndex
+                        ? 'bg-blue-500'
+                        : progressMap[q]
                           ? 'bg-green-500'
                           : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
-                      }`}
+                        }`}
                       onClick={() => {
                         const { course, subcourse } = match.params;
                         navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(q)}`);
@@ -216,20 +214,20 @@ const Navbar = () => {
           )}
 
           {/* Online indicator */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center">
             {isOnline ? (
-              <Wifi className="w-5 h-5 text-green-600" />
+              <Wifi className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
             ) : (
-              <WifiOff className="w-5 h-5 text-red-600" />
+              <WifiOff className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
             )}
           </div>
 
           {/* Theme toggle */}
-          <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-dark-tertiary">
+          <button onClick={toggleTheme} className="p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-dark-tertiary">
             {theme === 'dark' ? (
-              <SunIcon className="w-5 h-5 text-yellow-400" />
+              <SunIcon className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
             ) : (
-              <MoonIcon className="w-5 h-5 text-gray-700" />
+              <MoonIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
             )}
           </button>
 
@@ -240,12 +238,12 @@ const Navbar = () => {
                 <button
                   ref={authButtonRef}
                   onClick={() => setIsAuthOpen(!isAuthOpen)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-dark-tertiary rounded-full"
+                  className="p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-dark-tertiary rounded-full"
                 >
                   {user.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full" />
+                    <img src={user.photoURL} alt="Profile" className="w-7 h-7 sm:w-8 sm:h-8 rounded-full" />
                   ) : (
-                    <UserCircleIcon className="w-8 h-8 text-gray-700 dark:text-gray-200" />
+                    <UserCircleIcon className="w-7 h-7 sm:w-8 sm:h-8 text-gray-700 dark:text-gray-200" />
                   )}
                 </button>
 
@@ -277,7 +275,7 @@ const Navbar = () => {
             ) : (
               <Link
                 to="/login"
-                className="px-4 py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+                className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-colors whitespace-nowrap text-xs sm:text-sm font-bold"
               >
                 Sign In
               </Link>
@@ -313,11 +311,10 @@ const Navbar = () => {
                 <Link
                   key={index}
                   to={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${
-                    location.pathname === item.href
-                      ? 'bg-[#4285F4]/10 text-[#4285F4]'
-                      : 'text-gray-700 dark:text-gray-200'
-                  }`}
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${location.pathname === item.href
+                    ? 'bg-[#4285F4]/10 text-[#4285F4]'
+                    : 'text-gray-700 dark:text-gray-200'
+                    }`}
                   onClick={() => setIsMenuOpen(false)}
                 >
                   <span>{item.label}</span>
