@@ -16,6 +16,7 @@ import ProtectedRoute from './ProtectedRoute';
 import CompilerPage from './pages/CompilerPage';
 import LoadingPage from './pages/LoadingPage';
 import AdminMonitor from './pages/Admin/AdminMonitor';
+import CaseStudyMonitor from './pages/Admin/CaseStudyMonitor';
 import CpuApp from './pages/Visual/Cpu/CpuApp';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -25,7 +26,7 @@ const CoursePage = lazy(() => import('./pages/CoursePage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
-
+const CaseStudyPage = lazy(() => import('./pages/CaseStudyPage'));
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
 
@@ -38,8 +39,10 @@ const CopyPasteGuard = () => {
   const { pathname } = useLocation();
 
   useEffect(() => {
+    const isCaseStudy = pathname.includes('test-case-study') || pathname.includes('problem');
     const requiresAdmin = /^\/(admin(|monitor|results)|testedit|exammonitor|adminresults)(\/|$)/i.test(pathname);
-    if (requiresAdmin) {
+
+    if (requiresAdmin || isCaseStudy) {
       return;
     }
 
@@ -76,6 +79,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><TestsList /></ProtectedRoute>} />
               <Route path="/adminmonitor" element={<ProtectedRoute requireAdmin={true}><AdminMonitor /></ProtectedRoute>} />
+              <Route path="/adminmonitor/casestudies" element={<ProtectedRoute requireAdmin={true}><CaseStudyMonitor /></ProtectedRoute>} />
               <Route path="/testedit/:testId" element={<ProtectedRoute requireAdmin={true}><TestManage /></ProtectedRoute>} />
 
               <Route path="/problem/:course/:subcourse/:questionId" element={<ProtectedRoute > <DynamicComponent /></ProtectedRoute>} />
@@ -86,18 +90,16 @@ function App() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/test-case-study" element={<CaseStudyPage data={{}} />} />
               <Route path="*" element={<NotFoundPage />} />
 
               <Route path="/proctoring" element={<VideoProctor />} />
 
-              <Route path="/test" element={ <DesktopOnlyPage>  <ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>     </DesktopOnlyPage> } />
-              <Route path="/examwindow/:testid" element={  <DesktopOnlyPage> <ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute> </DesktopOnlyPage> } />
+              <Route path="/test" element={<DesktopOnlyPage>  <ProtectedRoute requireUser={true}><TestsPage /></ProtectedRoute>     </DesktopOnlyPage>} />
+              <Route path="/examwindow/:testid" element={<DesktopOnlyPage> <ProtectedRoute requireUser={true}><DynamicExam /></ProtectedRoute> </DesktopOnlyPage>} />
               <Route path="/exammonitor/:testid" element={<ProtectedRoute requireAdmin={true}><ExamMonitor /></ProtectedRoute>} />
               <Route path="/adminresults/:testid" element={<ProtectedRoute requireAdmin={true}><AdminResult /></ProtectedRoute>} />
               <Route path="/studentresults/:testid" element={<ProtectedRoute requireUser={true}><StudentResult /></ProtectedRoute>} />
-
-
-
             </Routes>
           </Suspense>
         </PageLayout>
