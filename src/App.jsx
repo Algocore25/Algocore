@@ -27,6 +27,7 @@ const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const CaseStudyPage = lazy(() => import('./pages/CaseStudyPage'));
+const CaseStudySelectionPage = lazy(() => import('./pages/CaseStudySelectionPage'));
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
 
@@ -39,7 +40,7 @@ const CopyPasteGuard = () => {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    const isCaseStudy = pathname.includes('test-case-study') || pathname.includes('problem');
+    const isCaseStudy = pathname.includes('case-study') || pathname.includes('problem');
     const requiresAdmin = /^\/(admin(|monitor|results)|testedit|exammonitor|adminresults)(\/|$)/i.test(pathname);
 
     if (requiresAdmin || isCaseStudy) {
@@ -91,6 +92,8 @@ function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/test-case-study" element={<CaseStudyPage data={{}} />} />
+              <Route path="/case-studies" element={<CaseStudySelectionPage />} />
+              <Route path="/case-study/:pdfId" element={<CaseStudyPage />} />
               <Route path="*" element={<NotFoundPage />} />
 
               <Route path="/proctoring" element={<VideoProctor />} />

@@ -61,6 +61,7 @@ const Navbar = () => {
     !isAdmin && user && { label: 'Tests', href: '/test' },
     isAdmin && { label: 'Admin', href: '/admin' },
     isAdmin && { label: 'Students', href: '/adminmonitor' },
+    isAdmin && { label: 'Case Studies', href: '/adminmonitor/casestudies' },
     { label: 'Compiler', href: '/compiler' },
   ].filter(Boolean);
 

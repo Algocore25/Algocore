@@ -8,8 +8,9 @@ import { ref, get, set, push, remove } from "firebase/database";
 import { useAuth } from '../context/AuthContext';
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import case1 from '../assets/case1.pdf';
-import case2 from '../assets/case2.pdf';
+import "react-toastify/dist/ReactToastify.css";
+// import case1 from '../assets/case1.pdf'; // REMOVED hardcoded imports
+// import case2 from '../assets/case2.pdf'; // REMOVED hardcoded imports
 
 const Icons = {
     FileText: ({ className }) => (
@@ -109,9 +110,13 @@ const CaseStudyPage = ({ data, navigation }) => {
     const { theme } = useTheme();
     const { user } = useAuth();
     const params = useParams();
-    // Default values for testing when route params are missing
+    // Use pdfId from route /case-study/:pdfId, or fallback to older prop/param method
+    const pdfId = params.pdfId ? decodeURIComponent(params.pdfId) : null;
+
+    // If accessing via /test-case-study (legacy), keep defaults. 
+    // If via /case-study/:pdfId, use pdfId as the identifier.
     const course = params.course || 'test_course';
-    const questionId = params.questionId || 'case_study_1';
+    const questionId = pdfId || params.questionId || 'case_study_1'; // Use filename as ID
     const saveTimeoutRef = useRef(null);
     const [activeFormats, setActiveFormats] = useState({
         bold: false,
@@ -149,10 +154,7 @@ const CaseStudyPage = ({ data, navigation }) => {
 
     // Use PDF URLs from props or fallback to placeholders
     // Initial state with fallbacks, will be updated from Firebase
-    const [pdfUrls, setPdfUrls] = useState([
-        data?.pdfUrl1 || case1,
-        data?.pdfUrl2 || case2
-    ]);
+    const [pdfUrls, setPdfUrls] = useState([]);
 
     // Check assignment
     useEffect(() => {
@@ -178,40 +180,73 @@ const CaseStudyPage = ({ data, navigation }) => {
                     setHasAccess(true); // Fallback
                 }
             } else {
-                 setHasAccess(true);
+                setHasAccess(true);
             }
         };
         checkAssignment();
     }, [user, questionId]);
 
     // Fetch PDF Path from algocoreCaseStudies
+    // Fetch PDF and create local Blob URL
     useEffect(() => {
-        const fetchPdfPath = async () => {
-            if (questionId) {
+        let activeUrl = null;
+
+        const loadPdf = async (url) => {
+            try {
+                // Fetch the PDF file
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Failed to fetch PDF');
+
+                // Get blob and create object URL with explicit PDF type
+                const blob = await response.blob();
+                const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+                activeUrl = URL.createObjectURL(pdfBlob);
+
+                setPdfUrls([activeUrl]);
+                setIsPdfLoading(false);
+            } catch (error) {
+                console.error("Error loading PDF:", error);
+                setIsPdfLoading(false);
+                toast.error("Failed to load PDF document");
+            }
+        };
+
+        if (pdfId) {
+            // Construct raw URL (GitHub serves as octet-stream, but we fetch and re-blob as PDF)
+            const rawUrl = `https://raw.githubusercontent.com/Algocore25/Images/main/${encodeURIComponent(pdfId)}`;
+            loadPdf(rawUrl);
+        } else if (questionId) {
+            // Fallback for legacy
+            const fetchLegacyPath = async () => {
                 const safeQuestionId = questionId.replace(/[.#$/\[\]]/g, '_');
-                // Use safeQuestionId if the key in firebase uses sanitized ID, otherwise use questionId directly.
-                // Assuming keys in algocoreCaseStudies use the same ID format.
                 const pathKey = `algocoreCaseStudies/${safeQuestionId}/path`;
 
                 try {
                     const snapshot = await get(ref(database, pathKey));
                     if (snapshot.exists()) {
                         const rawPath = snapshot.val();
-                        // Construct GitHub raw URL
-                        // Repo: https://github.com/Algocore25/Images
-                        // Raw Base: https://raw.githubusercontent.com/Algocore25/Images/main/
                         const fullUrl = `https://raw.githubusercontent.com/Algocore25/Images/main/${rawPath}`;
-                        
-                        // Update pdfUrls - currently logic supports 2 slots, filling first for now
-                        setPdfUrls(prev => [fullUrl, prev[1]]); 
+                        loadPdf(fullUrl);
+                    } else {
+                        setIsPdfLoading(false);
                     }
                 } catch (error) {
                     console.error("Error fetching PDF path:", error);
+                    setIsPdfLoading(false);
                 }
+            };
+            fetchLegacyPath();
+        } else {
+            setIsPdfLoading(false);
+        }
+
+        // Cleanup function to revoke object URL
+        return () => {
+            if (activeUrl) {
+                URL.revokeObjectURL(activeUrl);
             }
         };
-        fetchPdfPath();
-    }, [questionId]);
+    }, [pdfId, questionId]);
 
     // Reset loading state when active PDF changes
     useEffect(() => {
@@ -234,7 +269,7 @@ const CaseStudyPage = ({ data, navigation }) => {
                         // Based on user note: versionId: { text: "text" }
                         // We'll store current as { text: "..." } to be consistent
                         const content = typeof data === 'object' ? data.text : data;
-                        
+
                         setText(content || "");
                         if (editorRef.current) {
                             editorRef.current.innerHTML = content || "";
@@ -315,6 +350,13 @@ const CaseStudyPage = ({ data, navigation }) => {
         const historyKey = `caseStudyProgress/${user.uid}/${safeQuestionId}`;
         const timestamp = Date.now();
 
+        // Check if the current text matches ANY previously saved version
+        const isDuplicate = history.some(version => version.text === text);
+        if (isDuplicate) {
+            toast.info("This content has already been saved as a version.");
+            return;
+        }
+
         try {
             const newVersionRef = push(ref(database, historyKey));
             const newVersionKey = newVersionRef.key;
@@ -328,10 +370,8 @@ const CaseStudyPage = ({ data, navigation }) => {
 
             const newEntry = { id: newVersionKey, ...versionData };
             setHistory(prev => [newEntry, ...prev]);
-            toast.success("Version snapshot saved!");
         } catch (error) {
             console.error("Error saving version:", error);
-            toast.error("Failed to save version");
         }
     };
 
@@ -346,10 +386,8 @@ const CaseStudyPage = ({ data, navigation }) => {
         try {
             await remove(ref(database, versionPath));
             setHistory(prev => prev.filter(item => item.id !== versionId));
-            toast.success("Version deleted");
         } catch (error) {
             console.error("Error deleting version:", error);
-            toast.error("Failed to delete version");
         }
     };
 
@@ -359,7 +397,6 @@ const CaseStudyPage = ({ data, navigation }) => {
             editorRef.current.innerHTML = versionText;
         }
         handleTextChange(); // Trigger save to main ref
-        toast.info("Version restored!");
     };
 
     const checkFormats = () => {
@@ -477,6 +514,7 @@ const CaseStudyPage = ({ data, navigation }) => {
 
     return (
         <div className="h-[calc(100vh-4rem)] w-full flex bg-white dark:bg-gray-900 overflow-hidden">
+            <ToastContainer position="top-right" autoClose={3000} />
             <div className="flex-1 flex overflow-hidden">
                 {/* Left Panel: PDF Viewer */}
                 <div
@@ -486,21 +524,12 @@ const CaseStudyPage = ({ data, navigation }) => {
                     <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                         <button
                             onClick={() => { setActiveTab("pdf"); setActivePdf(0); }}
-                            className={`px-4 py-3 text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "pdf" && activePdf === 0
+                            className={`px-4 py-3 text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "pdf"
                                 ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50/30'
                                 : 'text-gray-500 hover:text-blue-500'
                                 }`}
                         >
-                            Case 1
-                        </button>
-                        <button
-                            onClick={() => { setActiveTab("pdf"); setActivePdf(1); }}
-                            className={`px-4 py-3 text-xs font-bold uppercase tracking-wider transition-all ${activeTab === "pdf" && activePdf === 1
-                                ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50/30'
-                                : 'text-gray-500 hover:text-blue-500'
-                                }`}
-                        >
-                            Case 2
+                            Case Document
                         </button>
                         <button
                             onClick={() => setActiveTab("history")}
@@ -517,17 +546,19 @@ const CaseStudyPage = ({ data, navigation }) => {
                     <div className="flex-1 relative overflow-hidden bg-gray-100 dark:bg-gray-900">
                         {activeTab === "pdf" ? (
                             <>
-                                {isPdfLoading && (
+                                {(!pdfUrls[activePdf] || isPdfLoading) && (
                                     <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-gray-800 z-10">
                                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                                     </div>
                                 )}
-                                <iframe
-                                    src={`${pdfUrls[activePdf]}#toolbar=0&navpanes=0&scrollbar=0`}
-                                    className="w-full h-full border-none"
-                                    title={`Case Study ${activePdf + 1}`}
-                                    onLoad={() => setIsPdfLoading(false)}
-                                />
+                                {pdfUrls[activePdf] && (
+                                    <iframe
+                                        src={`${pdfUrls[activePdf]}#toolbar=0&navpanes=0&scrollbar=0`}
+                                        className="w-full h-full border-none"
+                                        title={`Case Study ${activePdf + 1}`}
+                                        onLoad={() => setIsPdfLoading(false)}
+                                    />
+                                )}
                             </>
                         ) : (
                             <div className="h-full flex flex-col bg-white dark:bg-gray-800 overflow-y-auto p-4 custom-scrollbar">
