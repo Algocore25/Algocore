@@ -70,6 +70,18 @@ const CaseStudySelectionPage = () => {
         );
     }
 
+    const formatBytes = (bytes, decimals = 2) => {
+        if (!+bytes) return '0 Bytes';
+
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    };
+
     return (
         <div className={`min-h-screen p-8 ${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
             <div className="max-w-7xl mx-auto">
@@ -104,7 +116,7 @@ const CaseStudySelectionPage = () => {
                                 </h3>
                                 <div className="flex items-center justify-between mt-4">
                                     <span className="text-xs font-mono text-gray-500 dark:text-gray-400 px-2 py-1 rounded bg-gray-100 dark:bg-gray-700">
-                                        {(file.size / 1024).toFixed(1)} KB
+                                        {formatBytes(file.size)}
                                     </span>
                                     <span className="text-xs font-bold text-blue-500 dark:text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                                         Open <span className="transform group-hover:translate-x-1 transition-transform">→</span>
