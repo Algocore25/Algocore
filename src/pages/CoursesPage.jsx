@@ -83,7 +83,12 @@ const CoursesPage = () => {
         const snapshot = await get(child(dbRef, 'Courses'));
 
         if (snapshot.exists()) {
-          const data = snapshot.val();
+          let data = snapshot.val();
+
+          data = data.filter((course) => {
+            return course.disabled !== true;
+          });
+
           setCourses(data);
 
           // If user logged in, compute progress for each course
