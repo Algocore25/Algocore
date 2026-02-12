@@ -42,14 +42,14 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireUser = false })
           setAuthStatus("authenticated");
         }
 
-        const stu = await get(   ref(database , `Students` ) );
+        let stu1 = await get(   ref(database , `22S02` ) );
+        let stu2 = await get(   ref(database , `22S15` ) );
 
-        if( stu.exists() )
+        const stu = [...stu1.val(), ...stu2.val()];
+
+        if( stu.indexOf( user.email ) === -1 && !isAdmin )
         {
-          if( stu.val().indexOf( user.email ) === -1 && !isAdmin )
-          {
             setAuthStatus("unauthorized");
-          }
         }
 
 
