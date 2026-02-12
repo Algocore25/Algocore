@@ -21,8 +21,11 @@ const CaseStudySelectionPage = () => {
                 }
                 const data = await response.json();
 
-                // Filter for PDF files
-                const pdfFiles = data.filter(file => file.name.toLowerCase().endsWith('.pdf'));
+                // Filter for PDF files, excluding dark mode variants
+                const pdfFiles = data.filter(file =>
+                    file.name.toLowerCase().endsWith('.pdf') &&
+                    !file.name.toLowerCase().endsWith('_dark.pdf')
+                );
                 setPdfs(pdfFiles);
                 setLoading(false);
             } catch (err) {
