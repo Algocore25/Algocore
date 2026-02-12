@@ -42,6 +42,8 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireUser = false })
           setAuthStatus("authenticated");
         }
 
+        
+
         let stu1 = await get(   ref(database , `22S02` ) );
         let stu2 = await get(   ref(database , `22S15` ) );
 
