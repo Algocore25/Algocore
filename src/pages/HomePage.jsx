@@ -68,13 +68,19 @@ function HomePage() {
           setProgressLoading(false);
           return;
         }
-        const coursesList = coursesSnap.val();
+        let coursesList = coursesSnap.val();
+
+        coursesList = coursesList.filter(c => c.disabled !== true);
+
+
 
         if (!Array.isArray(coursesList)) {
           setMyCourses([]);
           setProgressLoading(false);
           return;
         }
+
+        
 
         const enriched = await Promise.all(
           coursesList.map(async (c) => {
