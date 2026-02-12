@@ -57,7 +57,13 @@ const Navbar = () => {
   // 🟣 Menu items
   const menuItems = [
     { label: 'Home', href: '/' },
-    { label: 'Courses', href: '/courses' },
+{ 
+  label: 'Courses', 
+  href:  '/courses' 
+},
+
+{ label: "Case Study" , href: '/course/case-studies' },
+
     !isAdmin && user && { label: 'Tests', href: '/test' },
     isAdmin && { label: 'Admin', href: '/admin' },
     isAdmin && { label: 'Students', href: '/adminmonitor' },
