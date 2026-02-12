@@ -16,6 +16,9 @@ const iconMap = {
 };
 
 const CourseCard = ({ course }) => (
+
+
+
   <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all duration-300 h-full flex flex-col hover:border-blue-400 dark:hover:border-blue-500">
     <div className="text-blue-600 dark:text-blue-400 mb-4">
       {iconMap[course.id] || <FaCuttlefish className="w-12 h-12" />}

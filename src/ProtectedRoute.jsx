@@ -48,7 +48,7 @@ const ProtectedRoute = ({ children, requireAdmin = false, requireUser = false })
         {
           if( stu.val().indexOf( user.email ) === -1 && !isAdmin )
           {
-            // setAuthStatus("unauthorized");
+            setAuthStatus("unauthorized");
           }
         }
 

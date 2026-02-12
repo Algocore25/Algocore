@@ -88,12 +88,12 @@ function App() {
               <Route path="/compiler" element={<CompilerPage />} />
               <Route path="/courses" element={<CoursesPage />} />
               <Route path="/course/:course" element={<CoursePage />} />
+              <Route path="/course/case-studies" element={  <ProtectedRoute requireUser={true}> <CaseStudySelectionPage /></ProtectedRoute>} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/test-case-study" element={<CaseStudyPage data={{}} />} />
-              <Route path="/case-studies" element={<CaseStudySelectionPage />} />
-              <Route path="/case-study/:pdfId" element={<CaseStudyPage />} />
+              <Route path="/case-study/:pdfId" element={ <ProtectedRoute requireUser={true}> <CaseStudyPage /></ProtectedRoute>} />
               <Route path="*" element={<NotFoundPage />} />
 
               <Route path="/proctoring" element={<VideoProctor />} />
