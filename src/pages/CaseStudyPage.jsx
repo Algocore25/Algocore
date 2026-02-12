@@ -212,8 +212,15 @@ const CaseStudyPage = ({ data, navigation }) => {
         };
 
         if (pdfId) {
-            // Construct raw URL (GitHub serves as octet-stream, but we fetch and re-blob as PDF)
-            const rawUrl = `https://raw.githubusercontent.com/Algocore25/Images/main/${encodeURIComponent(pdfId)}`;
+            // Determine filename based on theme
+            let fileName = pdfId;
+            if (theme === 'dark') {
+                // Insert _dark before .pdf
+                fileName = fileName.replace(/(\.pdf)$/i, '_dark$1');
+            }
+
+            // Construct raw URL
+            const rawUrl = `https://raw.githubusercontent.com/Algocore25/Images/main/${encodeURIComponent(fileName)}`;
             loadPdf(rawUrl);
         } else if (questionId) {
             // Fallback for legacy
@@ -224,7 +231,13 @@ const CaseStudyPage = ({ data, navigation }) => {
                 try {
                     const snapshot = await get(ref(database, pathKey));
                     if (snapshot.exists()) {
-                        const rawPath = snapshot.val();
+                        let rawPath = snapshot.val();
+
+                        // Handle theme for legacy path too if possible, assuming similar naming convention
+                        if (theme === 'dark') {
+                            rawPath = rawPath.replace(/(\.pdf)$/i, '_dark$1');
+                        }
+
                         const fullUrl = `https://raw.githubusercontent.com/Algocore25/Images/main/${rawPath}`;
                         loadPdf(fullUrl);
                     } else {
@@ -246,7 +259,7 @@ const CaseStudyPage = ({ data, navigation }) => {
                 URL.revokeObjectURL(activeUrl);
             }
         };
-    }, [pdfId, questionId]);
+    }, [pdfId, questionId, theme]);
 
     // Reset loading state when active PDF changes
     useEffect(() => {
