@@ -297,22 +297,22 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30">
       <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="relative w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+        <div className="relative w-full max-w-2xl rounded-lg bg-white dark:bg-dark-secondary p-6 shadow-xl">
           <button
-            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            className="absolute top-4 right-4 text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
             onClick={onClose}
           >
             <XMarkIcon className="h-6 w-6" />
           </button>
           <div className="flex space-x-4 mb-6">
             <button
-              className={`px-4 py-2 rounded-md ${activeTab === 'create' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+              className={`px-4 py-2 rounded-md ${activeTab === 'create' ? 'bg-blue-600 text-white dark:text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
               onClick={() => setActiveTab('create')}
             >
               {isEditMode ? 'Edit Question' : 'Create New Question'}
             </button>
             <button
-              className={`px-4 py-2 rounded-md ${activeTab === 'select' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+              className={`px-4 py-2 rounded-md ${activeTab === 'select' ? 'bg-blue-600 text-white dark:text-white' : 'bg-gray-200 dark:bg-gray-700'}`}
               onClick={() => setActiveTab('select')}
             >
               Select Existing Questions
@@ -320,7 +320,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
           </div>
 
           {activeTab === 'create' ? (
-            <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+            <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 bg-white dark:bg-dark-secondary">
               <div>
                 <label className="block text-sm font-medium">Title</label>
                 <input
@@ -328,7 +328,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                   name="questionname"
                   value={formData.questionname}
                   onChange={handleChange}
-                  className="w-full p-2 border rounded-md mt-1"
+                  className="w-full p-2 border rounded-md mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
                   placeholder="Enter question title"
                 />
               </div>
@@ -338,7 +338,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                   name="question"
                   value={formData.question}
                   onChange={handleChange}
-                  className="w-full p-2 border rounded-md mt-1"
+                  className="w-full p-2 border rounded-md mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
                   rows="4"
                   placeholder="Enter question description"
                 />
@@ -350,7 +350,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                     name="difficulty"
                     value={formData.difficulty}
                     onChange={handleChange}
-                    className="w-full p-2 border rounded-md mt-1"
+                    className="w-full p-2 border rounded-md mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
                   >
                     <option>Easy</option>
                     <option>Medium</option>
@@ -363,7 +363,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                     name="type"
                     value={formData.type}
                     onChange={handleChange}
-                    className="w-full p-2 border rounded-md mt-1"
+                    className="w-full p-2 border rounded-md mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
                   >
                     <option value="MCQ">MCQ</option>
                     <option value="MSQ">MSQ</option>
@@ -701,14 +701,14 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
                   type="button"
-                  className="px-4 py-2 text-sm font-medium bg-gray-200 rounded-md hover:bg-gray-300"
+                  className="px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
                   onClick={onClose}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
                 >
                   {isEditMode ? 'Save Changes' : 'Create Question'}
                 </button>
@@ -768,7 +768,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                   filteredQuestions.map((question) => (
                     <div
                       key={question.id}
-                      className={`p-4 rounded-lg border ${selectedQuestions.includes(question.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
+                      className={`p-4 rounded-lg border ${selectedQuestions.includes(question.id) ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500'}`}
                       onClick={() => handleQuestionToggle(question.id)}
                     >
                       <div className="flex items-start">
@@ -794,14 +794,14 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
               <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
                   onClick={onClose}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  className={`px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 ${selectedQuestions.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 border border-transparent rounded-md shadow-sm hover:bg-blue-700 dark:hover:bg-blue-600 ${selectedQuestions.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                   onClick={handleAddSelected}
                   disabled={selectedQuestions.length === 0}
                 >

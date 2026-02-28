@@ -108,7 +108,7 @@ const AddQuestions = () => {
         <h1 className="text-2xl font-bold">Manage Questions</h1>
         <button
           onClick={handleAddQuestion}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="px-4 py-2 bg-blue-600 text-white dark:text-white rounded-md hover:bg-blue-700"
         >
           Add New Question
         </button>
@@ -118,14 +118,14 @@ const AddQuestions = () => {
         <input
           type="text"
           placeholder="Search questions..."
-          className="w-full p-2 border rounded-md"
+          className="w-full p-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="w-full p-2 border rounded-md bg-white cursor-pointer"
+          className="w-full p-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 cursor-pointer"
         >
           <option value="All">All Types</option>
           <option value="MCQ">MCQ</option>
@@ -137,7 +137,7 @@ const AddQuestions = () => {
         <select
           value={filterDiff}
           onChange={(e) => setFilterDiff(e.target.value)}
-          className="w-full p-2 border rounded-md bg-white cursor-pointer"
+          className="w-full p-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 cursor-pointer"
         >
           <option value="All">All Difficulties</option>
           <option value="Easy">Easy</option>
@@ -147,7 +147,7 @@ const AddQuestions = () => {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
-          className="w-full p-2 border rounded-md bg-white cursor-pointer"
+          className="w-full p-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 cursor-pointer"
         >
           <option value="name-asc">Sort by Name (A-Z)</option>
           <option value="name-desc">Sort by Name (Z-A)</option>
@@ -171,10 +171,10 @@ const AddQuestions = () => {
                   <h3 className="font-semibold">{question.questionname}</h3>
                   <p className="text-gray-600 mt-1">{question.question}</p>
                   <div className="flex space-x-2 mt-2">
-                    <span className="text-sm bg-gray-100 px-2 py-1 rounded">
+                    <span className="text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white px-2 py-1 rounded">
                       {question.difficulty}
                     </span>
-                    <span className="text-sm bg-gray-100 px-2 py-1 rounded">
+                    <span className="text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white px-2 py-1 rounded">
                       {question.type}
                     </span>
                   </div>

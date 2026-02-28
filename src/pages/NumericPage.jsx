@@ -50,6 +50,10 @@ function NumericPage({ data }) {
                     const snapshot = await get(answerRef);
                     if (snapshot.exists()) {
                         setIsSubmitted(true);
+                        // Display the correct answer when already answered
+                        if (data && data.numericAnswer !== undefined) {
+                            setNumericAnswer(data.numericAnswer.toString());
+                        }
                     }
                 } catch (error) {
                     console.error("Error loading user answer:", error);

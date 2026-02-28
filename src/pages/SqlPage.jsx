@@ -204,8 +204,8 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
                   key={index}
                   onClick={() => setSelectedTestIndex(index)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group ${isActive
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm'
                     }`}
                 >
                   <div className={`w-2 h-2 rounded-full ${test.passed ? 'bg-green-500' : 'bg-red-500'
@@ -235,8 +235,8 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
                 <div className="flex items-center gap-2">
                   <h4 className="font-bold text-gray-900 dark:text-white">Case {selectedTestIndex + 1}</h4>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${currentTest.passed
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30'
-                      : 'bg-red-100 text-red-700 dark:bg-red-900/30'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30'
+                    : 'bg-red-100 text-red-700 dark:bg-red-900/30'
                     }`}>
                     {currentTest.passed ? 'Passed' : 'Failed'}
                   </span>
@@ -278,8 +278,8 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
                   <div>
                     <span className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Your Output</span>
                     <div className={`${currentTest.passed
-                        ? 'bg-green-50/50 dark:bg-green-900/10 border-green-100 dark:border-green-900/30'
-                        : 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30'
+                      ? 'bg-green-50/50 dark:bg-green-900/10 border-green-100 dark:border-green-900/30'
+                      : 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30'
                       } rounded-xl p-4 border min-h-[100px]`}>
                       {currentTest.output?.includes('|') ? (
                         <SqlResultTable text={currentTest.output} className={currentTest.passed ? 'border-green-200 dark:border-green-800' : 'border-red-200 dark:border-red-800'} />
@@ -307,6 +307,9 @@ function SqlPage({ data, navigation }) {
 
   // Prevent copy, cut, and paste
   useEffect(() => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocalhost) return;
+
     const preventDefault = (e) => {
       e.preventDefault();
       e.stopPropagation();

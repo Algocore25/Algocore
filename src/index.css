@@ -7,6 +7,13 @@
     @apply antialiased text-gray-900 bg-gray-50 dark:bg-gray-900 dark:text-white transition-colors duration-300;
   }
 
+  /* ensure inputs/selects/textareas have readable text in both themes */
+  input,
+  textarea,
+  select {
+    @apply bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600;
+  }
+
   /* Hide scrollbar for Chrome, Safari and Opera */
   ::-webkit-scrollbar {
     display: none;
@@ -32,6 +39,26 @@
 
   .btn-secondary {
     @apply text-[#4285F4] hover:bg-[#4285F4]/10;
+  }
+
+  /* make plain white backgrounds dark-friendly */
+  .bg-white {
+    @apply dark:bg-dark-secondary;
+  }
+
+  /* lighter gray text becomes lighter in dark mode */
+  .text-gray-500 {
+    @apply dark:text-gray-300;
+  }
+
+  /* collapse light borders in dark mode */
+  .border-gray-200 {
+    @apply dark:border-gray-700;
+  }
+
+  /* make light gray backgrounds dark-themed */
+  .bg-gray-100 {
+    @apply dark:bg-gray-700;
   }
 
   .bg-grid-pattern {
