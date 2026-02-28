@@ -31,6 +31,9 @@ function CodePage({ data, navigation }) {
 
   // Prevent copy, cut, and paste
   useEffect(() => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocalhost) return;
+
     const preventDefault = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -554,6 +557,11 @@ function CodePage({ data, navigation }) {
     fetchData();
     loadCode();
     getAllowedLanguageTemplates();
+  }, [questionId]);
+
+  // Whenever the question changes, default back to description tab
+  useEffect(() => {
+    setActiveTab('description');
   }, [questionId]);
 
   // Fixed Monaco Editor layout handling
