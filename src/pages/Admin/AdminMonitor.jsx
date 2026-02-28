@@ -54,6 +54,7 @@ const AdminMonitor = () => {
   const [selectedCourseName, setSelectedCourseName] = useState(null);
 
   const [Students, setStudents] = useState([]);
+  const [coursesList, setCoursesList] = useState([]);
 
   const [loadingStates, setLoadingStates] = useState({
     submissions: true,
@@ -61,7 +62,8 @@ const AdminMonitor = () => {
     users: true,
     courses: true,
     activityTime: true,
-    students: true
+    students: true,
+    coursesList: true
   });
   const [activeTab, setActiveTab] = useState('students');
 
@@ -79,25 +81,34 @@ const AdminMonitor = () => {
         submissionsSnap,
         progressSnap,
         usersSnap,
-        coursesSnap,
+        algoCoreSnap,
         studentsSnap,
-        activityTimeSnap
+        activityTimeSnap,
+        coursesListSnap
       ] = await Promise.all([
         get(ref(database, 'Submissions')),
         get(ref(database, 'userprogress')),
         get(ref(database, 'users')),
         get(ref(database, 'AlgoCore')),
         get(ref(database, 'Students')),
-        get(ref(database, 'Activitytime'))
+        get(ref(database, 'Activitytime')),
+        get(ref(database, 'Courses'))
       ]);
 
       // Set all data at once
       setSubmissions(submissionsSnap.val() || {});
       setUserProgress(progressSnap.val() || {});
       setUsers(usersSnap.val() || {});
-      setCourses(coursesSnap.val() || {});
-      setStudents(studentsSnap.val() || []);
+      setCourses(algoCoreSnap.val() || {});
+
+      const studentsData = studentsSnap.val();
+      const studentsArray = Array.isArray(studentsData)
+        ? studentsData
+        : (studentsData ? Object.values(studentsData) : []);
+      setStudents(studentsArray);
+
       setActivityTime(activityTimeSnap.val() || {});
+      setCoursesList(coursesListSnap.val() || []);
 
       // Batch loading state updates
       setLoadingStates({
@@ -106,7 +117,8 @@ const AdminMonitor = () => {
         users: false,
         courses: false,
         students: false,
-        activityTime: false
+        activityTime: false,
+        coursesList: false
       });
 
       setRefreshing(false);
@@ -173,8 +185,12 @@ const AdminMonitor = () => {
 
     if (lessons && typeof lessons === 'object') {
       Object.values(lessons).forEach(lesson => {
-        if (lesson && lesson.questions && Array.isArray(lesson.questions)) {
-          total += lesson.questions.length;
+        if (lesson && lesson.questions) {
+          if (Array.isArray(lesson.questions)) {
+            total += lesson.questions.length;
+          } else if (typeof lesson.questions === 'object') {
+            total += Object.keys(lesson.questions).length;
+          }
         }
       });
     }
@@ -189,18 +205,58 @@ const AdminMonitor = () => {
       return { users: [], courses: [] };
     }
 
+    const studentArray = Array.isArray(Students) ? Students : Object.values(Students || {});
+    const studentEmailSet = new Set(studentArray.map(email => email?.toLowerCase().trim()).filter(Boolean));
+    const isStudentListNotEmpty = studentEmailSet.size > 0;
+
     const processedUsers = {};
     const availableCourses = new Set();
-    const studentEmailSet = new Set(Students); // Convert to Set for O(1) lookup
 
-    // First, process all available courses
+    // First, process all available courses and build maps
+    const courseIdToTitle = {};
+    const titleToId = {};
+
+    // Fill maps from Courses list first (better source for titles)
+    const clArray = Array.isArray(coursesList) ? coursesList : Object.values(coursesList || {});
+    clArray.forEach(c => {
+      if (c && c.id) {
+        courseIdToTitle[c.id] = c.title;
+        if (c.title) titleToId[c.title] = c.id;
+      }
+    });
+
     if (courses) {
-      Object.keys(courses).forEach(course => {
-        if (courses[course]?.lessons) {
-          availableCourses.add(course);
+      Object.keys(courses).forEach(courseId => {
+        const courseInfo = courses[courseId]?.course;
+        // Only use title from AlgoCore if not already in map
+        if (courseInfo?.title && !courseIdToTitle[courseId]) {
+          courseIdToTitle[courseId] = courseInfo.title;
+          if (!titleToId[courseInfo.title]) {
+            titleToId[courseInfo.title] = courseId;
+          }
+        }
+
+        if (courses[courseId]?.lessons) {
+          availableCourses.add(courseId);
         }
       });
     }
+
+    // Also add courses found in submissions and progress to availableCourses immediately
+    Object.values(submissions || {}).forEach(userSubm => {
+      if (userSubm && typeof userSubm === 'object') {
+        Object.keys(userSubm).forEach(courseKey => {
+          availableCourses.add(titleToId[courseKey] || courseKey);
+        });
+      }
+    });
+    Object.values(userProgress || {}).forEach(userProg => {
+      if (userProg && typeof userProg === 'object') {
+        Object.keys(userProg).forEach(courseKey => {
+          availableCourses.add(titleToId[courseKey] || courseKey);
+        });
+      }
+    });
 
     // Pre-calculate total questions for each course (cache)
     const courseTotals = {};
@@ -210,7 +266,7 @@ const AdminMonitor = () => {
       availableCoursesStats[course] = {
         name: course,
         totalQuestions: courseTotals[course],
-        totalEnrolledUsers: studentEmailSet.size,
+        totalEnrolledUsers: 0,
         startedUsers: 0,
         completedUsers: 0,
         totalProgressSum: 0
@@ -219,8 +275,14 @@ const AdminMonitor = () => {
 
     // FIRST: Process ALL users from the users object
     Object.entries(users).forEach(([userId, userDetails]) => {
+      const userEmail = userDetails.email?.toLowerCase().trim();
 
-      if (!studentEmailSet.has(userDetails.email)) return; // O(1) instead of O(n)
+      // If student list exists, filter. Otherwise, show all.
+      if (isStudentListNotEmpty) {
+        if (!userEmail || !studentEmailSet.has(userEmail)) return;
+      } else if (!userEmail) {
+        return;
+      }
 
       processedUsers[userId] = {
         id: userId,
@@ -239,33 +301,35 @@ const AdminMonitor = () => {
       availableCourses.forEach(course => {
         processedUsers[userId].courseProgress[course] = {
           completed: 0,
-          total: courseTotals[course], // Use cached value
+          total: courseTotals[course],
           percentage: '0.0'
         };
+        // Update total enrolled count for each course for this user
+        if (availableCoursesStats[course]) {
+          availableCoursesStats[course].totalEnrolledUsers++;
+        }
       });
-
     });
 
-
     // SECOND: Process submissions for users who have them
-    Object.entries(submissions).forEach(([userId, userSubmissions]) => {
+    Object.entries(submissions).forEach(([userId, userSubm]) => {
       if (processedUsers[userId]) {
-        Object.entries(userSubmissions).forEach(([course, courseData]) => {
-          availableCourses.add(course);
-          if (!processedUsers[userId].submissions[course]) {
-            processedUsers[userId].submissions[course] = {};
-            if (!processedUsers[userId].courseProgress[course]) {
-              processedUsers[userId].courseProgress[course] = {
+        Object.entries(userSubm).forEach(([courseKey, courseData]) => {
+          const realCourseId = titleToId[courseKey] || courseKey;
+          if (!processedUsers[userId].submissions[realCourseId]) {
+            processedUsers[userId].submissions[realCourseId] = {};
+            if (!processedUsers[userId].courseProgress[realCourseId]) {
+              processedUsers[userId].courseProgress[realCourseId] = {
                 completed: 0,
-                total: courseTotals[course] || calculateTotalQuestions(course),
+                total: courseTotals[realCourseId] || calculateTotalQuestions(realCourseId),
                 percentage: '0.0'
               };
             }
           }
 
           Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
-            if (!processedUsers[userId].submissions[course][subcourse]) {
-              processedUsers[userId].submissions[course][subcourse] = {};
+            if (!processedUsers[userId].submissions[realCourseId][subcourse]) {
+              processedUsers[userId].submissions[realCourseId][subcourse] = {};
             }
 
             Object.entries(subcourseData).forEach(([question, questionData]) => {
@@ -276,7 +340,7 @@ const AdminMonitor = () => {
                 type: 'code' // Mark as code submission
               }));
 
-              processedUsers[userId].submissions[course][subcourse][question] = submissions;
+              processedUsers[userId].submissions[realCourseId][subcourse][question] = submissions;
 
               // Update stats for code submissions
               const latestSubmission = submissions[submissions.length - 1];
@@ -295,22 +359,23 @@ const AdminMonitor = () => {
     // SECOND-B: Process MCQ progress and add to stats
     Object.entries(userProgress).forEach(([userId, progress]) => {
       if (processedUsers[userId]) {
-        Object.entries(progress).forEach(([course, courseData]) => {
+        Object.entries(progress).forEach(([courseKey, courseData]) => {
+          const realCourseId = titleToId[courseKey] || courseKey;
           if (courseData && typeof courseData === 'object') {
             Object.entries(courseData).forEach(([subcourse, subcourseData]) => {
               if (subcourseData && typeof subcourseData === 'object') {
                 Object.entries(subcourseData).forEach(([question, status]) => {
                   // Add MCQ entries to submissions for display
-                  if (!processedUsers[userId].submissions[course]) {
-                    processedUsers[userId].submissions[course] = {};
+                  if (!processedUsers[userId].submissions[realCourseId]) {
+                    processedUsers[userId].submissions[realCourseId] = {};
                   }
-                  if (!processedUsers[userId].submissions[course][subcourse]) {
-                    processedUsers[userId].submissions[course][subcourse] = {};
+                  if (!processedUsers[userId].submissions[realCourseId][subcourse]) {
+                    processedUsers[userId].submissions[realCourseId][subcourse] = {};
                   }
 
                   // Only add if it's not already a code submission
-                  if (!processedUsers[userId].submissions[course][subcourse][question]) {
-                    processedUsers[userId].submissions[course][subcourse][question] = [{
+                  if (!processedUsers[userId].submissions[realCourseId][subcourse][question]) {
+                    processedUsers[userId].submissions[realCourseId][subcourse][question] = [{
                       timestamp: 'mcq-entry', // Special timestamp for MCQs
                       status: status === true ? 'correct' : (status === false ? 'wrong' : 'not-started'),
                       question,
@@ -335,8 +400,10 @@ const AdminMonitor = () => {
     // THIRD: Calculate course progress (match course page logic exactly)
     Object.entries(userProgress).forEach(([userId, progress]) => {
       if (processedUsers[userId]) {
-        Object.entries(progress).forEach(([course, courseData]) => {
-          const totalQuestions = calculateTotalQuestions(course);
+        Object.entries(progress).forEach(([courseKey, courseData]) => {
+          // Resolve real course ID from key (which might be a title)
+          const realCourseId = titleToId[courseKey] || courseKey;
+          const totalQuestions = calculateTotalQuestions(realCourseId);
           let completed = 0;
 
           if (courseData && typeof courseData === 'object') {
@@ -354,20 +421,20 @@ const AdminMonitor = () => {
 
           if (totalQuestions > 0) {
             const percentageRaw = (completed / totalQuestions) * 100;
-            processedUsers[userId].courseProgress[course] = {
+            processedUsers[userId].courseProgress[realCourseId] = {
               completed,
               total: totalQuestions,
               percentage: percentageRaw.toFixed(1)
             };
-            if (percentageRaw > 0) {
-              availableCoursesStats[course].startedUsers++;
-              availableCoursesStats[course].totalProgressSum += percentageRaw;
+            if (percentageRaw > 0 && availableCoursesStats[realCourseId]) {
+              availableCoursesStats[realCourseId].startedUsers++;
+              availableCoursesStats[realCourseId].totalProgressSum += percentageRaw;
               if (percentageRaw >= 100) {
-                availableCoursesStats[course].completedUsers++;
+                availableCoursesStats[realCourseId].completedUsers++;
               }
             }
-          } else {
-            processedUsers[userId].courseProgress[course] = {
+          } else if (availableCourses.has(realCourseId)) {
+            processedUsers[userId].courseProgress[realCourseId] = {
               completed: 0,
               total: 0,
               percentage: '0.0'
@@ -413,9 +480,10 @@ const AdminMonitor = () => {
     return {
       users: Object.values(processedUsers),
       courses: Array.from(availableCourses),
-      courseStats: Object.values(availableCoursesStats)
+      courseStats: Object.values(availableCoursesStats),
+      courseIdToTitle
     };
-  }, [submissions, userProgress, users, courses, activityTime, Students]);
+  }, [submissions, userProgress, users, courses, activityTime, Students, coursesList]);
 
   // Add new function to format percentage
   const formatPercentage = (value) => {
@@ -491,7 +559,8 @@ const AdminMonitor = () => {
           submissions.forEach(submission => {
             allSubmissions.push({
               ...submission,
-              course,
+              course: processedData.courseIdToTitle[course] || course,
+              courseId: course,
               subcourse,
               question: submission.question || question
             });
@@ -818,14 +887,18 @@ const AdminMonitor = () => {
 
                       {/* Course Progress */}
                       <div className="space-y-2">
-                        {sortedCourseNames.map(course => {
-                          const progress = user.courseProgress && user.courseProgress[course] ?
-                            user.courseProgress[course] : { percentage: '0.0', completed: 0, total: 0 };
+                        {sortedCourseNames.map(courseId => {
+                          const progress = user.courseProgress && user.courseProgress[courseId] ?
+                            user.courseProgress[courseId] : { percentage: '0.0', completed: 0, total: 0 };
+
+                          const courseTitle = processedData.courseIdToTitle[courseId] || courseId;
 
                           return (
-                            <div key={course} className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">{course}</span>
-                              <span className="font-medium text-blue-600 dark:text-blue-400">
+                            <div key={courseId} className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600 dark:text-gray-400 truncate mr-2" title={courseTitle}>
+                                {courseTitle}
+                              </span>
+                              <span className="font-medium text-blue-600 dark:text-blue-400 shrink-0">
                                 {formatPercentage(progress.percentage)}
                               </span>
                             </div>
@@ -856,7 +929,9 @@ const AdminMonitor = () => {
                       <FiBookOpen className="text-indigo-600" size={20} />
                     </div>
                     <div className="ml-3">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-300">{course.name}</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-300">
+                        {processedData.courseIdToTitle[course.name] || course.name}
+                      </h3>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{course.totalQuestions} Questions</p>
                     </div>
                   </div>
@@ -1026,7 +1101,7 @@ const AdminMonitor = () => {
             <div className="sticky top-0 bg-white border-b px-6 py-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {selectedCourseName} - Student Progress
+                  {processedData.courseIdToTitle[selectedCourseName] || selectedCourseName} - Student Progress
                 </h2>
                 <button
                   onClick={() => setSelectedCourseName(null)}

@@ -109,56 +109,172 @@ const SqlSchemaDisplay = ({ schema }) => {
 const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
   const [selectedTestIndex, setSelectedTestIndex] = useState(null);
   const { theme } = useTheme();
+
   useEffect(() => {
     if (testResults.length > 0) {
-      const firstFailed = testResults.findIndex(t => !t.passed);
-      setSelectedTestIndex(firstFailed !== -1 ? firstFailed : 0);
+      const firstFailedIndex = testResults.findIndex(t => !t.passed);
+      setSelectedTestIndex(firstFailedIndex !== -1 ? firstFailedIndex : 0);
     }
   }, [testResults]);
+
   if (runsubmit === 'none' || testResults.length === 0) {
-    return <div className="flex flex-col items-center justify-center py-12 px-4 text-center"><p className="text-gray-600 dark:text-gray-400">No tests run yet</p></div>;
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <p className="text-gray-600 dark:text-gray-400">No tests run yet</p>
+      </div>
+    );
   }
+
   const allPassed = testResults.every(t => t.passed);
   const currentTest = testResults[selectedTestIndex];
   const isHiddenCase = !(runsubmit === 'run' || selectedTestIndex === 0 || selectedTestIndex === 1);
+  const testStatus = allPassed ? 'passed' : 'failed';
+
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6 text-gray-800 dark:text-gray-100">
-      <div className="text-center mb-2">
-        {allPassed ? <h3 className="text-green-600 dark:text-green-400 text-lg font-semibold">✅ All Tests Passed</h3>
-          : <h3 className="text-red-600 dark:text-red-400 text-lg font-semibold">{testResults.filter(t => !t.passed).length} of {testResults.length} Tests Failed</h3>}
-      </div>
-      <div className="flex justify-center gap-2 flex-wrap px-2 py-3 rounded-lg border dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shadow-sm">
-        {testResults.map((test, index) => (
-          <button key={index} onClick={() => setSelectedTestIndex(index)}
-            className={`relative w-9 h-9 rounded-md flex items-center justify-center text-sm font-semibold transition-all
-              ${test.passed ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}
-              ${index === selectedTestIndex ? 'scale-110 ring-2 ring-offset-2 ring-blue-400 dark:ring-blue-300' : 'opacity-90 hover:opacity-100 hover:scale-105'}`}
-            title={`Test Case #${index + 1}`}>{index + 1}</button>
-        ))}
-      </div>
-      {currentTest && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow">
-          <div className={`px-4 py-3 flex items-center justify-between ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'} border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-            <h4 className="font-medium text-gray-800 dark:text-white">Test Case #{selectedTestIndex + 1} {currentTest.passed ? '✅ Passed' : '❌ Failed'}</h4>
-            {isHiddenCase && <span className="text-gray-500 dark:text-gray-400 text-sm">🔒 Hidden</span>}
+    <div className="w-full max-w-3xl mx-auto space-y-6">
+      {/* Summary Header */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${testStatus === 'passed' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-red-100 dark:bg-red-900/30 text-red-600'}`}>
+            {testStatus === 'passed' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
           </div>
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="text-sm font-medium text-green-600 dark:text-green-400 mb-2">Expected Output</div>
-                {isHiddenCase ? <div className="p-3 rounded border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-gray-400 italic text-sm">Hidden</div>
-                  : currentTest.expected?.includes('|') ? <SqlResultTable text={currentTest.expected} className="border-green-200 dark:border-green-800" />
-                    : <div className="p-3 rounded border font-mono text-sm bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-gray-800 dark:text-gray-100 whitespace-pre-wrap">{currentTest.expected || 'No output'}</div>}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">Your Output</div>
-                {currentTest.output?.includes('|') ? <SqlResultTable text={currentTest.output} className={currentTest.passed ? 'border-green-200 dark:border-green-800' : 'border-red-200 dark:border-red-800'} />
-                  : <div className={`p-3 rounded border font-mono text-sm whitespace-pre-wrap text-gray-800 dark:text-gray-100 ${currentTest.passed ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>{currentTest.output || 'No output'}</div>}
-              </div>
-            </div>
+          <div>
+            <h3 className={`text-xl font-bold ${testStatus === 'passed' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              {testStatus === 'passed' ? 'All Tests Passed' : `${testResults.filter(t => !t.passed).length} Tests Failed`}
+            </h3>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              Successfully executed {testResults.length} test cases
+            </p>
           </div>
         </div>
-      )}
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Score:</span>
+          <span className={`text-lg font-bold ${testStatus === 'passed' ? 'text-green-600' : 'text-blue-600'}`}>
+            {Math.round((testResults.filter(t => t.passed).length / testResults.length) * 100)}%
+          </span>
+        </div>
+      </div>
+
+      {/* Main Results Card */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col md:flex-row min-h-[400px]">
+        {/* Navigation Sidebar */}
+        <div className="w-full md:w-48 bg-gray-50 dark:bg-gray-800/30 border-r border-gray-200 dark:border-gray-800 flex flex-col">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Test Cases</span>
+            <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-700 dark:text-gray-300">
+              {testResults.length}
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {testResults.map((test, index) => {
+              const isActive = index === selectedTestIndex;
+              const isHidden = !(runsubmit === 'run' || index === 0 || index === 1);
+
+              return (
+                <button
+                  key={index}
+                  onClick={() => setSelectedTestIndex(index)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group ${isActive
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm'
+                    }`}
+                >
+                  <div className={`w-2 h-2 rounded-full ${test.passed ? 'bg-green-500' : 'bg-red-500'
+                    }`} />
+                  <span className="flex-1 text-left">Case {index + 1}</span>
+                  {isHidden && (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  )}
+                  {isActive && (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                    </svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-900">
+          {currentTest && (
+            <>
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-gray-900 dark:text-white">Case {selectedTestIndex + 1}</h4>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${currentTest.passed
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30'
+                      : 'bg-red-100 text-red-700 dark:bg-red-900/30'
+                    }`}>
+                    {currentTest.passed ? 'Passed' : 'Failed'}
+                  </span>
+                </div>
+                {isHiddenCase && (
+                  <span className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    Hidden Test Case
+                  </span>
+                )}
+              </div>
+
+              <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Expected Block */}
+                  <div>
+                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Expected Output</span>
+                    <div className="bg-green-50/50 dark:bg-green-900/10 rounded-xl p-4 border border-green-100 dark:border-green-900/30 min-h-[100px]">
+                      {isHiddenCase ? (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2 opacity-60 italic py-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          <span>Content Hidden</span>
+                        </div>
+                      ) : currentTest.expected?.includes('|') ? (
+                        <SqlResultTable text={currentTest.expected} className="border-green-200 dark:border-green-800" />
+                      ) : (
+                        <div className="font-mono text-sm text-gray-800 dark:text-green-200 whitespace-pre-wrap">
+                          {currentTest.expected || 'No output'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actual Block */}
+                  <div>
+                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Your Output</span>
+                    <div className={`${currentTest.passed
+                        ? 'bg-green-50/50 dark:bg-green-900/10 border-green-100 dark:border-green-900/30'
+                        : 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30'
+                      } rounded-xl p-4 border min-h-[100px]`}>
+                      {currentTest.output?.includes('|') ? (
+                        <SqlResultTable text={currentTest.output} className={currentTest.passed ? 'border-green-200 dark:border-green-800' : 'border-red-200 dark:border-red-800'} />
+                      ) : (
+                        <div className={`font-mono text-sm whitespace-pre-wrap ${currentTest.passed ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                          {currentTest.output || 'No output'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -441,85 +557,57 @@ function SqlPage({ question }) {
 
     const updatedResults = [...initialResults];
 
-    for (let i = 0; i < testCases.length; i++) {
-      const { input, expectedOutput } = testCases[i];
-      const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-      const { run: result } = await executeCode('sql', sqlSourceCode, input);
+    const promises = testCases.map(async (tc, i) => {
+      const { input, expectedOutput } = tc;
+      try {
+        const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
+        const { run: result } = await executeCode('sql', sqlSourceCode, input);
 
+        let passed = false;
+        if (questionData?.testcases[2]?.input === "regex2") {
+          const regex = new RegExp(/^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
+          passed = regex.test(result.output);
+        } else if (questionData?.testcases[2]?.input === "regex") {
+          const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
+          passed = regex.test(result.output);
+        } else {
+          const resultlist = result.output ? result.output.split("\n") : ["No output received."];
+          while (resultlist[resultlist.length - 1] === "") resultlist.pop();
 
+          const expectedLines = expectedOutput.split("\n");
+          while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
 
+          passed = resultlist.length === expectedLines.length &&
+            resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+        }
 
-
-
-
-
-
-
-
-
-      // regex
-
-      if (questionData?.testcases[2]?.input === "regex2") {
-        const passed = result.output.match(questionData.testcases[2].expectedOutput);
-        console.log(result.output);
-        console.log(questionData.testcases[2].expectedOutput);
-        const regex = new RegExp(
-          // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-          /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
-        );
-        console.log(regex.test(result.output))
-        updatedResults[i] = {
+        const currentResult = {
           input,
           expected: expectedOutput,
           output: result.output,
-          passed: regex.test(result.output),
+          passed,
           status: 'done',
         };
+
+        updatedResults[i] = currentResult;
         setTestResults([...updatedResults]);
-        await new Promise(res => setTimeout(res, 300));
-        continue;
-      }
-      if (questionData?.testcases[2]?.input === "regex") {
-        const passed = result.output.match(questionData.testcases[2].expectedOutput);
-        console.log(result.output);
-        console.log(questionData.testcases[2].expectedOutput);
-        const regex = new RegExp(
-          /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/
-        );
-        console.log(regex.test(result.output))
-        updatedResults[i] = {
+        return currentResult;
+      } catch (error) {
+        console.error(`Error executing test case ${i + 1}:`, error);
+        const errorResult = {
           input,
           expected: expectedOutput,
-          output: result.output,
-          passed: regex.test(result.output),
+          output: error.message || 'Error',
+          passed: false,
           status: 'done',
         };
-
+        updatedResults[i] = errorResult;
         setTestResults([...updatedResults]);
-        await new Promise(res => setTimeout(res, 300));
-        continue;
+        return errorResult;
       }
+    });
 
-
-      const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-      while (resultlist[resultlist.length - 1] === "") resultlist.pop();
-
-      const expectedLines = expectedOutput.split("\n");
-      while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
-
-      const passed = resultlist.length === expectedLines.length &&
-        resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
-
-      updatedResults[i] = {
-        input,
-        expected: expectedOutput,
-        output: result.output,
-        passed,
-        status: 'done',
-      };
-
-      setTestResults([...updatedResults]);
-    }
+    await Promise.all(promises);
 
     const allPassed = updatedResults.every(tc => tc.passed);
     const mark = updatedResults.filter(tc => tc.passed).length;
@@ -608,129 +696,73 @@ function SqlPage({ question }) {
       const updatedResults = [...initialResults];
       let firstFailureShown = false;
 
-      for (let i = 0; i < testCases.length; i++) {
-        const { input: testInput, expectedOutput } = testCases[i];
-
+      const promises = testCases.map(async (tc, i) => {
+        const { input: testInput, expectedOutput } = tc;
         try {
           const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
           const { run: result } = await executeCode('sql', sqlSourceCode, testInput);
 
+          let passed = false;
           // regex
           if (questionData?.testcases[2]?.input === "regex2") {
-            const passed = result.output.match(questionData.testcases[2].expectedOutput);
-            console.log(result.output);
-            console.log(questionData.testcases[2].expectedOutput);
-            const regex = new RegExp(
-              // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-              /^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/
-            );
-            console.log(regex.test(result.output))
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
+            const regex = new RegExp(/^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
+            passed = regex.test(result.output);
           }
           else if (questionData?.testcases[2]?.input === "regex") {
-            const passed = result.output.match(questionData?.testcases[2]?.expectedOutput);
-            console.log(result.output);
-            console.log(questionData?.testcases[2]?.expectedOutput);
-            const regex = new RegExp(
-              /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
-            console.log(regex.test(result.output))
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
+            const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
+            passed = regex.test(result.output);
           }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
           else {
-
             const resultOutput = result.output || '';
             const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
             const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
 
-            const passed = resultLines.length === expectedLines.length &&
+            passed = resultLines.length === expectedLines.length &&
               resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
-
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: resultOutput,
-              passed,
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
-
           }
 
-
+          const currentResult = {
+            input: testInput,
+            expected: expectedOutput,
+            output: result.output,
+            passed,
+            status: 'done',
+            isFirstFailure: false
+          };
+          updatedResults[i] = currentResult;
+          setTestResults([...updatedResults]);
+          return currentResult;
         } catch (error) {
           console.error(`Error executing test case ${i + 1}:`, error);
-          updatedResults[i] = {
+          const errorResult = {
             input: testInput,
             expected: expectedOutput || '',
             output: error.message || 'Error executing code',
             passed: false,
             status: 'done',
-            isFirstFailure: !firstFailureShown
+            isFirstFailure: false
           };
-
-          if (!firstFailureShown) {
-            firstFailureShown = true;
-            // Auto-expand the first failed test case
-            setTestCaseTab(i);
-          }
+          updatedResults[i] = errorResult;
+          setTestResults([...updatedResults]);
+          return errorResult;
         }
+      });
 
-        // Update UI after each test case
+      await Promise.all(promises);
+
+      // Handle first failure expansion
+      let firstFailureIdx = -1;
+      for (let i = 0; i < updatedResults.length; i++) {
+        if (!updatedResults[i].passed) {
+          firstFailureIdx = i;
+          break;
+        }
+      }
+
+      if (firstFailureIdx !== -1) {
+        updatedResults[firstFailureIdx].isFirstFailure = true;
+        setTestCaseTab(firstFailureIdx);
         setTestResults([...updatedResults]);
-
-        // Small delay to show test cases running one by one
-        await new Promise(resolve => setTimeout(resolve, 300));
       }
     } catch (error) {
       console.error("Error during test cases:", error);

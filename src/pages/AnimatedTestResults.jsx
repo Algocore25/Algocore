@@ -46,17 +46,56 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
 
   // Loader
   if (testStatus === 'running' || !showResults) {
+    const completedCount = testResults.filter(t => t.status === 'done').length;
+    const totalCount = testResults.length;
+    const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
     return (
-      <div className="flex flex-col items-center justify-center py-12 px-4">
-        <div className="relative w-20 h-20 mb-6">
-          <div className={`absolute inset-0 rounded-full border-4 ${theme === 'dark' ? 'border-blue-400' : 'border-blue-600'} border-t-transparent animate-spin`}></div>
+      <div className="w-full max-w-sm mx-auto py-20 flex flex-col items-center">
+        <div className="w-full space-y-4">
+          <div className="flex justify-between items-end">
+            <div className="space-y-1">
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 dark:text-white flex items-center gap-2">
+                {completedCount === totalCount ? 'Finalizing' : 'Running Analysis'}
+                {completedCount !== totalCount && (
+                  <span className="flex gap-1">
+                    <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" />
+                    <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse [animation-delay:200ms]" />
+                    <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse [animation-delay:400ms]" />
+                  </span>
+                )}
+              </h3>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">
+                {completedCount} of {totalCount} test cases processed
+              </p>
+            </div>
+            <span className="text-xs font-mono font-black text-gray-900 dark:text-white">
+              {Math.round(progress)}%
+            </span>
+          </div>
+
+          <div className="h-1 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gray-900 dark:bg-white transition-all duration-700 ease-in-out rounded-full"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <div className="flex justify-around pt-2 opacity-50">
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Completed</span>
+              <span className="text-xs font-bold text-gray-900 dark:text-white">{completedCount}</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Remaining</span>
+              <span className="text-xs font-bold text-gray-900 dark:text-white">{totalCount - completedCount}</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Total Cases</span>
+              <span className="text-xs font-bold text-gray-900 dark:text-white">{totalCount}</span>
+            </div>
+          </div>
         </div>
-        <h3 className="text-lg font-medium text-gray-800 dark:text-gray-100 mb-2">
-          Running Tests...
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Please wait while we execute your test cases
-        </p>
       </div>
     );
   }
@@ -73,121 +112,115 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
   const isHiddenCase = !(runsubmit === 'run' || selectedTestIndex === 0 || selectedTestIndex === 1);
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6 text-gray-800 dark:text-gray-100">
-      {/* Header */}
-      <div className="text-center mb-2">
-        {testStatus === 'passed' ? (
-          <h3 className="text-green-600 dark:text-green-400 text-lg font-semibold">
-            ✅ All Tests Passed
-          </h3>
-        ) : (
-          <h3 className="text-red-600 dark:text-red-400 text-lg font-semibold">
-            {testResults.filter(t => !t.passed).length} of {testResults.length} Tests Failed
-          </h3>
-        )}
+    <div className="w-full max-w-3xl mx-auto space-y-5">
+      {/* Neutral Summary Header */}
+      <div className="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+            {testStatus === 'passed' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+              {testStatus === 'passed' ? 'Verification Successful' : 'Verification Failed'}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {testResults.filter(t => t.passed).length} of {testResults.length} test cases passed
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-black text-gray-900 dark:text-white tabular-nums">
+            {Math.round((testResults.filter(t => t.passed).length / testResults.length) * 100)}%
+          </div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Score</div>
+        </div>
       </div>
 
-      {/* Navigation */}
-      <div className="flex justify-center gap-2 flex-wrap px-2 py-3 rounded-lg border dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shadow-sm">
+      {/* Modern Minimalistic Case Selector */}
+      <div className="flex flex-wrap gap-2">
         {testResults.map((test, index) => {
           const isActive = index === selectedTestIndex;
-          const color = test.status === 'running'
-            ? 'bg-blue-500 text-white'
-            : test.passed
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-
           const isHidden = !(runsubmit === 'run' || index === 0 || index === 1);
-
           return (
             <button
               key={index}
               onClick={() => setSelectedTestIndex(index)}
-              className={`relative w-9 h-9 rounded-md flex items-center justify-center text-sm font-semibold transition-all
-                ${color}
-                ${isActive ? 'scale-110 ring-2 ring-offset-2 ring-blue-400 dark:ring-blue-300' : 'opacity-90 hover:opacity-100 hover:scale-105'}
-              `}
-              title={isHidden ? `Hidden Test Case #${index + 1}` : `Test Case #${index + 1}`}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${isActive
+                ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
             >
-              <span>{index + 1}</span>
-              {isHidden && (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-3.5 h-3.5 text-gray-700 dark:text-gray-300"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0110 0v4" />
-                </svg>
-              )}
+              <div className="flex items-center gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full ${test.passed ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span>Case {index + 1}</span>
+                {isHidden && (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                )}
+              </div>
             </button>
           );
         })}
       </div>
 
-      {/* Test Details */}
+      {/* Clean Detail Card */}
       {currentTest && (
-        <div className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow ${isHiddenCase ? 'opacity-95' : ''}`}>
-          <div className={`px-4 py-3 flex items-center justify-between ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'} border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-            <h4 className="font-medium text-gray-800 dark:text-white">
-              Test Case #{selectedTestIndex + 1} {currentTest.passed ? '✅ Passed' : '❌ Failed'}
-            </h4>
-            {isHiddenCase && (
-              <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm gap-1">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-4 h-4"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0110 0v4" />
-                </svg>
-                <span>Hidden Case</span>
-              </div>
-            )}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 bg-gray-50/50 dark:bg-gray-800/30 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className={`w-2 h-2 rounded-full ${currentTest.passed ? 'bg-green-500' : 'bg-red-500'}`} />
+              <h4 className="font-bold text-gray-900 dark:text-white">Case {selectedTestIndex + 1} Result</h4>
+            </div>
+            <div className="flex items-center gap-4">
+              {isHiddenCase && (
+                <span className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Hidden
+                </span>
+              )}
+              <span className={`text-xs font-black uppercase tracking-wider ${currentTest.passed ? 'text-green-600' : 'text-red-600'}`}>
+                {currentTest.passed ? 'Passed' : 'Failed'}
+              </span>
+            </div>
           </div>
 
-          <div className="p-4 space-y-4">
-            {/* Input */}
-            <div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Input
-              </div>
-              <div className="p-3 rounded border font-mono text-sm max-h-40 overflow-y-auto bg-gray-50 dark:bg-gray-900 dark:border-gray-700 text-gray-800 dark:text-gray-100">
-                {formatText(currentTest.input)}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Expected Output */}
-              <div>
-                <div className="text-sm font-medium text-green-600 dark:text-green-400 mb-1">
-                  Expected Output
-                </div>
-                <div className="p-3 rounded border font-mono text-sm bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-gray-800 dark:text-gray-100">
-                  {isHiddenCase ? (
-                    <span className="italic text-gray-400">Hidden</span>
-                  ) : (
-                    formatText(currentTest.expected)
-                  )}
+          <div className="p-6 space-y-6">
+            <div className="space-y-5">
+              {/* Input Section */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Input</span>
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 overflow-x-auto whitespace-pre">
+                  {formatText(currentTest.input)}
                 </div>
               </div>
 
-              {/* Your Output */}
-              <div>
-                <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-1">
-                  Your Output
+              {/* Outputs Row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Expected</span>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 min-h-[80px] whitespace-pre">
+                    {isHiddenCase ? <span className="italic opacity-30">Restricted</span> : formatText(currentTest.expected)}
+                  </div>
                 </div>
-                <div className="p-3 rounded border font-mono text-sm bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-gray-800 dark:text-gray-100">
-                  {formatText(currentTest.output)}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Output</span>
+                  <div className={`p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border min-h-[80px] whitespace-pre ${currentTest.passed
+                    ? 'border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300'
+                    : 'border-red-100/50 dark:border-red-900/10 text-red-600 dark:text-red-400'
+                    }`}>
+                    {formatText(currentTest.output)}
+                  </div>
                 </div>
               </div>
             </div>

@@ -244,34 +244,47 @@ function CodePage({ data, navigation }) {
 
     const updatedResults = [...initialResults];
 
-    for (let i = 0; i < testCases.length; i++) {
+    const promises = testCases.map(async (tc, i) => {
+      const { input, expectedOutput } = tc;
+      try {
+        const { run: result } = await executeCode(selectedLanguage, code, input);
 
+        const resultlist = result.output ? result.output.split("\n") : ["No output received."];
+        while (resultlist[resultlist.length - 1] === "") resultlist.pop();
 
-      const { input, expectedOutput } = testCases[i];
-      const { run: result } = await executeCode(selectedLanguage, code, input);
+        const expectedLines = expectedOutput.split("\n");
+        while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
 
+        const passed = resultlist.length === expectedLines.length &&
+          resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
 
+        const currentResult = {
+          input,
+          expected: expectedOutput,
+          output: result.output,
+          passed,
+          status: 'done',
+        };
 
-      const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-      while (resultlist[resultlist.length - 1] === "") resultlist.pop();
+        updatedResults[i] = currentResult;
+        setTestResults([...updatedResults]); // Still update one by one for visual feedback
+        return currentResult;
+      } catch (error) {
+        console.error(`Error executing test case ${i + 1}:`, error);
+        const errorResult = {
+          input,
+          expected: expectedOutput,
+          output: error.message || 'Error',
+          passed: false,
+          status: 'done',
+        };
+        updatedResults[i] = errorResult;
+        setTestResults([...updatedResults]);
+        return errorResult;
+      }
+    });
 
-      const expectedLines = expectedOutput.split("\n");
-      while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
-
-      const passed = resultlist.length === expectedLines.length &&
-        resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
-
-      updatedResults[i] = {
-        input,
-        expected: expectedOutput,
-        output: result.output,
-        passed,
-        status: 'done',
-      };
-
-      setTestResults([...updatedResults]);
-      await new Promise(res => setTimeout(res, 300));
-    }
+    await Promise.all(promises);
 
 
     const allPassed = updatedResults.every(tc => tc.passed);
@@ -318,45 +331,10 @@ function CodePage({ data, navigation }) {
       const updatedResults = [...initialResults];
       let firstFailureShown = false;
 
-      for (let i = 0; i < testCases.length; i++) {
-        const { input: testInput, expectedOutput } = testCases[i];
+      const promises = testCases.map(async (tc, i) => {
+        const { input: testInput, expectedOutput } = tc;
         try {
           const { run: result } = await executeCode(selectedLanguage, code, testInput);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
           const resultOutput = result.output || '';
           const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
           const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
@@ -364,51 +342,48 @@ function CodePage({ data, navigation }) {
           const passed = resultLines.length === expectedLines.length &&
             resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
 
-          updatedResults[i] = {
+          const currentResult = {
             input: testInput,
             expected: expectedOutput,
             output: resultOutput,
             passed,
             status: 'done',
-            isFirstFailure: !passed && !firstFailureShown
+            isFirstFailure: false
           };
-          if (!passed && !firstFailureShown) {
-            firstFailureShown = true;
-            // Auto-expand the first failed test case
-            setTestCaseTab(i);
-          }
-
-
-
-
-
-
-
-
-
+          updatedResults[i] = currentResult;
+          setTestResults([...updatedResults]);
+          return currentResult;
         } catch (error) {
           console.error(`Error executing test case ${i + 1}:`, error);
-          updatedResults[i] = {
+          const errorResult = {
             input: testInput,
             expected: expectedOutput || '',
             output: error.message || 'Error executing code',
             passed: false,
             status: 'done',
-            isFirstFailure: !firstFailureShown
+            isFirstFailure: false
           };
-
-          if (!firstFailureShown) {
-            firstFailureShown = true;
-            // Auto-expand the first failed test case
-            setTestCaseTab(i);
-          }
+          updatedResults[i] = errorResult;
+          setTestResults([...updatedResults]);
+          return errorResult;
         }
+      });
 
-        // Update UI after each test case
+      await Promise.all(promises);
+
+      // Handle first failure expansion
+      let firstFailureIdx = -1;
+      for (let i = 0; i < updatedResults.length; i++) {
+        if (!updatedResults[i].passed) {
+          firstFailureIdx = i;
+          break;
+        }
+      }
+
+      if (firstFailureIdx !== -1) {
+        updatedResults[firstFailureIdx].isFirstFailure = true;
+        setTestCaseTab(firstFailureIdx);
         setTestResults([...updatedResults]);
-
-        // Small delay to show test cases running one by one
-        await new Promise(resolve => setTimeout(resolve, 300));
       }
     } catch (error) {
       console.error("Error during test cases:", error);
