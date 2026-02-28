@@ -7,14 +7,36 @@ const TestCard = ({ test, onStart }) => {
   const status = test?.Properties?.status || "Unknown";
 
   return (
-        <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200 border border-gray-200 dark:border-dark-tertiary">
-            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{test.name}</h3>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">Duration: {test.duration} minutes</p>
-            <p className="text-gray-600 dark:text-gray-400">Questions: {test?.configure?.questionsPerType ? Object.values(test.configure.questionsPerType).reduce((a, b) => a + b, 0) : 0}</p>
+    <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200 border border-gray-200 dark:border-dark-tertiary">
+      <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{test.name}</h3>
+      <p className="text-gray-600 dark:text-gray-400 mt-2">Duration: {test.duration} minutes</p>
+      <p className="text-gray-600 dark:text-gray-400">Questions: {test?.configure?.questionsPerType ? Object.values(test.configure.questionsPerType).reduce((a, b) => a + b, 0) : 0}</p>
+
+      {test.Properties?.schedulingType === 'scheduled' ? (
+        <div className="mt-3 space-y-1">
+          {test.Properties?.startTime && (
+            <p className="flex items-center text-blue-600 dark:text-blue-400 text-xs font-semibold">
+              <span className="w-2 h-2 bg-blue-600 rounded-full mr-2"></span>
+              Starts: {new Date(test.Properties.startTime).toLocaleString()}
+            </p>
+          )}
+          {test.Properties?.endTime && (
+            <p className="flex items-center text-red-500 dark:text-red-400 text-xs font-semibold">
+              <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+              Deadline: {new Date(test.Properties.endTime).toLocaleString()}
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="flex items-center text-green-600 dark:text-green-400 text-xs mt-3 font-semibold">
+          <span className="w-2 h-2 bg-green-600 rounded-full mr-2 animate-pulse"></span>
+          Anytime Access
+        </p>
+      )}
 
       <div className="mt-4">
         {status === "NotStarted" && (
-                    <button
+          <button
             className="w-full bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 py-2 px-4 rounded-md cursor-not-allowed"
             disabled
           >
@@ -23,7 +45,7 @@ const TestCard = ({ test, onStart }) => {
         )}
 
         {status === "Started" && (
-                    <button
+          <button
             onClick={() => onStart(test.id)}
             className="w-full bg-blue-600 dark:bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
           >
@@ -32,15 +54,15 @@ const TestCard = ({ test, onStart }) => {
         )}
 
         {status === "Completed" && (
-                    <button
-                    onClick={() => onStart(test.id)}
+          <button
+            onClick={() => onStart(test.id)}
 
             className="w-full bg-green-500 dark:bg-green-600 text-white py-2 px-4 rounded-md cursor-not-allowed"
           >
             Completed
           </button>
         )}
-        
+
       </div>
     </div>
   );

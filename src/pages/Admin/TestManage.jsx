@@ -24,6 +24,9 @@ const TestManage = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [testTitle, setTestTitle] = useState('');
   const [duration, setDuration] = useState(60);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [schedulingType, setSchedulingType] = useState('anytime'); // 'anytime' or 'scheduled'
   const [isSaving, setIsSaving] = useState(false);
   const [enableVideoProctoring, setEnableVideoProctoring] = useState(true);
   const [blockOnViolations, setBlockOnViolations] = useState(false);
@@ -180,6 +183,13 @@ const TestManage = () => {
             );
           }
 
+          // Set scheduling if available
+          if (testData.Properties) {
+            setStartTime(testData.Properties.startTime || '');
+            setEndTime(testData.Properties.endTime || '');
+            setSchedulingType(testData.Properties.schedulingType || 'anytime');
+          }
+
           // Load saved configuration if exists
           const configRef = ref(database, `Exam/${testId}/configure`);
           const configSnapshot = await get(configRef);
@@ -275,6 +285,31 @@ const TestManage = () => {
       } else {
         console.log('[TestManage] No duration found in Firebase, using default');
         setDuration(60); // Default 60 minutes
+      }
+    });
+
+    return () => unsubscribe();
+  }, [testId]);
+
+  // Real-time listener for scheduling changes
+  useEffect(() => {
+    if (!testId) return;
+
+    const propsRef = ref(database, `Exam/${testId}/Properties`);
+    const unsubscribe = onValue(propsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const props = snapshot.val();
+        setStartTime(props.startTime || '');
+        setEndTime(props.endTime || '');
+        setSchedulingType(props.schedulingType || 'anytime');
+
+        setTest(prev => ({
+          ...prev,
+          Properties: {
+            ...prev?.Properties,
+            ...props
+          }
+        }));
       }
     });
 
@@ -785,6 +820,86 @@ const TestManage = () => {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Scheduling Section */}
+                <div className="col-span-1 sm:col-span-2 mt-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                      Scheduling
+                    </h3>
+                    <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+                      <button
+                        onClick={() => {
+                          setSchedulingType('anytime');
+                          update(ref(database, `Exam/${testId}/Properties`), { schedulingType: 'anytime' });
+                        }}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${schedulingType === 'anytime'
+                            ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-400'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                          }`}
+                      >
+                        Anytime
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSchedulingType('scheduled');
+                          update(ref(database, `Exam/${testId}/Properties`), { schedulingType: 'scheduled' });
+                        }}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${schedulingType === 'scheduled'
+                            ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-400'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                          }`}
+                      >
+                        Time Range
+                      </button>
+                    </div>
+                  </div>
+
+                  {schedulingType === 'scheduled' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div>
+                        <label htmlFor="startTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Start Time
+                        </label>
+                        <input
+                          type="datetime-local"
+                          id="startTime"
+                          value={startTime}
+                          onChange={(e) => setStartTime(e.target.value)}
+                          onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { startTime })}
+                          className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="endTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          End Time
+                        </label>
+                        <input
+                          type="datetime-local"
+                          id="endTime"
+                          value={endTime}
+                          onChange={(e) => setEndTime(e.target.value)}
+                          onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { endTime })}
+                          className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 p-4 rounded-lg">
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        <strong>Anytime Access Enabled:</strong> Students can start this test whenever they want.
+                        Once they click "Start Test", they will have exactly <strong>{duration} minutes</strong> to complete it.
+                      </p>
+                    </div>
+                  )}
+
+                  {schedulingType === 'scheduled' && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      The test will only be visible to students within this timeframe.
+                      Once started, the {duration}-minute timer begins.
+                    </p>
+                  )}
                 </div>
 
                 {/* Proctoring Settings */}

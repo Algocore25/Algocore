@@ -41,13 +41,30 @@ const AvailableTests = () => {
 
 
                 const filtered = dataArray2.filter(test => {
-                    console.log("Checking test:", Object.values(test.Eligible || {})); // Print test on every iteration
                     const isAllowAll = test.allowAllStudents === true;
                     const isEligible = Array.isArray(Object.values(test.Eligible || {})) &&
                         Object.values(test.Eligible || {}).includes(user?.email);
+
+                    // Time-based filtering
+                    let isWithinTime = true;
+                    const schedType = test.Properties?.schedulingType || 'anytime';
+
+                    if (schedType === 'scheduled') {
+                        const now = new Date();
+                        if (test.Properties?.startTime) {
+                            const start = new Date(test.Properties.startTime);
+                            if (now < start) isWithinTime = false;
+                        }
+                        if (test.Properties?.endTime) {
+                            const end = new Date(test.Properties.endTime);
+                            if (now > end) isWithinTime = false;
+                        }
+                    }
+
                     return (
                         (isAllowAll || isEligible) &&
-                        test.Properties.status?.toLowerCase() !== "completed"
+                        test.Properties?.status?.toLowerCase() !== "completed" &&
+                        isWithinTime
                     );
                 });
 

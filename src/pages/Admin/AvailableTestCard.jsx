@@ -16,6 +16,20 @@ export default function AvailableTestCard({ test, endTest }) {
       <p className="text-gray-600 dark:text-gray-300">
         Status: <span className="capitalize">{test.Properties?.status || 'draft'}</span>
       </p>
+      {test.Properties?.schedulingType === 'scheduled' && (
+        <>
+          {test.Properties?.startTime && (
+            <p className="text-blue-600 dark:text-blue-400 text-xs mt-2 font-medium">
+              Started At: {new Date(test.Properties.startTime).toLocaleString()}
+            </p>
+          )}
+          {test.Properties?.endTime && (
+            <p className="text-red-600 dark:text-red-400 text-xs mt-1 font-medium">
+              Deadline: {new Date(test.Properties.endTime).toLocaleString()}
+            </p>
+          )}
+        </>
+      )}
       <div className="mt-4 flex gap-2">
         <button
           onClick={() => endTest(test.id)}
