@@ -9,6 +9,7 @@ import MSQPage from "./MSQPage";
 import NumericPage from "./NumericPage";
 import LoadingPage from "./LoadingPage";
 import CpuApp from "./Visual/Cpu/CpuApp";
+import { encodeShort, decodeShort } from "../utils/urlEncoder";
 
 // Navigation Icons
 const NavigationIcons = {
@@ -30,8 +31,12 @@ const DynamicComponent = () => {
   const [allQuestions, setAllQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-  const { course, subcourse, questionId } = useParams();
+  const { course: encodedCourse, subcourse, questionId } = useParams();
   const navigate = useNavigate();
+
+  const decodedCourse = decodeShort(encodedCourse);
+  const decodedSubcourse = decodeShort(subcourse);
+  const decodedQuestionId = decodeShort(questionId);
 
   const [status, setStatus] = useState("active");
 
@@ -46,11 +51,11 @@ const DynamicComponent = () => {
         // Single call for both question data and next question URL
         const questionRef = ref(
           database,
-          `questions/${questionId}`);
+          `questions/${decodedQuestionId}`);
 
         const statusRef = ref(
           database,
-          `AlgoCore/${course}/lessons/${subcourse}/status`);
+          `AlgoCore/${decodedCourse}/lessons/${decodedSubcourse}/status`);
 
         // Get both question data and all questions in parallel
         const [questionSnapshot, statusSnapshot] = await Promise.all([
@@ -80,7 +85,7 @@ const DynamicComponent = () => {
         // Single call for both question data and next question URL
         const questionRef = ref(
           database,
-          `AlgoCore/${course}/lessons/${subcourse}/questions`);
+          `AlgoCore/${decodedCourse}/lessons/${decodedSubcourse}/questions`);
 
         // Get both question data and all questions in parallel
         const [questionSnapshot] = await Promise.all([
@@ -110,8 +115,8 @@ const DynamicComponent = () => {
           setAllQuestions(questionsList);
 
           // Find current question index
-          const currentIndex = questionsList.findIndex(q => q === questionId);
-          console.log('Current question ID:', questionId);
+          const currentIndex = questionsList.findIndex(q => q === decodedQuestionId);
+          console.log('Current question ID:', decodedQuestionId);
           console.log('Found index:', currentIndex);
           setCurrentQuestionIndex(currentIndex !== -1 ? currentIndex : 0);
         }
@@ -123,7 +128,7 @@ const DynamicComponent = () => {
     fetchData();
     fetchDataQuestions();
 
-    if (questionId === "CpuVisual") {
+    if (decodedQuestionId === "CpuVisual") {
       setData({
         type: "CpuVisual"
       })
@@ -133,39 +138,25 @@ const DynamicComponent = () => {
     setLoading(false);
 
 
-  }, [questionId, course, subcourse]); // Dependencies adjusted
+  }, [decodedQuestionId, decodedCourse, decodedSubcourse]); // Dependencies adjusted
 
   const handlePreviousQuestion = () => {
-    console.log('Previous button clicked');
-    console.log('Current index:', currentQuestionIndex);
-    console.log('All questions:', allQuestions);
-
     if (currentQuestionIndex > 0) {
       const prevQuestion = allQuestions[currentQuestionIndex - 1];
-      console.log('Navigating to previous question:', prevQuestion);
-      const url = `/problem/${course}/${subcourse}/${prevQuestion}`;
-      console.log('Navigation URL:', url);
+      const url = `/problem/${encodedCourse}/${encodeShort(decodedSubcourse)}/${encodeShort(prevQuestion)}`;
       navigate(url);
     } else {
-      console.log('Already at first question - redirecting to home');
-      navigate(`/course/${course}`); // Redirect to home when at first question
+      navigate(`/course/${encodedCourse}`); // Redirect to course page
     }
   };
 
   const handleNextQuestion = () => {
-    console.log('Next button clicked');
-    console.log('Current index:', currentQuestionIndex);
-    console.log('All questions:', allQuestions);
-
     if (currentQuestionIndex < allQuestions.length - 1) {
       const nextQuestion = allQuestions[currentQuestionIndex + 1];
-      console.log('Navigating to next question:', nextQuestion);
-      const url = `/problem/${course}/${subcourse}/${nextQuestion}`;
-      console.log('Navigation URL:', url);
+      const url = `/problem/${encodedCourse}/${encodeShort(decodedSubcourse)}/${encodeShort(nextQuestion)}`;
       navigate(url);
     } else {
-      console.log('At last question - redirecting to home');
-      navigate(`/course/${course}`); // Redirect to home when at last question
+      navigate(`/course/${encodedCourse}`); // Redirect to course page
     }
   };
 

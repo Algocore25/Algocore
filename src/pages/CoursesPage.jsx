@@ -8,9 +8,11 @@ import LoadingPage from './LoadingPage';
 import { useAuth } from '../context/AuthContext';
 import { COURSE_ICONS, getCourseIcon } from '../utils/courseIcons';
 
+import { encodeShort } from '../utils/urlEncoder';
+
 const CourseCard = ({ course }) => (
   <Link
-    to={`/course/${course.id}`}
+    to={`/course/${encodeShort(course.id)}`}
     className="group relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-[2rem] p-6 md:p-8 border border-white/40 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 h-full flex flex-col overflow-hidden"
   >
     {/* Decorative gradient blur behind the card */}
@@ -173,27 +175,20 @@ const CoursesPage = () => {
     <div className="min-h-screen relative overflow-x-hidden flex flex-col w-full">
       <AnimatedBackground />
       <main className="relative flex-grow z-10 w-full">
-        {/* Hero Section */}
-        <section className="flex flex-col items-center justify-center py-20 px-4 sm:px-6 lg:px-8">
-          <div className="w-full max-w-4xl flex flex-col items-center justify-center text-center">
-            <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium text-sm mb-8 border border-blue-200/60 dark:border-blue-800/60 shadow-sm backdrop-blur-sm">
-              <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400 mr-2 animate-pulse" />
-              Interactive Learning Ecosystem
-            </div>
-
-            <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-gray-900 dark:text-white mb-6 tracking-tight leading-tight">
-              Master Programming <br className="hidden md:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600">Through Practice</span>
+        {/* Clean Header Section */}
+        <section className="pt-24 pb-8 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">
+              Explore Courses
             </h1>
-
-            <p className="text-lg sm:text-xl md:text-2xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto mb-4 leading-relaxed font-light">
-              No boring lectures — just immersive, hands-on coding challenges designed to level up your engineering skills instantly.
+            <p className="text-gray-600 dark:text-gray-400 text-lg">
+              Level up your skills with interactive coding challenges.
             </p>
           </div>
         </section>
 
         {/* Courses Section */}
-        <section className="relative z-10 py-8 px-4 sm:px-6 lg:px-8">
+        <section className="relative z-10 pb-20 px-4 sm:px-6 lg:px-8">
           <div className="max-w-7xl mx-auto space-y-16">
             {Object.entries((courses || []).reduce((acc, course) => {
               if (!course) return acc;

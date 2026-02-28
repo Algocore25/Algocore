@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { getDatabase, ref, get, set, update, child } from 'firebase/database';
 import { database } from '../../firebase';
-import { FiSave, FiPlus, FiTrash2, FiArrowLeft, FiArrowUp, FiArrowDown, FiX } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiArrowLeft, FiArrowUp, FiArrowDown, FiX, FiMenu } from 'react-icons/fi';
 import { FaChevronDown } from "react-icons/fa";
+import { Reorder } from "framer-motion";
 import { COURSE_ICONS, getCourseIcon, getCourseIconDef } from '../../utils/courseIcons';
 import toast from 'react-hot-toast';
 import LoadingPage from '../LoadingPage';
@@ -25,6 +26,8 @@ const CourseEdit = () => {
     const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
     const [activeSectionForQuestions, setActiveSectionForQuestions] = useState(null);
     const [isIconDropdownOpen, setIsIconDropdownOpen] = useState(false);
+    const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
+    const [tempSectionOrder, setTempSectionOrder] = useState([]);
 
     const [accessType, setAccessType] = useState('open'); // 'open' or 'restricted'
     const [allowedUsers, setAllowedUsers] = useState([]); // array of users
@@ -298,6 +301,43 @@ const CourseEdit = () => {
         });
     };
 
+    const openReorderModal = () => {
+        const sortedKeys = Object.entries(lessons)
+            .sort((a, b) => (a[1].order || 0) - (b[1].order || 0))
+            .map(entry => entry[0]);
+        setTempSectionOrder(sortedKeys);
+        setIsReorderModalOpen(true);
+    };
+
+    const handleTempMoveUp = (index) => {
+        if (index === 0) return;
+        const newOrder = [...tempSectionOrder];
+        const temp = newOrder[index - 1];
+        newOrder[index - 1] = newOrder[index];
+        newOrder[index] = temp;
+        setTempSectionOrder(newOrder);
+    };
+
+    const handleTempMoveDown = (index) => {
+        if (index === tempSectionOrder.length - 1) return;
+        const newOrder = [...tempSectionOrder];
+        const temp = newOrder[index + 1];
+        newOrder[index + 1] = newOrder[index];
+        newOrder[index] = temp;
+        setTempSectionOrder(newOrder);
+    };
+
+    const saveReorderModal = () => {
+        setLessons(prev => {
+            const newLessons = {};
+            tempSectionOrder.forEach((sectionKey, index) => {
+                newLessons[sectionKey] = { ...prev[sectionKey], order: index };
+            });
+            return newLessons;
+        });
+        setIsReorderModalOpen(false);
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
@@ -554,12 +594,21 @@ const CourseEdit = () => {
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Curriculum</h2>
-                        <button
-                            onClick={addSection}
-                            className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 rounded-md transition-colors text-sm flex items-center"
-                        >
-                            <FiPlus className="mr-1" /> Add Section
-                        </button>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={openReorderModal}
+                                disabled={Object.keys(lessons).length < 2}
+                                className="px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 rounded-md transition-colors text-sm flex items-center disabled:opacity-50"
+                            >
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg> Reorder Sections
+                            </button>
+                            <button
+                                onClick={addSection}
+                                className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 rounded-md transition-colors text-sm flex items-center"
+                            >
+                                <FiPlus className="mr-1" /> Add Section
+                            </button>
+                        </div>
                     </div>
 
                     <div className="space-y-6">
@@ -680,6 +729,64 @@ const CourseEdit = () => {
                 }}
                 onAddQuestions={handleAddQuestionsFromModal}
             />
+
+            {/* Reorder Sections Modal */}
+            {isReorderModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Reorder Sections</h3>
+                            <button onClick={() => setIsReorderModalOpen(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                                <FiX size={24} />
+                            </button>
+                        </div>
+                        <div className="p-4 overflow-y-auto flex-1">
+                            <Reorder.Group axis="y" values={tempSectionOrder} onReorder={setTempSectionOrder} className="space-y-2">
+                                {tempSectionOrder.map((sectionKey, idx) => (
+                                    <Reorder.Item key={sectionKey} value={sectionKey} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-md p-3 cursor-grab active:cursor-grabbing">
+                                        <div className="flex items-center flex-1 overflow-hidden">
+                                            <FiMenu className="text-gray-400 mr-3 shrink-0" size={18} />
+                                            <span className="font-medium text-gray-900 dark:text-white truncate pr-4">{sectionKey}</span>
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                            <button
+                                                onClick={() => handleTempMoveUp(idx)}
+                                                disabled={idx === 0}
+                                                className={`p-1 rounded ${idx === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                                                title="Move Up"
+                                            >
+                                                <FiArrowUp size={18} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleTempMoveDown(idx)}
+                                                disabled={idx === tempSectionOrder.length - 1}
+                                                className={`p-1 rounded ${idx === tempSectionOrder.length - 1 ? 'text-gray-300 dark:text-gray-600' : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                                                title="Move Down"
+                                            >
+                                                <FiArrowDown size={18} />
+                                            </button>
+                                        </div>
+                                    </Reorder.Item>
+                                ))}
+                            </Reorder.Group>
+                        </div>
+                        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsReorderModalOpen(false)}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-lg transition-colors font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={saveReorderModal}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                            >
+                                Save Order
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

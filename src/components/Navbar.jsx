@@ -8,10 +8,11 @@ import { Wifi, WifiOff, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FaSun as SunIcon, FaMoon as MoonIcon, FaUserCircle as UserCircleIcon } from 'react-icons/fa';
 import logoLight from '../assets/LOGO.png';
 import logoDark from '../assets/LOGO-1.png';
+import { encodeShort, decodeShort } from '../utils/urlEncoder';
 
 const pathMappings = [
-  { pattern: "/problem/:course/:subcourse/:questionId", label: "course/os" },
-  { pattern: "/course/:courseId", label: "course" },
+  { pattern: "/problem/:course/:subcourse/:questionId", getPath: (params) => `/course/${params.course}` },
+  { pattern: "/course/:courseId", getPath: () => "/courses" },
 ];
 
 const Navbar = () => {
@@ -32,6 +33,17 @@ const Navbar = () => {
 
   const authDropdownRef = useRef(null);
   const authButtonRef = useRef(null);
+  const dotsContainerRef = useRef(null);
+
+  // Scroll active dot into view
+  useEffect(() => {
+    if (dotsContainerRef.current && currentIndex >= 0) {
+      const activeDot = dotsContainerRef.current.children[currentIndex];
+      if (activeDot) {
+        activeDot.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [currentIndex]);
 
   // 🟢 Online/Offline listener
   useEffect(() => {
@@ -48,9 +60,9 @@ const Navbar = () => {
   if (loading) return null;
 
   const matched = pathMappings
-    .map(({ pattern, label }) => {
+    .map(({ pattern, getPath }) => {
       const match = matchPath(pattern, location.pathname);
-      return match ? { pattern, label, params: match.params } : null;
+      return match ? { pattern, path: getPath(match.params), params: match.params } : null;
     })
     .find(Boolean);
 
@@ -94,7 +106,12 @@ const Navbar = () => {
         return;
       }
 
-      const { course, subcourse, questionId } = pathMatch.params;
+      const { course: encodedCourse, subcourse, questionId } = pathMatch.params;
+      const course = decodeShort(encodedCourse);
+
+      const decodedSubcourse = decodeShort(subcourse);
+      const decodedQuestionId = decodeShort(questionId);
+
       if (isMounted) setIsLoading(true);
       try {
         const questionRef = ref(database, `AlgoCore/${course}`);
@@ -102,17 +119,16 @@ const Navbar = () => {
         if (!snapshot.exists()) return;
 
         const lessons = snapshot.val()?.["lessons"];
-        const questionsArray = lessons[subcourse.replaceAll("%20", " ")]?.["questions"] || [];
+        const questionsArray = lessons[decodedSubcourse]?.["questions"] || [];
 
         if (!isMounted) return;
         setQuestionData(questionsArray);
 
-        const index = questionsArray.findIndex(q => q === questionId || q === questionId.replaceAll("%20", " "));
+        const index = questionsArray.findIndex(q => q === decodedQuestionId || q === decodedQuestionId.replaceAll("%20", " "));
         setCurrentIndex(index);
 
         if (user) {
-          const decodedSub = subcourse.replaceAll("%20", " ");
-          const progressRef = ref(database, `userprogress/${user.uid}/${course}/${decodedSub}`);
+          const progressRef = ref(database, `userprogress/${user.uid}/${course}/${decodedSubcourse}`);
           const progressSnap = await get(progressRef);
           setProgressMap(progressSnap.exists() ? progressSnap.val() : {});
         }
@@ -161,7 +177,7 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
         {/* Left: Logo + Menu */}
         <div className="flex items-center gap-6">
-          <Link to={matched?.label || '/'} className="flex items-center gap-2">
+          <Link to={matched?.path || '/'} className="flex items-center gap-2">
             <img src={theme === 'dark' ? logoDark : logoLight} alt="AlgoCore Logo" className="h-8 w-auto" />
             <span className="text-xl font-bold text-[#202124] dark:text-white">AlgoCore</span>
           </Link>
@@ -190,11 +206,13 @@ const Navbar = () => {
               {/* Previous button */}
               <button
                 onClick={() => {
-                  const { course, subcourse } = match.params;
+                  const { course: encodedCourse, subcourse } = match.params;
+
                   if (currentIndex > 0) {
-                    navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(questionData[currentIndex - 1])}`);
+                    const dSub = decodeShort(subcourse);
+                    navigate(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex - 1])}`);
                   } else {
-                    navigate(`/course/${course}`);
+                    navigate(`/course/${encodedCourse}`);
                   }
                 }}
                 className={`p-1 sm:p-1.5 rounded-md transition-all duration-150 ${currentIndex === 0
@@ -210,7 +228,10 @@ const Navbar = () => {
               <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
                 {currentIndex + 1}/{questionData.length}
               </div>
-              <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar max-w-[60px] sm:max-w-[120px]">
+              <div
+                ref={dotsContainerRef}
+                className="flex items-center gap-1 overflow-x-auto hide-scrollbar max-w-[60px] sm:max-w-[120px]"
+              >
                 {questionData.map((q, i) => (
                   <button
                     key={i}
@@ -222,8 +243,9 @@ const Navbar = () => {
                         : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
                       }`}
                     onClick={() => {
-                      const { course, subcourse } = match.params;
-                      navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(q)}`);
+                      const { course: encodedCourse, subcourse } = match.params;
+                      const dSub = decodeShort(subcourse);
+                      navigate(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(q)}`);
                     }}
                   />
                 ))}
@@ -232,11 +254,13 @@ const Navbar = () => {
               {/* Next button */}
               <button
                 onClick={() => {
-                  const { course, subcourse } = match.params;
+                  const { course: encodedCourse, subcourse } = match.params;
+
                   if (currentIndex < questionData.length - 1) {
-                    navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(questionData[currentIndex + 1])}`);
+                    const dSub = decodeShort(subcourse);
+                    navigate(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex + 1])}`);
                   } else {
-                    navigate(`/course/${course}`);
+                    navigate(`/course/${encodedCourse}`);
                   }
                 }}
                 className={`p-1 sm:p-1.5 rounded-md transition-all duration-150 ${currentIndex === questionData.length - 1

@@ -20,6 +20,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry";
+import { decodeShort } from '../utils/urlEncoder';
 
 
 
@@ -179,7 +180,10 @@ function CodePage({ data, navigation }) {
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0); // New state to trigger submission refresh
 
-  const { course, subcourse, questionId } = useParams();
+  const { course: encCourse, subcourse: encSubcourse, questionId: encQuestionId } = useParams();
+  const course = decodeShort(encCourse);
+  const subcourse = decodeShort(encSubcourse);
+  const questionId = decodeShort(encQuestionId);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -328,7 +332,6 @@ function CodePage({ data, navigation }) {
 
 
 
-       
 
 
 
@@ -351,30 +354,31 @@ function CodePage({ data, navigation }) {
 
 
 
-  
 
-            const resultOutput = result.output || '';
-            const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
-            const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
 
-            const passed = resultLines.length === expectedLines.length &&
-              resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
 
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: resultOutput,
-              passed,
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
+          const resultOutput = result.output || '';
+          const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
+          const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
 
-          
+          const passed = resultLines.length === expectedLines.length &&
+            resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+
+          updatedResults[i] = {
+            input: testInput,
+            expected: expectedOutput,
+            output: resultOutput,
+            passed,
+            status: 'done',
+            isFirstFailure: !passed && !firstFailureShown
+          };
+          if (!passed && !firstFailureShown) {
+            firstFailureShown = true;
+            // Auto-expand the first failed test case
+            setTestCaseTab(i);
+          }
+
+
 
 
 
@@ -882,94 +886,94 @@ function CodePage({ data, navigation }) {
             <div className="space-y-6">
 
               {
-                  
 
 
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white"> Manual Test Cases </h3>
-                      <div className="flex items-center gap-2 mb-4">
-                        {testCasesrun.map((_, idx) => (
-                          <button
-                            key={idx}
-                            className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
-                              }`}
-                            onClick={() => setTestCaseTab(idx)}
-                          >
-                            Case {idx + 1}
-                          </button>
-                        ))}
-                        <button
-                          className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
-                          onClick={() => {
-                            setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
-                            setTestCaseTab(testCasesrun.length);
+
+                <div>
+                  <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white"> Manual Test Cases </h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    {testCasesrun.map((_, idx) => (
+                      <button
+                        key={idx}
+                        className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
+                          }`}
+                        onClick={() => setTestCaseTab(idx)}
+                      >
+                        Case {idx + 1}
+                      </button>
+                    ))}
+                    <button
+                      className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
+                      onClick={() => {
+                        setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
+                        setTestCaseTab(testCasesrun.length);
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
+                        <textarea
+                          ref={inputRef}
+                          className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
+                          value={testCasesrun[testCaseTab]?.input || ''}
+                          onChange={e => {
+                            const updated = [...testCasesrun];
+                            updated[testCaseTab].input = e.target.value;
+                            setTestCases(updated);
+                            // Force update height after state update
+                            requestAnimationFrame(() => {
+                              adjustTextareaHeight(e.target);
+                            });
                           }}
-                        >
-                          +
-                        </button>
+                          onInput={e => adjustTextareaHeight(e.target)}
+                          placeholder="Enter input (supports multiple lines)"
+                          rows={1}
+                          style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
+                        />
                       </div>
-                      <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
-                            <textarea
-                              ref={inputRef}
-                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
-                              value={testCasesrun[testCaseTab]?.input || ''}
-                              onChange={e => {
-                                const updated = [...testCasesrun];
-                                updated[testCaseTab].input = e.target.value;
-                                setTestCases(updated);
-                                // Force update height after state update
-                                requestAnimationFrame(() => {
-                                  adjustTextareaHeight(e.target);
-                                });
-                              }}
-                              onInput={e => adjustTextareaHeight(e.target)}
-                              placeholder="Enter input (supports multiple lines)"
-                              rows={1}
-                              style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
-                            <textarea
-                              ref={outputRef}
-                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
-                              value={testCasesrun[testCaseTab]?.expectedOutput || ''}
-                              onChange={e => {
-                                const updated = [...testCasesrun];
-                                updated[testCaseTab].expectedOutput = e.target.value;
-                                setTestCases(updated);
-                                // Force update height after state update
-                                requestAnimationFrame(() => {
-                                  adjustTextareaHeight(e.target);
-                                });
-                              }}
-                              onInput={e => adjustTextareaHeight(e.target)}
-                              placeholder="Enter expected output (supports multiple lines)"
-                              rows={1}
-                              style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end mt-4">
-                          <button
-                            className="text-red-500 hover:text-red-700 font-medium"
-                            onClick={() => {
-                              const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
-                              setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
-                              setTestCaseTab(prev => Math.max(0, prev - 1));
-                            }}
-                            disabled={testCasesrun.length <= 1}
-                            title="Delete this test case"
-                          >
-                            Delete Case
-                          </button>
-                        </div>
+                      <div>
+                        <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
+                        <textarea
+                          ref={outputRef}
+                          className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
+                          value={testCasesrun[testCaseTab]?.expectedOutput || ''}
+                          onChange={e => {
+                            const updated = [...testCasesrun];
+                            updated[testCaseTab].expectedOutput = e.target.value;
+                            setTestCases(updated);
+                            // Force update height after state update
+                            requestAnimationFrame(() => {
+                              adjustTextareaHeight(e.target);
+                            });
+                          }}
+                          onInput={e => adjustTextareaHeight(e.target)}
+                          placeholder="Enter expected output (supports multiple lines)"
+                          rows={1}
+                          style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
+                        />
                       </div>
                     </div>
-                  
+                    <div className="flex justify-end mt-4">
+                      <button
+                        className="text-red-500 hover:text-red-700 font-medium"
+                        onClick={() => {
+                          const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
+                          setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
+                          setTestCaseTab(prev => Math.max(0, prev - 1));
+                        }}
+                        disabled={testCasesrun.length <= 1}
+                        title="Delete this test case"
+                      >
+                        Delete Case
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
               }
             </div>
           )}

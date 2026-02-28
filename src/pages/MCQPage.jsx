@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ref, get, child, set } from "firebase/database";
 import { database } from "../firebase";
+import { decodeShort } from '../utils/urlEncoder';
 
 // SVG Icons
 const Icons = {
@@ -35,7 +36,10 @@ function MCQPage({ data }) {
 
   const { user } = useAuth();
 
-  const { course, subcourse, questionId } = useParams();
+  const { course: encCourse, subcourse: encSubcourse, questionId: encQuestionId } = useParams();
+  const course = decodeShort(encCourse);
+  const subcourse = decodeShort(encSubcourse);
+  const questionId = decodeShort(encQuestionId);
 
   const convertDriveUrl = (url) => {
     if (!url) return url;
@@ -155,10 +159,10 @@ function MCQPage({ data }) {
                     <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
                       {data.question}
                     </p>
-                    {data?.darkimageurl&& (
+                    {data?.darkimageurl && (
                       <div className="mb-4">
                         <img
-                          src={  theme === 'dark' ? data.darkimageurl : data.lightimageurl}
+                          src={theme === 'dark' ? data.darkimageurl : data.lightimageurl}
                           alt="Question diagram"
                           className="max-w-full h-auto rounded-lg border border-gray-200 dark:border-gray-700"
                           onError={(e) => {

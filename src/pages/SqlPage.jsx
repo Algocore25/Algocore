@@ -20,6 +20,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry";
+import { decodeShort } from '../utils/urlEncoder';
 
 // Helper: Render pipe-separated SQL output as a styled table
 const SqlResultTable = ({ text, className = '' }) => {
@@ -398,7 +399,10 @@ function SqlPage({ data, navigation }) {
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0); // New state to trigger submission refresh
 
-  const { course, subcourse, questionId } = useParams();
+  const { course: encCourse, subcourse: encSubcourse, questionId: encQuestionId } = useParams();
+  const course = decodeShort(encCourse);
+  const subcourse = decodeShort(encSubcourse);
+  const questionId = decodeShort(encQuestionId);
   const { user } = useAuth();
   const navigate = useNavigate();
 

@@ -6,6 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ChevronDown, ChevronRight, Lock, PlayCircle, StopCircle, RefreshCw, XCircle } from 'lucide-react';
 import LoadingPage from './LoadingPage';
+import { encodeShort, decodeShort } from '../utils/urlEncoder';
 
 // ─── Difficulty badge colour ───────────────────────────────────────────────────
 const diffColor = (d = '') => {
@@ -44,7 +45,8 @@ const calcTopicProgress = (topic) => {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 const CoursePage = () => {
-  const { course } = useParams();
+  const { course: encodedCourse } = useParams();
+  const course = decodeShort(encodedCourse);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -390,7 +392,9 @@ const CoursePage = () => {
                                       }`}
                                     onClick={() => {
                                       if (topic.status !== 'blocked') {
-                                        navigate(`/problem/${course}/${topic.title}/${problem.name}`);
+                                        const encSub = encodeShort(topic.title);
+                                        const encQ = encodeShort(problem.name);
+                                        navigate(`/problem/${encodedCourse}/${encSub}/${encQ}`);
                                       }
                                     }}
                                   >

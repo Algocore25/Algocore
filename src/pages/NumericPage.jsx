@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ref, get, set } from "firebase/database";
 import { database } from "../firebase";
+import { decodeShort } from '../utils/urlEncoder';
 
 // SVG Icons
 const Icons = {
@@ -33,7 +34,10 @@ function NumericPage({ data }) {
     const [leftPanelWidth, setLeftPanelWidth] = useState(45);
     const { theme } = useTheme();
     const { user } = useAuth();
-    const { course, subcourse, questionId } = useParams();
+    const { course: encCourse, subcourse: encSubcourse, questionId: encQuestionId } = useParams();
+    const course = decodeShort(encCourse);
+    const subcourse = decodeShort(encSubcourse);
+    const questionId = decodeShort(encQuestionId);
 
     useEffect(() => {
         setNumericAnswer('');
