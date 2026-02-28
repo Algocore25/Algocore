@@ -24,7 +24,6 @@ const MULTI_SESSION_ALLOWED = [
 // Session configuration
 const SESSION_CONFIG = {
   HEARTBEAT_INTERVAL: 30000, // 30 seconds
-  NEW_LOGIN_DETECTION_WINDOW: 2000, // 2 seconds to detect new login vs page refresh
 };
 
 export const AuthProvider = ({ children }) => {
@@ -44,39 +43,48 @@ export const AuthProvider = ({ children }) => {
 
   // Generate a more robust session ID
   const generateSessionId = () => {
-    if (window.crypto?.randomUUID) {
-      return window.crypto.randomUUID();
+    const existingSessionId = localStorage.getItem('algocore_session_id');
+    if (existingSessionId) {
+      return existingSessionId;
     }
-    // Fallback for older browsers
-    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+    let newSessionId;
+    if (window.crypto?.randomUUID) {
+      newSessionId = window.crypto.randomUUID();
+    } else {
+      // Fallback for older browsers
+      newSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+    localStorage.setItem('algocore_session_id', newSessionId);
+    return newSessionId;
   };
 
   // Enhanced cleanup function
   const cleanupSessionListeners = useCallback(() => {
     console.log('Cleaning up session listeners');
-    
+
     // Clear heartbeat
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
     }
-    
+
     // Clear cleanup timeout
     if (cleanupTimeoutRef.current) {
       clearTimeout(cleanupTimeoutRef.current);
       cleanupTimeoutRef.current = null;
     }
-    
+
     // Unsubscribe from session listener
     if (sessionUnsubRef.current) {
-      try { 
-        sessionUnsubRef.current(); 
+      try {
+        sessionUnsubRef.current();
       } catch (error) {
         console.warn('Error unsubscribing from session listener:', error);
       }
       sessionUnsubRef.current = null;
     }
-    
+
     // Reset refs
     sessionIdRef.current = null;
     sessionPathRef.current = null;
@@ -88,7 +96,7 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(async (isAuto = false, reason = 'manual') => {
     try {
       console.log(`Logging out - Auto: ${isAuto}, Reason: ${reason}`);
-      
+
       // Set manual logout flag if this is not an automatic logout
       if (!isAuto) {
         isManualLogoutRef.current = true;
@@ -97,12 +105,23 @@ export const AuthProvider = ({ children }) => {
       // Clean up session listeners first
       cleanupSessionListeners();
 
+      // Clear local storage session ID
+      localStorage.removeItem('algocore_session_id');
+
       // Try to remove the session record from database
       const uid = auth.currentUser?.uid || user?.uid;
       if (uid && sessionPathRef.current) {
         try {
-          await remove(ref(database, `sessions/${uid}`));
-          console.log('Session record removed from database');
+          const sessionRef = ref(database, `sessions/${uid}`);
+          const snap = await get(sessionRef);
+          const currentSession = snap.val();
+          
+          if (!currentSession || currentSession.sessionId === sessionIdRef.current || isManualLogoutRef.current) {
+            await remove(sessionRef);
+            console.log('Session record removed from database');
+          } else {
+            console.log('Session owned by another client, skipping removal');
+          }
         } catch (error) {
           console.warn('Failed to remove session record:', error);
         }
@@ -111,12 +130,12 @@ export const AuthProvider = ({ children }) => {
       // Sign out from Firebase
       await firebaseSignOut(auth);
       setUser(null);
-      
+
       // Show modal for automatic logouts only
       if (isAuto && reason !== 'manual') {
         showLogoutModal(reason);
       }
-      
+
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -133,11 +152,11 @@ export const AuthProvider = ({ children }) => {
     const modal = document.createElement('div');
     modal.className = 'session-logout-modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
 
-    const reasonText = reason === 'new-login' 
+    const reasonText = reason === 'new-login'
       ? 'You have been logged out because your account was signed in from another device or browser.'
       : reason === 'session-removed'
-      ? 'Your session was terminated by another login.'
-      : 'Your session has ended.';
+        ? 'Your session was terminated by another login.'
+        : 'Your session has ended.';
 
     modal.innerHTML = `
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 relative">
@@ -170,7 +189,7 @@ export const AuthProvider = ({ children }) => {
 
     const okBtn = modal.querySelector('#modal-ok-btn');
     okBtn?.addEventListener('click', removeModal);
-    
+
     // Auto-remove after 15 seconds
     setTimeout(removeModal, 15000);
 
@@ -197,7 +216,7 @@ export const AuthProvider = ({ children }) => {
       const newSessionId = generateSessionId();
       sessionIdRef.current = newSessionId;
       sessionPathRef.current = `sessions/${uid}`;
-      
+
       const sessionRef = ref(database, sessionPathRef.current);
 
       // Create comprehensive session data
@@ -215,14 +234,17 @@ export const AuthProvider = ({ children }) => {
       const snapshot = await get(sessionRef);
       const existingSession = snapshot.val();
       
-      if (existingSession) {
-        console.log('Existing session found:', existingSession.sessionId);
-        // Don't immediately terminate - let the new session take over
+      if (existingSession && existingSession.sessionId === newSessionId) {
+        console.log('Existing session found with same ID, joining session:', existingSession.sessionId);
+        await update(sessionRef, {
+          lastActive: Date.now(),
+          updatedAt: Date.now()
+        });
+      } else {
+        // Set new session data
+        await set(sessionRef, sessionData);
+        console.log('New session created:', newSessionId);
       }
-
-      // Set new session data
-      await set(sessionRef, sessionData);
-      console.log('New session created:', newSessionId);
 
       // Don't set up onDisconnect handler to avoid logout on network issues
       // Sessions will be cleaned up by new logins instead
@@ -231,7 +253,7 @@ export const AuthProvider = ({ children }) => {
       // Set up session listener
       sessionUnsubRef.current = onValue(sessionRef, (snapshot) => {
         const sessionValue = snapshot.val();
-        
+
         if (!sessionValue) {
           console.log('Session removed from database');
           // Only logout if we're online (to avoid false logout on network issues)
@@ -249,24 +271,10 @@ export const AuthProvider = ({ children }) => {
           console.log('Session ID changed - new login detected');
           console.log('Current session:', sessionIdRef.current);
           console.log('New session:', sessionValue.sessionId);
-          
-          // Check if this is a genuine new login (not just a page refresh)
-          const now = Date.now();
-          const sessionCreated = sessionValue.createdAt || sessionValue.updatedAt;
-          const timeSinceCreation = now - sessionCreated;
-          
-          // If the session was created very recently, it's likely a new login
-          const isNewLogin = timeSinceCreation <= SESSION_CONFIG.NEW_LOGIN_DETECTION_WINDOW;
-          
+
           if (!isManualLogoutRef.current) {
-            if (isNewLogin || sessionValue.sessionId !== sessionIdRef.current) {
-              console.log('Terminating current session due to new login');
-              logout(true, 'new-login');
-            } else {
-              // Update our session ID to match (shouldn't happen often)
-              console.log('Updating session ID to match database');
-              sessionIdRef.current = sessionValue.sessionId;
-            }
+            console.log('Terminating current session due to new login');
+            logout(true, 'new-login');
           }
         }
 
@@ -326,15 +334,15 @@ export const AuthProvider = ({ children }) => {
       console.log('Network: ONLINE');
       isOnlineRef.current = true;
     };
-    
+
     const handleOffline = () => {
       console.log('Network: OFFLINE');
       isOnlineRef.current = false;
     };
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -344,10 +352,10 @@ export const AuthProvider = ({ children }) => {
   // Auth state listener
   useEffect(() => {
     console.log('Setting up auth state listener');
-    
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       console.log('Auth state changed:', firebaseUser?.uid || 'null');
-      
+
       if (firebaseUser) {
         const userData = {
           uid: firebaseUser.uid,
@@ -361,7 +369,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         cleanupSessionListeners();
       }
-      
+
       setLoading(false);
     });
 
@@ -382,14 +390,14 @@ export const AuthProvider = ({ children }) => {
     const isMultiSessionUser = MULTI_SESSION_ALLOWED.includes(user.email);
 
     if (isMultiSessionUser) {
-    console.log(`Multi-session allowed for ${user.email}. Skipping single-session enforcement.`);
-    return; // ✅ Skip session enforcement entirely
-  }
+      console.log(`Multi-session allowed for ${user.email}. Skipping single-session enforcement.`);
+      return; // ✅ Skip session enforcement entirely
+    }
 
 
 
     console.log('Starting session enforcement for user:', user.uid);
-    
+
     // Small delay to ensure auth is fully settled
     const timeoutId = setTimeout(() => {
       initSingleSession(user.uid);
@@ -405,13 +413,13 @@ export const AuthProvider = ({ children }) => {
   const googleSignIn = async () => {
     try {
       console.log('Starting Google sign-in');
-      
+
       const provider = new GoogleAuthProvider();
       provider.addScope('profile');
       provider.addScope('email');
-      
+
       const result = await signInWithPopup(auth, provider);
-      
+
       // Store user data in database
       await set(ref(database, `users/${result.user.uid}`), {
         email: result.user.email,
@@ -420,14 +428,14 @@ export const AuthProvider = ({ children }) => {
         lastLogin: Date.now(),
         provider: 'google'
       });
-      
+
       console.log('Google sign-in successful');
       toast.success('Signed in successfully!');
-      
+
       return result.user;
     } catch (error) {
       console.error('Google sign-in error:', error);
-      
+
       if (error.code === 'auth/popup-closed-by-user') {
         toast.error('Sign-in was cancelled');
       } else if (error.code === 'auth/popup-blocked') {
@@ -435,7 +443,7 @@ export const AuthProvider = ({ children }) => {
       } else {
         toast.error('Failed to sign in. Please try again.');
       }
-      
+
       throw error;
     }
   };
