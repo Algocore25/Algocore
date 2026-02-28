@@ -66,25 +66,68 @@ export const Icons = {
 
 
 export const languageTemplates = {
-  typescript: `function solve(word: string, k: number): any {
-  // Write your solution here
+  c: `#include <stdio.h>
+
+int main() {
+    // Write your code here
+    
+    return 0;
 }`,
-  javascript: `function solve(word, k) {
-  // Write your solution here
+  cpp: `#include <iostream>
+using namespace std;
+
+int main() {
+    // Write your code here
+    
+    return 0;
 }`,
-  python: `def solve(word, k):
-    # Write your solution here
-    pass`,
-  java: `public class Solution {
-    public Object solve(String word, int k) {
-        // Write your solution here
-        return null;
+  java: `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        // Write your code here
+        
     }
 }`,
-  cpp: `
-#include<stdio.h>
-int main() {
-    // Write your solution here
-    return 0;
-}`
+  python: `import sys
+
+def main():
+    # Write your code here
+    pass
+
+if __name__ == '__main__':
+    main()`,
+  javascript: `const readline = require('readline');
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+let inputLines = [];
+rl.on('line', (line) => {
+  inputLines.push(line);
+});
+
+rl.on('close', () => {
+  // Write your code here
+  
+});`,
+  typescript: `import * as readline from 'readline';
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+let inputLines: string[] = [];
+rl.on('line', (line: string) => {
+  inputLines.push(line);
+});
+
+rl.on('close', () => {
+  // Write your code here
+  
+});`
 };

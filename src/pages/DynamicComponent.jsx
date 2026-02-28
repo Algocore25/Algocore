@@ -3,8 +3,10 @@ import { ref, onValue, get } from "firebase/database";
 import { database } from "../firebase";
 import { useParams, useNavigate } from "react-router-dom";
 import CodePage from "./CodePage";
+import SqlPage from "./SqlPage";
 import MCQPage from "./MCQPage";
-import CaseStudyPage from "./CaseStudyPage";
+import MSQPage from "./MSQPage";
+import NumericPage from "./NumericPage";
 import LoadingPage from "./LoadingPage";
 import CpuApp from "./Visual/Cpu/CpuApp";
 
@@ -55,6 +57,8 @@ const DynamicComponent = () => {
           get(questionRef),
           get(statusRef)
         ]);
+
+        console.log(questionId);
 
         console.log(questionSnapshot.val());
         console.log(statusSnapshot.val());
@@ -125,13 +129,6 @@ const DynamicComponent = () => {
       })
     }
 
-    if (questionId === "test-case-study") {
-      setData({
-        type: "CaseStudy",
-        questionname: "Sample Case Study Analysis"
-      })
-    }
-
 
     setLoading(false);
 
@@ -151,7 +148,7 @@ const DynamicComponent = () => {
       navigate(url);
     } else {
       console.log('Already at first question - redirecting to home');
-      navigate('/course/os'); // Redirect to home when at first question
+      navigate(`/course/${course}`); // Redirect to home when at first question
     }
   };
 
@@ -168,7 +165,7 @@ const DynamicComponent = () => {
       navigate(url);
     } else {
       console.log('At last question - redirecting to home');
-      navigate('/course/os'); // Redirect to home when at last question
+      navigate(`/course/${course}`); // Redirect to home when at last question
     }
   };
 
@@ -193,39 +190,24 @@ const DynamicComponent = () => {
   return (
     <div className="relative">
       {data.type === "Programming" && <CodePage data={data} navigation={navigationProps} />}
+      {data.type === "SQL" && <SqlPage data={data} navigation={navigationProps} />}
       {data.type === "MCQ" && <MCQPage data={data} />}
+      {data.type === "MSQ" && <MSQPage data={data} />}
+      {data.type === "Numeric" && <NumericPage data={data} />}
       {data.type === "CpuVisual" && <CpuApp />}
-      {data.type === "CaseStudy" && <CaseStudyPage data={data} navigation={navigationProps} />}
-      {/* Add more conditional components as needed */}
-
-      {/* Navigation Buttons - Only show for MCQ since CodePage handles its own */}
-      {(data.type === "MCQ" || data.type === "CpuVisual") && allQuestions.length > 1 && (
-        <div className="fixed bottom-6 right-6 flex gap-3 z-50">
-          <button
-            onClick={handlePreviousQuestion}
-            // disabled={currentQuestionIndex === 0}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 shadow-lg ${currentQuestionIndex === 0
-              ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl transform hover:scale-105'
-              }`}
-          >
-            <NavigationIcons.ChevronLeft />
-            {currentQuestionIndex === 0 ? 'Previous Chapter' : 'Previous'}
-          </button>
-
-          <button
-            onClick={handleNextQuestion}
-            // disabled={currentQuestionIndex === allQuestions.length - 1}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 shadow-lg ${currentQuestionIndex === allQuestions.length - 1
-              ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl transform hover:scale-105'
-              }`}
-          >
-            {currentQuestionIndex === allQuestions.length - 1 ? 'Next Chapter' : 'Next'}
-            <NavigationIcons.ChevronRight />
-          </button>
+      {!["Programming", "SQL", "MCQ", "MSQ", "Numeric", "CpuVisual"].includes(data.type) && (
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="text-center p-8 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800 max-w-md">
+            <svg className="w-16 h-16 mx-auto text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-2">Unsupported Question Type</h3>
+            <p className="text-sm text-red-600 dark:text-red-400">Question type "{data.type}" is not supported yet.</p>
+          </div>
         </div>
       )}
+      {/* Add more conditional components as needed */}
+
 
 
     </div>

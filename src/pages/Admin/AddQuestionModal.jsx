@@ -10,6 +10,9 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
   const [filteredQuestions, setFilteredQuestions] = useState([]);
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name-asc');
+  const [filterType, setFilterType] = useState('All');
+  const [filterDiff, setFilterDiff] = useState('All');
   const [isLoading, setIsLoading] = useState(true);
 
   const [formData, setFormData] = useState({
@@ -17,15 +20,20 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
     question: '',
     difficulty: 'Easy',
     type: 'MCQ',
-    // MCQ specific fields
+    // MCQ/MSQ specific fields
     options: ['', '', '', ''],
     correctAnswer: 1,
+    correctAnswers: [],
     explanation: '',
+    // Numeric specific fields
+    numericAnswer: '',
     // Programming specific fields
     constraints: [],
     Example: [],
     testcases: [],
-    solution: ''
+    solution: '',
+    // SQL specific fields
+    schema: ''
   });
 
   const isEditMode = !!question;
@@ -38,15 +46,20 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         question: question.question || '',
         difficulty: question.difficulty || 'Easy',
         type: questionType,
-        // MCQ specific fields
+        // MCQ/MSQ specific fields
         options: question.options || ['', '', '', ''],
         correctAnswer: question.correctAnswer || 1,
+        correctAnswers: question.correctAnswers || [],
         explanation: question.explanation || '',
+        // Numeric specific fields
+        numericAnswer: question.numericAnswer || '',
         // Programming specific fields
         constraints: question.constraints || [],
         Example: question.Example || [],
         testcases: question.testcases || [],
-        solution: question.solution || ''
+        solution: question.solution || '',
+        // SQL specific fields
+        schema: question.schema || ''
       });
       setActiveTab('create');
     } else {
@@ -55,15 +68,20 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         question: '',
         difficulty: 'Easy',
         type: 'MCQ',
-        // MCQ specific fields
+        // MCQ/MSQ specific fields
         options: ['', '', '', ''],
         correctAnswer: 1,
+        correctAnswers: [],
         explanation: '',
+        // Numeric specific fields
+        numericAnswer: '',
         // Programming specific fields
         constraints: [],
         Example: [],
         testcases: [],
-        solution: ''
+        solution: '',
+        // SQL specific fields
+        schema: ''
       });
     }
   }, [isOpen, question, isEditMode]);
@@ -95,17 +113,46 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
   }, [isOpen]);
 
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredQuestions(questions);
-    } else {
+    let result = [...questions];
+
+    // Filter by Search Term
+    if (searchTerm.trim() !== '') {
       const searchLower = searchTerm.toLowerCase();
-      const filtered = questions.filter(q => 
+      result = result.filter(q =>
         (q.questionname && q.questionname.toLowerCase().includes(searchLower)) ||
         (q.question && q.question.toLowerCase().includes(searchLower))
       );
-      setFilteredQuestions(filtered);
     }
-  }, [searchTerm, questions]);
+
+    // Filter by Type
+    if (filterType !== 'All') {
+      result = result.filter(q => q.type === filterType);
+    }
+
+    // Filter by Difficulty
+    if (filterDiff !== 'All') {
+      result = result.filter(q => q.difficulty === filterDiff);
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      const nameA = (a.questionname || '').toLowerCase();
+      const nameB = (b.questionname || '').toLowerCase();
+
+      const diffMap = { 'Easy': 1, 'Medium': 2, 'Hard': 3 };
+      const diffA = diffMap[a.difficulty] || 0;
+      const diffB = diffMap[b.difficulty] || 0;
+
+      if (sortBy === 'name-asc') return nameA.localeCompare(nameB);
+      if (sortBy === 'name-desc') return nameB.localeCompare(nameA);
+      if (sortBy === 'diff-asc') return diffA - diffB;
+      if (sortBy === 'diff-desc') return diffB - diffA;
+
+      return 0;
+    });
+
+    setFilteredQuestions(result);
+  }, [searchTerm, filterType, filterDiff, sortBy, questions]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -120,13 +167,26 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
     }
 
     // Validate based on question type
-    if (formData.type === 'MCQ') {
+    if (formData.type === 'MCQ' || formData.type === 'MSQ') {
       if (formData.options.some(option => !option.trim())) {
-        toast.error('All MCQ options are required.');
+        toast.error(`All ${formData.type} options are required.`);
+        return;
+      }
+      if (formData.type === 'MSQ' && formData.correctAnswers.length === 0) {
+        toast.error('At least one correct answer must be selected for MSQ.');
         return;
       }
       if (!formData.explanation.trim()) {
-        toast.error('Explanation is required for MCQ questions.');
+        toast.error(`Explanation is required for ${formData.type} questions.`);
+        return;
+      }
+    } else if (formData.type === 'Numeric') {
+      if (formData.numericAnswer === null || formData.numericAnswer === undefined || formData.numericAnswer.toString().trim() === '') {
+        toast.error('Numeric answer is required.');
+        return;
+      }
+      if (!formData.explanation.trim()) {
+        toast.error('Explanation is required for Numeric questions.');
         return;
       }
     } else if (formData.type === 'Programming') {
@@ -136,6 +196,15 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
       }
       if (formData.testcases.length === 0) {
         toast.error('At least one test case is required for Programming questions.');
+        return;
+      }
+    } else if (formData.type === 'SQL') {
+      if (!formData.schema || !formData.schema.trim()) {
+        toast.error('Database schema is required for SQL questions.');
+        return;
+      }
+      if (formData.testcases.length === 0) {
+        toast.error('At least one test case is required for SQL questions.');
         return;
       }
     }
@@ -155,6 +224,19 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         correctAnswer: formData.correctAnswer,
         explanation: formData.explanation
       };
+    } else if (formData.type === 'MSQ') {
+      questionData = {
+        ...questionData,
+        options: formData.options,
+        correctAnswers: formData.correctAnswers,
+        explanation: formData.explanation
+      };
+    } else if (formData.type === 'Numeric') {
+      questionData = {
+        ...questionData,
+        numericAnswer: formData.numericAnswer,
+        explanation: formData.explanation
+      };
     } else if (formData.type === 'Programming') {
       questionData = {
         ...questionData,
@@ -163,15 +245,25 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         testcases: formData.testcases,
         solution: formData.solution
       };
+    } else if (formData.type === 'SQL') {
+      questionData = {
+        ...questionData,
+        schema: formData.schema,
+        testcases: formData.testcases,
+        solution: formData.solution
+      };
     }
 
     try {
       if (isEditMode) {
+        // Find existing ID. We use question.id.
         const questionRef = ref(database, `questions/${question.id}`);
+        // Instead of replacing, update fields and delete others safely or just update.
+        // wait, we can just update the whole object, but wait, if it's SQL, it doesn't have options.
         await update(questionRef, questionData);
         toast.success('Question updated successfully!');
       } else {
-        const questionRef = ref(database, `questions/${formData.questionname}`);
+        const questionRef = ref(database, `questions/${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
         await set(questionRef, questionData);
         toast.success('Question added successfully!');
       }
@@ -183,9 +275,9 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
   };
 
   const handleQuestionToggle = (questionId) => {
-    setSelectedQuestions(prev => 
-      prev.includes(questionId) 
-        ? prev.filter(id => id !== questionId) 
+    setSelectedQuestions(prev =>
+      prev.includes(questionId)
+        ? prev.filter(id => id !== questionId)
         : [...prev, questionId]
     );
   };
@@ -206,25 +298,25 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30">
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="relative w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
-          <button 
+          <button
             className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
             onClick={onClose}
           >
             <XMarkIcon className="h-6 w-6" />
           </button>
           <div className="flex space-x-4 mb-6">
-            {/* <button
+            <button
               className={`px-4 py-2 rounded-md ${activeTab === 'create' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
               onClick={() => setActiveTab('create')}
             >
               {isEditMode ? 'Edit Question' : 'Create New Question'}
-            </button> */}
-            {/* <button
+            </button>
+            <button
               className={`px-4 py-2 rounded-md ${activeTab === 'select' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
               onClick={() => setActiveTab('select')}
             >
               Select Existing Questions
-            </button> */}
+            </button>
           </div>
 
           {activeTab === 'create' ? (
@@ -274,13 +366,16 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                     className="w-full p-2 border rounded-md mt-1"
                   >
                     <option value="MCQ">MCQ</option>
+                    <option value="MSQ">MSQ</option>
+                    <option value="Numeric">Numeric</option>
                     <option value="Programming">Programming</option>
+                    <option value="SQL">SQL</option>
                   </select>
                 </div>
               </div>
-              
-              {/* MCQ Specific Fields */}
-              {formData.type === 'MCQ' && (
+
+              {/* MCQ/MSQ Specific Fields */}
+              {(formData.type === 'MCQ' || formData.type === 'MSQ') && (
                 <>
                   <div>
                     <label className="block text-sm font-medium">Options</label>
@@ -300,18 +395,44 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                     ))}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium">Correct Answer</label>
-                    <select
-                      value={formData.correctAnswer}
-                      onChange={(e) => setFormData(prev => ({ ...prev, correctAnswer: parseInt(e.target.value) }))}
-                      className="w-full p-2 border rounded-md mt-1"
-                    >
-                      {formData.options.map((_, index) => (
-                        <option key={index} value={index + 1}>
-                          Option {index + 1}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-sm font-medium">Correct Answer{formData.type === 'MSQ' ? 's' : ''}</label>
+                    {formData.type === 'MCQ' ? (
+                      <select
+                        value={formData.correctAnswer}
+                        onChange={(e) => setFormData(prev => ({ ...prev, correctAnswer: parseInt(e.target.value) }))}
+                        className="w-full p-2 border rounded-md mt-1"
+                      >
+                        {formData.options.map((_, index) => (
+                          <option key={index} value={index + 1}>
+                            Option {index + 1}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="flex flex-wrap gap-4 mt-2">
+                        {formData.options.map((_, index) => (
+                          <label key={index} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={formData.correctAnswers.includes(index + 1)}
+                              onChange={(e) => {
+                                const val = index + 1;
+                                setFormData(prev => {
+                                  const currentAnswers = prev.correctAnswers || [];
+                                  if (e.target.checked) {
+                                    return { ...prev, correctAnswers: [...currentAnswers, val] };
+                                  } else {
+                                    return { ...prev, correctAnswers: currentAnswers.filter(a => a !== val) };
+                                  }
+                                });
+                              }}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm">Option {index + 1}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium">Explanation</label>
@@ -321,6 +442,33 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                       className="w-full p-2 border rounded-md mt-1"
                       rows="3"
                       placeholder="Explain why this is the correct answer"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Numeric Specific Fields */}
+              {formData.type === 'Numeric' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium">Correct Answer (Numeric)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formData.numericAnswer}
+                      onChange={(e) => setFormData(prev => ({ ...prev, numericAnswer: e.target.value }))}
+                      className="w-full p-2 border rounded-md mt-1"
+                      placeholder="Enter the numeric answer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium">Explanation</label>
+                    <textarea
+                      value={formData.explanation}
+                      onChange={(e) => setFormData(prev => ({ ...prev, explanation: e.target.value }))}
+                      className="w-full p-2 border rounded-md mt-1"
+                      rows="3"
+                      placeholder="Explain the solution"
                     />
                   </div>
                 </>
@@ -364,7 +512,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                       Add Constraint
                     </button>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium">Examples</label>
                     {formData.Example.map((example, index) => (
@@ -468,6 +616,88 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                   </div>
                 </>
               )}
+
+              {/* SQL Specific Fields */}
+              {formData.type === 'SQL' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium">Database Schema (SQL)</label>
+                    <textarea
+                      value={formData.schema}
+                      onChange={(e) => setFormData(prev => ({ ...prev, schema: e.target.value }))}
+                      className="w-full p-2 border rounded-md mt-1 font-mono text-sm"
+                      rows="6"
+                      placeholder="CREATE TABLE ...&#10;INSERT INTO ..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium">Test Cases</label>
+                    {formData.testcases.map((testcase, index) => (
+                      <div key={index} className="border rounded-md p-3 mt-2">
+                        <div className="grid grid-cols-1 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600">Test Case Name / Regex / Input</label>
+                            <textarea
+                              value={testcase.input || ''}
+                              onChange={(e) => {
+                                const newTestcases = [...formData.testcases];
+                                newTestcases[index] = { ...newTestcases[index], input: e.target.value };
+                                setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                              }}
+                              className="w-full p-2 border rounded-md font-mono text-sm"
+                              rows="2"
+                              placeholder="Test case input or regex"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600">Expected Output</label>
+                            <textarea
+                              value={testcase.expectedOutput || ''}
+                              onChange={(e) => {
+                                const newTestcases = [...formData.testcases];
+                                newTestcases[index] = { ...newTestcases[index], expectedOutput: e.target.value };
+                                setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                              }}
+                              className="w-full p-2 border rounded-md font-mono text-sm"
+                              rows="2"
+                              placeholder="Expected output"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newTestcases = formData.testcases.filter((_, i) => i !== index);
+                              setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                            }}
+                            className="self-start px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm"
+                          >
+                            Remove Test Case
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, testcases: [...prev.testcases, { input: '', expectedOutput: '' }] }))}
+                      className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    >
+                      Add Test Case
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium">Solution Query (Optional)</label>
+                    <textarea
+                      value={formData.solution}
+                      onChange={(e) => setFormData(prev => ({ ...prev, solution: e.target.value }))}
+                      className="w-full p-2 border rounded-md mt-1 font-mono text-sm"
+                      rows="4"
+                      placeholder="SELECT * FROM ..."
+                    />
+                  </div>
+                </>
+              )}
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
                   type="button"
@@ -486,16 +716,48 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
             </form>
           ) : (
             <div className="space-y-4">
-              <div className="mb-4">
+              <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input
                   type="text"
-                  placeholder="Search questions..."
+                  placeholder="Search questions by name or description..."
                   className="w-full p-2 border rounded-md"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="w-full p-2 border rounded-md bg-white cursor-pointer"
+                >
+                  <option value="All">All Types</option>
+                  <option value="MCQ">MCQ</option>
+                  <option value="MSQ">MSQ</option>
+                  <option value="Numeric">Numeric</option>
+                  <option value="Programming">Programming</option>
+                  <option value="SQL">SQL</option>
+                </select>
+                <select
+                  value={filterDiff}
+                  onChange={(e) => setFilterDiff(e.target.value)}
+                  className="w-full p-2 border rounded-md bg-white cursor-pointer"
+                >
+                  <option value="All">All Difficulties</option>
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full p-2 border rounded-md bg-white cursor-pointer"
+                >
+                  <option value="name-asc">Sort by Name (A-Z)</option>
+                  <option value="name-desc">Sort by Name (Z-A)</option>
+                  <option value="diff-asc">Sort by Difficulty (Easy to Hard)</option>
+                  <option value="diff-desc">Sort by Difficulty (Hard to Easy)</option>
+                </select>
               </div>
-              <div className="space-y-4 max-h-96 overflow-y-auto mb-4">
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto mb-4">
                 {isLoading ? (
                   <div>Loading questions...</div>
                 ) : filteredQuestions.length === 0 ? (
@@ -513,7 +775,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                         <input
                           type="checkbox"
                           checked={selectedQuestions.includes(question.id)}
-                          onChange={() => {}}
+                          onChange={() => { }}
                           className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                         />
                         <div className="ml-3">

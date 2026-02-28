@@ -276,27 +276,27 @@ const ExamMonitor = () => {
                     const userViolations = violations[userId] ?? 0;
                     const allocatedQuestions = myQuestions[userId] ? Object.keys(myQuestions[userId]).length : 0;
 
-                    if(  userProgress?.status?.toLowerCase() === "started") {
-                         const givenTime = new Date(userProgress?.startTime|| '');
-                    const currentTime = new Date();
+                    if (userProgress?.status?.toLowerCase() === "started") {
+                        const givenTime = new Date(userProgress?.startTime || '');
+                        const currentTime = new Date();
 
-                    // Calculate difference in minutes
-                    const diffMinutes = (currentTime - givenTime) / (1000 * 60);
+                        // Calculate difference in minutes
+                        const diffMinutes = (currentTime - givenTime) / (1000 * 60);
 
-                    if (diffMinutes > exam.duration) {
-                        console.log(`More than ${exam.duration} minutes have passed.`);
-                        userProgress.status = 'completed';
-                        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${userId}/status`);
-                        await set(statusRef, "completed");
-                    } else {
-                        console.log("Less than or equal to 60 minutes have passed.");
+                        if (diffMinutes > exam.duration) {
+                            console.log(`More than ${exam.duration} minutes have passed.`);
+                            userProgress.status = 'completed';
+                            const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${userId}/status`);
+                            await set(statusRef, "completed");
+                        } else {
+                            console.log("Less than or equal to 60 minutes have passed.");
+                        }
+
+                        console.log("Difference (minutes):", diffMinutes);
+
                     }
 
-                    console.log("Difference (minutes):", diffMinutes);
 
-                    }
-
-                   
 
                     monitoredUsers.push({
                         id: `${testid}-${userId}`,
@@ -400,7 +400,7 @@ const ExamMonitor = () => {
     };
 
     return (
-        <div className="container mx-auto p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="container mx-auto p-6 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-4rem)] -mt-4 -mx-4 w-[calc(100%+2rem)] max-w-none">
             {/* Header Section */}
             <div className="mb-6">
                 <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-white">Real-Time Exam Monitor</h1>
@@ -612,22 +612,22 @@ const ExamMonitor = () => {
                                                                         <span className="text-xs font-mono text-gray-500 dark:text-gray-400">Q{idx + 1}</span>
                                                                         <div className="flex gap-1">
                                                                             <span className={`px-2 py-0.5 text-xs font-semibold rounded ${question.type.toLowerCase() === 'mcq'
-                                                                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                                                                                    : question.type.toLowerCase() === 'programming'
-                                                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                                                        : question.type.toLowerCase() === 'sql'
-                                                                                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                                                                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                                                                                : question.type.toLowerCase() === 'programming'
+                                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                                                    : question.type.toLowerCase() === 'sql'
+                                                                                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                                                                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                                                                                 }`}>
                                                                                 {question.type}
                                                                             </span>
                                                                             <span className={`px-2 py-0.5 text-xs font-semibold rounded ${question.difficulty.toLowerCase() === 'easy'
-                                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                                                                    : question.difficulty.toLowerCase() === 'medium'
-                                                                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-                                                                                        : question.difficulty.toLowerCase() === 'hard'
-                                                                                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                                                                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                                                : question.difficulty.toLowerCase() === 'medium'
+                                                                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                                                                    : question.difficulty.toLowerCase() === 'hard'
+                                                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                                                                                 }`}>
                                                                                 {question.difficulty}
                                                                             </span>
@@ -692,8 +692,8 @@ const ExamMonitor = () => {
                                                                                     onClick={() => hasReplacements && handleStartChangeQuestion(user.userId, question.order)}
                                                                                     disabled={!hasReplacements}
                                                                                     className={`mt-2 text-[10px] px-2 py-0.5 rounded transition-colors inline-flex items-center gap-1 ${hasReplacements
-                                                                                            ? 'bg-indigo-500 hover:bg-indigo-600 text-white cursor-pointer'
-                                                                                            : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                                                                                        ? 'bg-indigo-500 hover:bg-indigo-600 text-white cursor-pointer'
+                                                                                        : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                                                                                         }`}
                                                                                     title={hasReplacements ? `${availableReplacements.length} replacement(s) available` : 'No available replacements of same type'}
                                                                                 >

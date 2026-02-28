@@ -3,15 +3,16 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCb61YDcPFdtefpFTsnuQS3kA66IHNG128",
-  authDomain: "algocore-80652.firebaseapp.com",
-  databaseURL: "https://algocore-80652-default-rtdb.firebaseio.com",
-  projectId: "algocore-80652",
-  storageBucket: "algocore-80652.firebasestorage.app",
-  messagingSenderId: "563824995926",
-  appId: "1:563824995926:web:56e94c313d4bad8ea9d5f7",
-  measurementId: "G-MF59KXSF49"
+  apiKey: "AIzaSyDBWkdtOH1AMKWL81UYRdcVGApSmYFjRUs",
+  authDomain: "algocore-db3d9.firebaseapp.com",
+  databaseURL: "https://algocore-db3d9-default-rtdb.firebaseio.com",
+  projectId: "algocore-db3d9",
+  storageBucket: "algocore-db3d9.firebasestorage.app",
+  messagingSenderId: "586545249772",
+  appId: "1:586545249772:web:9397ac695648a1b584d4c9",
+  measurementId: "G-VNL5R9KQWY"
 };
+
 
 // Initialize Firebase app (only if it hasn't been initialized yet)
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();

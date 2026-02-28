@@ -9,6 +9,10 @@ const AddQuestions = () => {
   const [questions, setQuestions] = useState([]);
   const [filteredQuestions, setFilteredQuestions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name-asc');
+  const [filterType, setFilterType] = useState('All');
+  const [filterDiff, setFilterDiff] = useState('All');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,19 +39,48 @@ const AddQuestions = () => {
     return () => unsubscribe();
   }, []);
 
-  // Filter questions based on search term
+  // Filter and Sort questions
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredQuestions(questions);
-    } else {
+    let result = [...questions];
+
+    // Filter by Search Term
+    if (searchTerm.trim() !== '') {
       const searchLower = searchTerm.toLowerCase();
-      const filtered = questions.filter(q => 
+      result = result.filter(q =>
         (q.questionname && q.questionname.toLowerCase().includes(searchLower)) ||
         (q.question && q.question.toLowerCase().includes(searchLower))
       );
-      setFilteredQuestions(filtered);
     }
-  }, [searchTerm, questions]);
+
+    // Filter by Type
+    if (filterType !== 'All') {
+      result = result.filter(q => q.type === filterType);
+    }
+
+    // Filter by Difficulty
+    if (filterDiff !== 'All') {
+      result = result.filter(q => q.difficulty === filterDiff);
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      const nameA = (a.questionname || '').toLowerCase();
+      const nameB = (b.questionname || '').toLowerCase();
+
+      const diffMap = { 'Easy': 1, 'Medium': 2, 'Hard': 3 };
+      const diffA = diffMap[a.difficulty] || 0;
+      const diffB = diffMap[b.difficulty] || 0;
+
+      if (sortBy === 'name-asc') return nameA.localeCompare(nameB);
+      if (sortBy === 'name-desc') return nameB.localeCompare(nameA);
+      if (sortBy === 'diff-asc') return diffA - diffB;
+      if (sortBy === 'diff-desc') return diffB - diffA;
+
+      return 0;
+    });
+
+    setFilteredQuestions(result);
+  }, [searchTerm, filterType, filterDiff, sortBy, questions]);
 
   const handleAddQuestion = () => {
     setEditingQuestion(null);
@@ -81,7 +114,7 @@ const AddQuestions = () => {
         </button>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
         <input
           type="text"
           placeholder="Search questions..."
@@ -89,6 +122,38 @@ const AddQuestions = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="w-full p-2 border rounded-md bg-white cursor-pointer"
+        >
+          <option value="All">All Types</option>
+          <option value="MCQ">MCQ</option>
+          <option value="MSQ">MSQ</option>
+          <option value="Numeric">Numeric</option>
+          <option value="Programming">Programming</option>
+          <option value="SQL">SQL</option>
+        </select>
+        <select
+          value={filterDiff}
+          onChange={(e) => setFilterDiff(e.target.value)}
+          className="w-full p-2 border rounded-md bg-white cursor-pointer"
+        >
+          <option value="All">All Difficulties</option>
+          <option value="Easy">Easy</option>
+          <option value="Medium">Medium</option>
+          <option value="Hard">Hard</option>
+        </select>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          className="w-full p-2 border rounded-md bg-white cursor-pointer"
+        >
+          <option value="name-asc">Sort by Name (A-Z)</option>
+          <option value="name-desc">Sort by Name (Z-A)</option>
+          <option value="diff-asc">Sort by Difficulty (Easy to Hard)</option>
+          <option value="diff-desc">Sort by Difficulty (Hard to Easy)</option>
+        </select>
       </div>
 
       {loading ? (

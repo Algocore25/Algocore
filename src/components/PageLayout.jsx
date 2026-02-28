@@ -3,7 +3,7 @@ import Navbar from './Navbar';
 
 const PageLayout = ({ children }) => {
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8F9FA] dark:bg-dark-primary transition-colors duration-200">
+    <div className="min-h-screen flex flex-col transition-colors duration-200">
       {/* Fixed Navbar */}
       <div className="fixed top-0 left-0 right-0 z-50">
         <Navbar />

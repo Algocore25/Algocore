@@ -156,7 +156,7 @@ function MCQPage({ data }) {
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Select the correct answer</h2>
 
             <div className="space-y-4 mb-8">
-              {data?.options.map((option, index) => {
+              {data?.options && data.options.map((option, index) => {
                 let optionClasses = "p-4 border rounded-lg cursor-pointer transition-colors duration-150 ";
 
                 if (isSubmitted) {

@@ -14,7 +14,7 @@ const StatusBadge = ({ status }) => {
     Wrong: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
     'Not Attended': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
   };
-  
+
   return (
     <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${styles[status]} mb-2`}>
       {status}
@@ -29,9 +29,9 @@ const QuestionTypeBadge = ({ type }) => {
     SQL: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
     default: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
   };
-  
+
   const style = typeStyles[type] || typeStyles.default;
-  
+
   return (
     <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${style} mb-2`}>
       {type}
@@ -48,8 +48,8 @@ const ResultsTable = ({ children }) => (
 );
 
 const TableHeader = ({ children, onClick, sortDirection }) => (
-  <th 
-    scope="col" 
+  <th
+    scope="col"
     className="px-6 py-4 text-left text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
     onClick={onClick}
   >
@@ -65,7 +65,7 @@ const TableHeader = ({ children, onClick, sortDirection }) => (
 );
 
 const TableRow = ({ children, isSelected, onClick }) => (
-  <tr 
+  <tr
     className={`${isSelected ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800'} ${onClick ? 'cursor-pointer' : ''}`}
     onClick={onClick}
   >
@@ -120,7 +120,7 @@ export default function AdminResult() {
   const [genProgress, setGenProgress] = useState(0);
   const [genStatus, setGenStatus] = useState('');
 
-  const [ ExamcodeSubmissions, setExamcodeSubmissions ] = useState({});
+  const [ExamcodeSubmissions, setExamcodeSubmissions] = useState({});
 
   useEffect(() => {
     const fetchreultdata = async () => {
@@ -241,7 +241,7 @@ export default function AdminResult() {
 
           const totalMarks = Object.values(marks).reduce((acc, mark) => acc + mark, 0) / questionIds.length;
 
-          
+
 
           for (const questionId of questionIds) {
             const questionKey = studentQuestions[questionId];
@@ -254,7 +254,7 @@ export default function AdminResult() {
             // Handle code data for programming questions
             let codeData = null;
             if (questionType === 'Programming' && codeSubmissions[questionKey]?.cpp) {
-              codeData =  codeSubmissions[questionKey].cpp
+              codeData = codeSubmissions[questionKey].cpp
             }
 
             console.log(marks);
@@ -456,7 +456,7 @@ export default function AdminResult() {
     pdf.text(`Mode: ${useWeightage ? 'Weighted (category-wise)' : 'Standard (unweighted)'}`, margin + 5, yPosition);
     yPosition += 5;
     if (useWeightage) {
-      const weightsLine = `Weights — MCQ: ${Number(weights.mcq)||0}%, Programming: ${Number(weights.programming)||0}%, SQL: ${Number(weights.sql)||0}%, Other: ${Number(weights.other)||0}%`;
+      const weightsLine = `Weights — MCQ: ${Number(weights.mcq) || 0}%, Programming: ${Number(weights.programming) || 0}%, SQL: ${Number(weights.sql) || 0}%, Other: ${Number(weights.other) || 0}%`;
       pdf.text(weightsLine, margin + 5, yPosition);
       yPosition += 6;
     }
@@ -547,25 +547,25 @@ export default function AdminResult() {
     let yPosition = margin;
     // Track current tint (RGB) for student pages; null for summary/TOC
     let currentTint = null;
-   const tintPalette = [
-  [230, 240, 255], // soft blue
-  [255, 230, 240], // soft pink
-  [240, 255, 230], // soft green
-  [225, 235, 255], // bluish tint
-  [255, 240, 225], // warm tint
-  [225, 255, 240], // cyan tint
-  [240, 225, 255], // violet tint
-  [255, 225, 235], // rose tint
-  [220, 245, 255], // sky blue
-  [240, 255, 220], // spring green
-  [255, 220, 245], // lilac pink
-  [220, 255, 235]  // mint tint
-];
+    const tintPalette = [
+      [230, 240, 255], // soft blue
+      [255, 230, 240], // soft pink
+      [240, 255, 230], // soft green
+      [225, 235, 255], // bluish tint
+      [255, 240, 225], // warm tint
+      [225, 255, 240], // cyan tint
+      [240, 225, 255], // violet tint
+      [255, 225, 235], // rose tint
+      [220, 245, 255], // sky blue
+      [240, 255, 220], // spring green
+      [255, 220, 245], // lilac pink
+      [220, 255, 235]  // mint tint
+    ];
 
 
     // Page header for each page
-    const drawHeader = ( studentName ) => {
-      if( studentName === undefined ) {
+    const drawHeader = (studentName) => {
+      if (studentName === undefined) {
         studentName = 'Detailed';
       }
       pdf.setFillColor(245, 248, 255);
@@ -704,7 +704,7 @@ export default function AdminResult() {
         pageForStudent[r.uid] = studentPageNumber;
         // Assign unique very light background tint for this student
         currentTint = tintPalette[i % tintPalette.length];
-        const studentName = r.studentId ;
+        const studentName = r.studentId;
 
         drawHeader(studentName);
         pdf.setFillColor(...currentTint);
@@ -775,9 +775,9 @@ export default function AdminResult() {
           yPosition += 8;
 
           presentCats.forEach((c, idx) => {
-            if (yPosition + 8 > pageHeight - margin) { 
-              pdf.addPage(); 
-              drawHeader() ; 
+            if (yPosition + 8 > pageHeight - margin) {
+              pdf.addPage();
+              drawHeader();
               if (currentTint) { pdf.setFillColor(...currentTint); pdf.rect(0, 14, pageWidth, pageHeight - 14, 'F'); }
             }
             if (idx % 2 === 1) { pdf.setFillColor(245, 245, 245); pdf.rect(margin, yPosition - 5, w, 7, 'F'); }
@@ -831,22 +831,22 @@ export default function AdminResult() {
 
           checkNewPage(16);
           const status = (studentAnswer === null || studentAnswer === undefined) ? 'Not Attended' : (q.correct ? 'Correct' : 'Wrong');
-          const statusColor = status === 'Correct' ? [0,128,0] : status === 'Wrong' ? [255,0,0] : [150,150,150];
+          const statusColor = status === 'Correct' ? [0, 128, 0] : status === 'Wrong' ? [255, 0, 0] : [150, 150, 150];
           const type = String(q.type || '').toUpperCase();
 
           // Header row
           pdf.setFillColor(240, 240, 240);
           pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
-          
+
           pdf.setFontSize(11);
           pdf.setFont('helvetica', 'bold');
-          pdf.text(`Question ${qi + 1} [${type}] - ${(Number(q.marks)||0).toFixed(2)} pts`, margin + 2, yPosition);
-          
+          pdf.text(`Question ${qi + 1} [${type}] - ${(Number(q.marks) || 0).toFixed(2)} pts`, margin + 2, yPosition);
+
           // Status badge
           pdf.setTextColor(...statusColor);
           pdf.text(status, pageWidth - margin - 25, yPosition);
-          pdf.setTextColor(0,0,0);
-          
+          pdf.setTextColor(0, 0, 0);
+
           yPosition += 8;
 
           // Question text
@@ -860,7 +860,7 @@ export default function AdminResult() {
           if (qData.question) {
             pdf.setFont('helvetica', 'italic');
             pdf.setFontSize(9);
-            const descH = addText(qData.question , margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
+            const descH = addText(qData.question, margin + 2, yPosition, pageWidth - 2 * margin - 4, 9);
             yPosition += descH + 3;
             pdf.setFont('helvetica', 'normal');
           }
@@ -868,22 +868,22 @@ export default function AdminResult() {
           // MCQ-like questions
           if (q.type !== 'Programming' && qData.options) {
             checkNewPage(8);
-            
+
             pdf.setFont('helvetica', 'normal');
             pdf.setFontSize(9);
             pdf.text('Options:', margin + 2, yPosition);
             yPosition += 5;
-            
+
             pdf.setFont('helvetica', 'normal');
             const entries = Object.entries(qData.options);
             for (const [optKey, optValue] of entries) {
               checkNewPage(7);
-              
+
               const isCorrectAnswer = optKey === qData.correctAnswer;
               const isStudentAnswer = studentAnswerIndex !== null
                 ? String(optKey) === String(studentAnswerIndex)
                 : String(optKey) === String(studentAnswer);
-              
+
               // Highlight boxes
               if (isCorrectAnswer) {
                 pdf.setFillColor(200, 255, 200);
@@ -892,10 +892,10 @@ export default function AdminResult() {
                 pdf.setFillColor(255, 200, 200);
                 pdf.rect(margin + 4, yPosition - 4, pageWidth - 2 * margin - 8, 6, 'F');
               }
-              
+
               const optLabel = `${convertOptionKey(optKey)}. ${optValue}`;
               const textH = addText(optLabel, margin + 6, yPosition, pageWidth - 2 * margin - 12, 9);
-              
+
               // Add badges
               let badgeX = margin + 8 + pdf.getTextWidth(optLabel);
               if (isCorrectAnswer) {
@@ -909,7 +909,7 @@ export default function AdminResult() {
                 pdf.text(' [SELECTED]', badgeX + (isCorrectAnswer ? 25 : 0), yPosition);
               }
               pdf.setTextColor(0, 0, 0);
-              
+
               yPosition += textH + 2;
             }
 
@@ -942,17 +942,17 @@ export default function AdminResult() {
 
             yPosition += 14;
 
-            
+
             pdf.setFont('helvetica', 'bold');
             pdf.text('Code Submission:', margin + 2, yPosition);
             yPosition += 6;
-            
+
             pdf.setFont('courier', 'normal');
             pdf.setFontSize(7);
             const codeLines = String(q.code).split('\n');
             for (let li = 0; li < Math.min(codeLines.length, 60); li++) {
               checkNewPage(5);
-              
+
               const line = codeLines[li];
               const truncated = line.length > 95 ? line.substring(0, 95) + '...' : line;
               // Background for code line
@@ -971,13 +971,13 @@ export default function AdminResult() {
           // Test cases
           if (qData.testcases) {
 
-           
+
             checkNewPage(10);
-            
+
             pdf.setFont('helvetica', 'bold');
             pdf.text('Test Cases:', margin + 2, yPosition);
             yPosition += 6;
-            
+
             pdf.setFont('helvetica', 'normal');
             pdf.setFontSize(9);
             const testCases = qData.testcases;
@@ -986,54 +986,54 @@ export default function AdminResult() {
               checkNewPage(10);
 
 
-               const testcaseresult = ExamcodeSubmissions?.[r.uid]?.[q.id] || {};
+              const testcaseresult = ExamcodeSubmissions?.[r.uid]?.[q.id] || {};
 
-            // Find the highest mark object
-            const highest = Object.entries(testcaseresult).reduce((max, [key, value]) => {
-              return !max || value.marks > max[1].marks ? [key, value] : max;
-            }, null);
+              // Find the highest mark object
+              const highest = Object.entries(testcaseresult).reduce((max, [key, value]) => {
+                return !max || value.marks > max[1].marks ? [key, value] : max;
+              }, null);
 
 
               console.log('highest test case result', highest);
-              
+
               // Test case header with status
-              const testCaseStatus = highest && highest[1]?.testResults?.[tcIndex]?.passed 
-                ? (highest[1].testResults[tcIndex].passed === true ? 'PASSED' : 'FAILED') 
+              const testCaseStatus = highest && highest[1]?.testResults?.[tcIndex]?.passed
+                ? (highest[1].testResults[tcIndex].passed === true ? 'PASSED' : 'FAILED')
                 : 'NOT RUN';
 
 
-              const statusColor = testCaseStatus === 'PASSED' 
-                ? [0, 128, 0] 
-                : testCaseStatus === 'FAILED' 
-                  ? [255, 0, 0] 
+              const statusColor = testCaseStatus === 'PASSED'
+                ? [0, 128, 0]
+                : testCaseStatus === 'FAILED'
+                  ? [255, 0, 0]
                   : [150, 150, 150];
-              
+
               pdf.setFillColor(240, 240, 240);
               pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 8, 'F');
-              
+
               pdf.setFontSize(9);
               pdf.setFont('helvetica', 'bold');
               pdf.text(`Test Case ${tcIndex + 1}`, margin + 2, yPosition);
-              
+
               pdf.setTextColor(...statusColor);
               pdf.text(testCaseStatus, pageWidth - margin - 20, yPosition);
               pdf.setTextColor(0, 0, 0);
-              
+
               yPosition += 8;
-              
+
               // Input
               pdf.setFont('helvetica', 'bold');
               pdf.setFontSize(8);
               pdf.text('Input:', margin + 4, yPosition);
               yPosition += 4;
-              
+
               pdf.setFont('courier', 'normal');
               pdf.setFontSize(7);
               const inputText = testCase.input || 'No input';
               const inputLines = pdf.splitTextToSize(inputText, pageWidth - 2 * margin - 8);
               pdf.text(inputLines, margin + 6, yPosition);
               yPosition += inputLines.length * 3.5 + 2;
-              
+
               // Expected Output
               checkNewPage(15);
               pdf.setFont('helvetica', 'bold');
@@ -1041,7 +1041,7 @@ export default function AdminResult() {
               pdf.setTextColor(0, 128, 0);
               pdf.text('Expected Output:', margin + 4, yPosition);
               yPosition += 4;
-              
+
               pdf.setFont('courier', 'normal');
               pdf.setFontSize(7);
               pdf.setTextColor(0, 0, 0);
@@ -1049,7 +1049,7 @@ export default function AdminResult() {
               const expectedLines = pdf.splitTextToSize(expectedText, pageWidth - 2 * margin - 8);
               pdf.text(expectedLines, margin + 6, yPosition);
               yPosition += expectedLines.length * 3.5 + 2;
-              
+
               // Actual Output (if available)
               if (qData.codeSubmission && testCaseStatus === 'FAILED') {
                 checkNewPage(15);
@@ -1058,7 +1058,7 @@ export default function AdminResult() {
                 pdf.setTextColor(255, 0, 0);
                 pdf.text('Actual Output:', margin + 4, yPosition);
                 yPosition += 4;
-                
+
                 pdf.setFont('courier', 'normal');
                 pdf.setFontSize(7);
                 pdf.setTextColor(0, 0, 0);
@@ -1067,7 +1067,7 @@ export default function AdminResult() {
                 pdf.text(actualLines, margin + 6, yPosition);
                 yPosition += actualLines.length * 3.5 + 4;
               }
-              
+
               yPosition += 3; // Space between test cases
             }
           } else {
@@ -1087,15 +1087,15 @@ export default function AdminResult() {
             checkNewPage(15);
             pdf.setFillColor(230, 240, 255);
             const explStartY = yPosition - 3;
-            
+
             pdf.setFont('helvetica', 'bold');
             pdf.setFontSize(9);
             pdf.text('Explanation:', margin + 2, yPosition);
             yPosition += 5;
-            
+
             pdf.setFont('helvetica', 'normal');
             const explHeight = addText(qData.explanation, margin + 2, yPosition, pageWidth - 2 * margin - 4, 8);
-            
+
             // Draw explanation box
             pdf.rect(margin, explStartY, pageWidth - 2 * margin, explHeight + 8, 'S');
             yPosition += explHeight + 5;
@@ -1103,7 +1103,7 @@ export default function AdminResult() {
 
           yPosition += 5; // Space between questions
         }
-        
+
 
         setGenProgress(Math.round(((i + 1) / total) * 100));
         setGenStatus(`Processed ${i + 1} of ${total} students`);
@@ -1153,7 +1153,7 @@ export default function AdminResult() {
     let yPosition = margin;
     // Fetch all question details for this student
     const questionDetailsMap = {};
-    
+
     try {
       for (const q of result.questions) {
         try {
@@ -1304,17 +1304,17 @@ export default function AdminResult() {
     for (let i = 0; i < result.questions.length; i++) {
       const q = result.questions[i];
       const qDetails = questionDetailsMap[q.id] || {};
-      
+
       checkNewPage(40);
 
       // Question header
       pdf.setFillColor(240, 240, 240);
       pdf.rect(margin, yPosition - 5, pageWidth - 2 * margin, 8, 'F');
-      
+
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'bold');
       pdf.text(`Question ${i + 1}`, margin + 2, yPosition);
-      
+
       // Status badge
       if (qDetails.studentAnswer === null || qDetails.studentAnswer === undefined) {
         pdf.setTextColor(150, 150, 150);
@@ -1327,7 +1327,7 @@ export default function AdminResult() {
         pdf.text(`Wrong (${q.marks.toFixed(2)})`, pageWidth - margin - 30, yPosition);
       }
       pdf.setTextColor(0, 0, 0);
-      
+
       yPosition += 10;
 
       // Question text
@@ -1349,20 +1349,20 @@ export default function AdminResult() {
       // For MCQ questions
       if (q.type !== 'Programming' && qDetails.options) {
         checkNewPage(30);
-        
+
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(9);
         pdf.text('Options:', margin + 2, yPosition);
         yPosition += 5;
-        
+
         pdf.setFont('helvetica', 'normal');
         const entries = Object.entries(qDetails.options);
         for (const [optKey, optValue] of entries) {
           checkNewPage(8);
-          
+
           const isCorrectAnswer = optKey === qDetails.correctAnswer;
           const isStudentAnswer = optKey === qDetails.studentAnswer;
-          
+
           // Highlight boxes
           if (isCorrectAnswer) {
             pdf.setFillColor(200, 255, 200); // Light green for correct
@@ -1376,7 +1376,7 @@ export default function AdminResult() {
           pdf.setFont('helvetica', 'normal');
           const optionText = `${convertOptionKey(optKey)}. ${optValue}`;
           const optHeight = addText(optionText, margin + 6, yPosition, pageWidth - 2 * margin - 12, 9);
-          
+
           // Add badges
           let badgeX = margin + 8 + pdf.getTextWidth(optionText);
           if (isCorrectAnswer) {
@@ -1390,7 +1390,7 @@ export default function AdminResult() {
             pdf.text(' [SELECTED]', badgeX + (isCorrectAnswer ? 25 : 0), yPosition);
           }
           pdf.setTextColor(0, 0, 0);
-          
+
           yPosition += optHeight + 2;
         }
 
@@ -1420,7 +1420,7 @@ export default function AdminResult() {
       // For Programming questions - SHOW ALL CODE WITHOUT OMISSION
       if (q.type === 'Programming') {
         checkNewPage(30);
-        
+
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(10);
         pdf.text('Code Submission:', margin + 2, yPosition);
@@ -1431,17 +1431,17 @@ export default function AdminResult() {
         if (codeToDisplay) {
           pdf.setFont('courier', 'normal');
           pdf.setFontSize(7);
-          
+
           // Split code into lines and display ALL of them with background
           const codeLines = codeToDisplay.split('\n');
-          
+
           for (const line of codeLines) {
             // Check if we need a new page before adding each line
             if (checkNewPage(5)) {
               pdf.setFont('courier', 'normal');
               pdf.setFontSize(7);
             }
-            
+
             // Truncate only extremely long lines to fit the page width
             const truncatedLine = line.length > 95 ? line.substring(0, 95) + '...' : line;
             // Light background behind code line
@@ -1452,7 +1452,7 @@ export default function AdminResult() {
             pdf.setTextColor(0, 0, 0);
             yPosition += 3.5;
           }
-          
+
           yPosition += 5;
         } else {
           pdf.setFont('helvetica', 'italic');
@@ -1467,7 +1467,7 @@ export default function AdminResult() {
       // Test cases
       if (qDetails.testCases) {
         checkNewPage(30);
-        
+
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(10);
         pdf.text('Test Cases:', margin + 2, yPosition);
@@ -1479,37 +1479,37 @@ export default function AdminResult() {
         for (let tcIndex = 0; tcIndex < testCases.length; tcIndex++) {
           const testCase = testCases[tcIndex];
           checkNewPage(10);
-          
+
           // Test case header with status
           const testCaseStatus = q.correct ? 'PASSED' : 'FAILED'; // Simplified - in real implementation, you'd need individual test case results
           const statusColor = q.correct ? [0, 128, 0] : [255, 0, 0];
-          
+
           pdf.setFillColor(240, 240, 240);
           pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 8, 'F');
-          
+
           pdf.setFontSize(9);
           pdf.setFont('helvetica', 'bold');
           pdf.text(`Test Case ${tcIndex + 1}`, margin + 2, yPosition);
-          
+
           pdf.setTextColor(...statusColor);
           pdf.text(testCaseStatus, pageWidth - margin - 20, yPosition);
           pdf.setTextColor(0, 0, 0);
-          
+
           yPosition += 8;
-          
+
           // Input
           pdf.setFont('helvetica', 'bold');
           pdf.setFontSize(8);
           pdf.text('Input:', margin + 4, yPosition);
           yPosition += 4;
-          
+
           pdf.setFont('courier', 'normal');
           pdf.setFontSize(7);
           const inputText = testCase.input || 'No input';
           const inputLines = pdf.splitTextToSize(inputText, pageWidth - 2 * margin - 8);
           pdf.text(inputLines, margin + 6, yPosition);
           yPosition += inputLines.length * 3.5 + 2;
-          
+
           // Expected Output
           checkNewPage(15);
           pdf.setFont('helvetica', 'bold');
@@ -1517,7 +1517,7 @@ export default function AdminResult() {
           pdf.setTextColor(0, 128, 0);
           pdf.text('Expected Output:', margin + 4, yPosition);
           yPosition += 4;
-          
+
           pdf.setFont('courier', 'normal');
           pdf.setFontSize(7);
           pdf.setTextColor(0, 0, 0);
@@ -1525,7 +1525,7 @@ export default function AdminResult() {
           const expectedLines = pdf.splitTextToSize(expectedText, pageWidth - 2 * margin - 8);
           pdf.text(expectedLines, margin + 6, yPosition);
           yPosition += expectedLines.length * 3.5 + 2;
-          
+
           // Actual Output (if available)
           if (qDetails.codeSubmission && testCaseStatus === 'FAILED') {
             checkNewPage(15);
@@ -1534,7 +1534,7 @@ export default function AdminResult() {
             pdf.setTextColor(255, 0, 0);
             pdf.text('Actual Output:', margin + 4, yPosition);
             yPosition += 4;
-            
+
             pdf.setFont('courier', 'normal');
             pdf.setFontSize(7);
             pdf.setTextColor(0, 0, 0);
@@ -1543,7 +1543,7 @@ export default function AdminResult() {
             pdf.text(actualLines, margin + 6, yPosition);
             yPosition += actualLines.length * 3.5 + 4;
           }
-          
+
           yPosition += 3; // Space between test cases
         }
       } else {
@@ -1563,15 +1563,15 @@ export default function AdminResult() {
         checkNewPage(15);
         pdf.setFillColor(230, 240, 255);
         const explStartY = yPosition - 3;
-        
+
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(9);
         pdf.text('Explanation:', margin + 2, yPosition);
         yPosition += 5;
-        
+
         pdf.setFont('helvetica', 'normal');
         const explHeight = addText(qDetails.explanation, margin + 2, yPosition, pageWidth - 2 * margin - 4, 8);
-        
+
         // Draw explanation box
         pdf.rect(margin, explStartY, pageWidth - 2 * margin, explHeight + 8, 'S');
         yPosition += explHeight + 5;
@@ -1579,7 +1579,7 @@ export default function AdminResult() {
 
       yPosition += 5; // Space between questions
     }
-    
+
 
     // Footer
     const totalPages = pdf.internal.getNumberOfPages();
@@ -1706,7 +1706,7 @@ export default function AdminResult() {
   if (loading) return <LoadingPage />;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-[calc(100vh-4rem)] -mt-4 -mx-4 bg-gray-50 dark:bg-gray-900 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6" ref={pdfRef}>
           <div className="mb-6">
@@ -1755,7 +1755,7 @@ export default function AdminResult() {
                     min="0"
                     max="100"
                     value={weights.mcq}
-                    onChange={(e) => setWeights((w) => ({ ...w, mcq: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    onChange={(e) => setWeights((w) => ({ ...w, mcq: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
                     className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
                   />
                 </div>
@@ -1766,7 +1766,7 @@ export default function AdminResult() {
                     min="0"
                     max="100"
                     value={weights.programming}
-                    onChange={(e) => setWeights((w) => ({ ...w, programming: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    onChange={(e) => setWeights((w) => ({ ...w, programming: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
                     className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
                   />
                 </div>
@@ -1777,7 +1777,7 @@ export default function AdminResult() {
                     min="0"
                     max="100"
                     value={weights.sql}
-                    onChange={(e) => setWeights((w) => ({ ...w, sql: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    onChange={(e) => setWeights((w) => ({ ...w, sql: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
                     className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
                   />
                 </div>
@@ -1788,7 +1788,7 @@ export default function AdminResult() {
                     min="0"
                     max="100"
                     value={weights.other}
-                    onChange={(e) => setWeights((w) => ({ ...w, other: Math.max(0, Math.min(100, Number(e.target.value)||0)) }))}
+                    onChange={(e) => setWeights((w) => ({ ...w, other: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
                     className="w-full px-2 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
                   />
                 </div>
@@ -1810,18 +1810,18 @@ export default function AdminResult() {
                   <label htmlFor="useWeightage" className="text-sm text-gray-700 dark:text-gray-200">Use weightage in scores</label>
                 </div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">
-                  Total: {['mcq','programming','sql','other'].reduce((s,k)=>s+(Number(weights[k])||0),0)}%
+                  Total: {['mcq', 'programming', 'sql', 'other'].reduce((s, k) => s + (Number(weights[k]) || 0), 0)}%
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
                       const present = new Set();
-                      enrichedResults.forEach(r => (r.questions||[]).forEach(q => present.add(normalizeType(q.type))));
+                      enrichedResults.forEach(r => (r.questions || []).forEach(q => present.add(normalizeType(q.type))));
                       const arr = Array.from(present);
-                      const base = arr.length>0 ? Math.floor(100/arr.length) : 25;
+                      const base = arr.length > 0 ? Math.floor(100 / arr.length) : 25;
                       const equal = { mcq: 0, programming: 0, sql: 0, other: 0 };
-                      arr.forEach(t=>{ equal[t]=base; });
-                      const rem = 100 - base*arr.length; if (rem>0 && arr[0]) equal[arr[0]] += rem;
+                      arr.forEach(t => { equal[t] = base; });
+                      const rem = 100 - base * arr.length; if (rem > 0 && arr[0]) equal[arr[0]] += rem;
                       setWeights(equal);
                     }}
                     className="px-3 py-1.5 rounded-md border text-sm bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
@@ -1830,7 +1830,7 @@ export default function AdminResult() {
                   </button>
                   <button
                     disabled={savingWeights}
-                    onClick={async ()=>{
+                    onClick={async () => {
                       setSavingWeights(true);
                       try {
                         await set(ref(database, `Exam/${testid}/configure/weightage`), weights);
@@ -2106,7 +2106,7 @@ export default function AdminResult() {
                       {Object.entries(questionDetails.options).map(([key, value]) => {
                         const displayKey = parseInt(key);
                         const displayLabel = isNaN(displayKey) ? key : (displayKey + 1).toString();
-                        
+
                         return (
                           <div
                             key={key}

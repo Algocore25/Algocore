@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { database } from '../firebase';
 import { ref, get } from 'firebase/database';
-import { Wifi, WifiOff } from 'lucide-react';
+import { Wifi, WifiOff, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FaSun as SunIcon, FaMoon as MoonIcon, FaUserCircle as UserCircleIcon } from 'react-icons/fa';
 import logoLight from '../assets/LOGO.png';
 import logoDark from '../assets/LOGO-1.png';
@@ -57,17 +57,10 @@ const Navbar = () => {
   // 🟣 Menu items
   const menuItems = [
     { label: 'Home', href: '/' },
-{ 
-  label: 'Courses', 
-  href:  '/courses' 
-},
-
-{ label: "Case Study" , href: '/course/case-studies' },
-
+    { label: 'Courses', href: '/courses' },
     !isAdmin && user && { label: 'Tests', href: '/test' },
     isAdmin && { label: 'Admin', href: '/admin' },
     isAdmin && { label: 'Students', href: '/adminmonitor' },
-    isAdmin && { label: 'Case Studies', href: '/adminmonitor/casestudies' },
     { label: 'Compiler', href: '/compiler' },
   ].filter(Boolean);
 
@@ -164,7 +157,7 @@ const Navbar = () => {
   }, [location]);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-dark-secondary border-b border-gray-200 dark:border-dark-tertiary z-50">
+    <nav className="fixed top-0 left-0 right-0 h-16 bg-white/95 dark:bg-dark-secondary/95 backdrop-blur-md border-b border-gray-200/50 dark:border-dark-tertiary/50 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
         {/* Left: Logo + Menu */}
         <div className="flex items-center gap-6">
@@ -193,30 +186,67 @@ const Navbar = () => {
         <div className="flex items-center gap-2 sm:gap-4">
           {/* Question progress dots */}
           {match && questionData.length > 0 && currentIndex >= 0 && (
-            <div className="mr-2 sm:mr-4 max-w-[100px] sm:max-w-xs">
-              <div className="flex items-center gap-2">
-                <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                  {currentIndex + 1}/{questionData.length}
-                </div>
-                <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
-                  {questionData.map((q, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-colors flex-shrink-0 ${i === currentIndex
-                        ? 'bg-blue-500'
-                        : progressMap[q]
-                          ? 'bg-green-500'
-                          : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
-                        }`}
-                      onClick={() => {
-                        const { course, subcourse } = match.params;
-                        navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(q)}`);
-                      }}
-                    />
-                  ))}
-                </div>
+            <div className="mr-2 sm:mr-4 flex items-center gap-1.5 sm:gap-2">
+              {/* Previous button */}
+              <button
+                onClick={() => {
+                  const { course, subcourse } = match.params;
+                  if (currentIndex > 0) {
+                    navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(questionData[currentIndex - 1])}`);
+                  } else {
+                    navigate(`/course/${course}`);
+                  }
+                }}
+                className={`p-1 sm:p-1.5 rounded-md transition-all duration-150 ${currentIndex === 0
+                  ? 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                  }`}
+                title={currentIndex === 0 ? 'Back to course' : 'Previous question'}
+              >
+                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              {/* Progress dots */}
+              <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                {currentIndex + 1}/{questionData.length}
               </div>
+              <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar max-w-[60px] sm:max-w-[120px]">
+                {questionData.map((q, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-colors flex-shrink-0 ${i === currentIndex
+                      ? 'bg-blue-500'
+                      : progressMap[q]
+                        ? 'bg-green-500'
+                        : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                      }`}
+                    onClick={() => {
+                      const { course, subcourse } = match.params;
+                      navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(q)}`);
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Next button */}
+              <button
+                onClick={() => {
+                  const { course, subcourse } = match.params;
+                  if (currentIndex < questionData.length - 1) {
+                    navigate(`/problem/${course}/${subcourse}/${encodeURIComponent(questionData[currentIndex + 1])}`);
+                  } else {
+                    navigate(`/course/${course}`);
+                  }
+                }}
+                className={`p-1 sm:p-1.5 rounded-md transition-all duration-150 ${currentIndex === questionData.length - 1
+                  ? 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                  }`}
+                title={currentIndex === questionData.length - 1 ? 'Back to course' : 'Next question'}
+              >
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
             </div>
           )}
 

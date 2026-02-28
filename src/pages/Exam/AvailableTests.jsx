@@ -1,5 +1,5 @@
 // pages/AvailableTests.jsx or wherever you render the list
-import React, { useEffect, useState  } from "react";
+import React, { useEffect, useState } from "react";
 import TestCard from "./TestCard";
 import { getDatabase, ref, get, child } from "firebase/database";
 
@@ -18,7 +18,7 @@ const AvailableTests = () => {
 
     const navigate = useNavigate();
 
-    const {user} = useAuth();
+    const { user } = useAuth();
 
 
     useEffect(() => {
@@ -26,47 +26,49 @@ const AvailableTests = () => {
     }, []);
 
     const fetchTests = async () => {
-    try {
+        try {
 
-        const dbRef = ref(database);
-        const snapshot = await get(child(dbRef, "Exam"));
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            const dataArray = Object.values(data); // convert object to array if needed
-              // Convert to array with keys (if you need the exam IDs)
-            const dataArray2 = Object.entries(data).map(([id, value]) => ({ id, ...value }));
+            const dbRef = ref(database);
+            const snapshot = await get(child(dbRef, "Exam"));
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const dataArray = Object.values(data); // convert object to array if needed
+                // Convert to array with keys (if you need the exam IDs)
+                const dataArray2 = Object.entries(data).map(([id, value]) => ({ id, ...value }));
 
-            console.log(dataArray2);
-            console.log( user?.email);
+                console.log(dataArray2);
+                console.log(user?.email);
 
 
-            const filtered = dataArray2.filter(test => {
-                console.log("Checking test:", Object.values(test.Eligible || {} )); // Print test on every iteration
-                return (
-                    Array.isArray(Object.values(test.Eligible || {} )) &&
-                    Object.values(test.Eligible || {} ).includes(user?.email) &&
-                    test.Properties.status?.toLowerCase() !== "completed"
-                );
-            });
-            
+                const filtered = dataArray2.filter(test => {
+                    console.log("Checking test:", Object.values(test.Eligible || {})); // Print test on every iteration
+                    const isAllowAll = test.allowAllStudents === true;
+                    const isEligible = Array.isArray(Object.values(test.Eligible || {})) &&
+                        Object.values(test.Eligible || {}).includes(user?.email);
+                    return (
+                        (isAllowAll || isEligible) &&
+                        test.Properties.status?.toLowerCase() !== "completed"
+                    );
+                });
 
-            console.log(filtered);
 
-            setTests(dataArray);
-            setFilteredTests(filtered);
-        } else {
-            console.log("No data available");
+                console.log(filtered);
+
+                setTests(dataArray);
+                setFilteredTests(filtered);
+            } else {
+                console.log("No data available");
+            }
+        } catch (error) {
+            console.error("Error loading mock exams from Firebase:", error);
+        } finally {
+            setLoading(false);
         }
-    } catch (error) {
-        console.error("Error loading mock exams from Firebase:", error);
-    } finally {
-        setLoading(false);
-    }
-};
+    };
 
     const handleStartTest = (testId) => {
         console.log("Start test with ID:", testId);
-        navigate(`/examwindow/${testId}` );
+        navigate(`/examwindow/${testId}`);
         // navigate to test page, or set state
     };
 

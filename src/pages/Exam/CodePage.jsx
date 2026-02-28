@@ -9,6 +9,7 @@ import { Copy } from "lucide-react";
 
 
 import { Icons, languageTemplates } from '../constants';
+import { registerIntelliSense, INTELLISENSE_OPTIONS } from '../../hooks/useMonacoIntelliSense';
 import { RxCrossCircled, RxCheckCircled } from "react-icons/rx";
 import { BsDashCircle } from "react-icons/bs";
 
@@ -83,7 +84,7 @@ function CodePage({ question }) {
 
 
 
-  const logSubmission = async (status, submittedCode, marks , updatedResults) => {
+  const logSubmission = async (status, submittedCode, marks, updatedResults) => {
     console.log("logging submission");
     console.log(user?.email);
 
@@ -405,14 +406,13 @@ function CodePage({ question }) {
 
     let marks = (vm / 2) * 0.3 + (hm / (tclen - 2)) * 0.7;
 
-    if( updatedResults.length <=2  )
-    {
-      marks = (vm / 2) * 1.0 ;
+    if (updatedResults.length <= 2) {
+      marks = (vm / 2) * 1.0;
     }
-    
 
 
-    await logSubmission(allPassed ? 'correct' : 'wrong', code, marks , updatedResults);
+
+    await logSubmission(allPassed ? 'correct' : 'wrong', code, marks, updatedResults);
 
     toast.success('Submitted', {
       autoClose: 1000, // 3 seconds
@@ -710,29 +710,41 @@ function CodePage({ question }) {
     };
   }, []);
 
-  // async function getAllowedLanguageTemplates() {
+  async function getAllowedLanguageTemplates() {
+    const dbRef = ref(database);
 
-  //   const dbRef = ref(database);
+    try {
+      const snapshot = await get(child(dbRef, `Exam/${testid}/allowedLanguages`));
 
-  //   try {
-  //     const snapshot = await get(child(dbRef, `/AlgoCore/${course}/allowedLanguages`));
+      if (!snapshot.exists()) {
+        console.warn("No allowed languages found in Firebase for this exam, defaulting.");
+        setallowlanguages(['python', 'javascript', 'java', 'cpp', 'c']);
+        return;
+      }
 
-  //     if (!snapshot.exists()) {
-  //       console.warn("No data found in Firebase.");
-  //       return {};
-  //     }
+      const data = snapshot.val();
 
-  //     const data = snapshot.val();
+      let normalizedArray = [];
+      if (Array.isArray(data)) {
+        normalizedArray = data;
+      } else {
+        normalizedArray = Object.values(data);
+      }
 
-  //     setallowlanguages(data);
+      const mappedLangs = normalizedArray.map(lang => {
+        const l = String(lang).toLowerCase();
+        if (l === 'c/c++' || l === 'c++' || l === 'c') return 'cpp';
+        return l;
+      });
 
-  //     console.log(allowlanguages);
-
-  //   } catch (error) {
-  //     console.error("Failed to fetch templates:", error);
-  //     return [];
-  //   }
-  // }
+      setallowlanguages(mappedLangs);
+      setSelectedLanguage(prev => mappedLangs.includes(prev) ? prev : mappedLangs[0] || 'cpp');
+      console.log('Allowed Languages for this exam mapped:', mappedLangs);
+    } catch (error) {
+      console.error("Failed to fetch templates:", error);
+      setallowlanguages(['python', 'javascript', 'java', 'cpp', 'c']);
+    }
+  }
 
 
   // Fetch question data from Firebase
@@ -775,10 +787,8 @@ function CodePage({ question }) {
     };
 
     fetchData();
-
-    console.log(question);
-
-  }, [question]); // Dependencies adjusted
+    getAllowedLanguageTemplates();
+  }, [question, testid]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -790,6 +800,7 @@ function CodePage({ question }) {
   }, []);
 
   function handleEditorDidMount(editor, monaco) {
+    registerIntelliSense(editor, monaco);
     editorRef.current = editor;
 
     // Clean up previous observer
@@ -1188,20 +1199,20 @@ function CodePage({ question }) {
                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">
                                 Failed
                               </span>
-                            ) : s.marks === 100  ? (
+                            ) : s.marks === 100 ? (
                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold">
                                 Passed
                               </span>
                             ) : (
                               <span className="inline-flex items-center px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 font-semibold">
-                                Partial 
+                                Partial
                               </span>
                             )}
                           </td>
 
                           {/* Marks */}
                           <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 text-center whitespace-nowrap">
-                            {s.marks }/100
+                            {s.marks}/100
                           </td>
 
 
@@ -1253,11 +1264,11 @@ function CodePage({ question }) {
               <option value="python">Python</option>
               <option value="java">Java</option> */}
               <option value="cpp">C</option>
-              {/* {  allowlanguages.map((lang) => (
+              {allowlanguages.map((lang) => (
                 <option key={lang} value={lang}>
-                  { lang}
+                  {lang}
                 </option>
-              ))} */}
+              ))}
             </select>
           </div>
           {/* Right: Run/Submit/Stats */}
@@ -1297,6 +1308,7 @@ function CodePage({ question }) {
             onChange={handleCodeChange}
             onMount={handleEditorDidMount}
             options={{
+              ...INTELLISENSE_OPTIONS,
               minimap: { enabled: false },
               fontSize: 14,
               lineNumbers: 'on',
@@ -1307,7 +1319,7 @@ function CodePage({ question }) {
               tabSize: 2,
               dragAndDrop: true,
               formatOnPaste: true,
-              formatOnType: true
+              formatOnType: true,
             }}
           />
         </div>

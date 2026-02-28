@@ -11,7 +11,8 @@ import { VideoCanvas } from "../../LiveProctoring/components/VideoCanvas";
 
 import FullscreenTracker from "../FullscreenTracker";
 import LoadingPage from "../LoadingPage";
-import { User } from "lucide-react";
+import { User, Clock, FileText, CheckCircle2, ShieldAlert, BadgeInfo, Cpu, Maximize, AlertTriangle, Monitor } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const DynamicExam = () => {
   const [stage, setStage] = useState("loading"); // 'loading', 'instructions', 'exam', 'warning', 'completed', 'resume', 'blocked'
@@ -149,7 +150,7 @@ const DynamicExam = () => {
           const elapsedMinutes = (Date.now() - startTimeDate.getTime()) / 60000;
 
           if (elapsedMinutes >= durationMinutes) {
-              const examRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
+            const examRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
             await set(examRef, "completed");
             await markExamCompleted();
             return true;
@@ -198,11 +199,11 @@ const DynamicExam = () => {
   // --- Log violation to Firebase ---
   const logViolation = useCallback(async (reason, details = {}) => {
     if (!testid || !user?.uid) return;
-    
+
     try {
       const violationRef = ref(database, `Exam/${testid}/Violations/${user.uid}`);
       const newViolationRef = push(violationRef);
-      
+
       await set(newViolationRef, {
         reason,
         timestamp: new Date().toISOString(),
@@ -211,7 +212,7 @@ const DynamicExam = () => {
         screenSize: `${window.screen.width}x${window.screen.height}`,
         windowSize: `${window.innerWidth}x${window.innerHeight}`,
       });
-      
+
       console.log(`[Violation Logged] ${reason}`, details);
     } catch (error) {
       console.error("Error logging violation:", error);
@@ -308,14 +309,14 @@ const DynamicExam = () => {
       }
       streamRef.current = null;
       if (videoRef.current) {
-        try { videoRef.current.srcObject = null; } catch (_) {}
+        try { videoRef.current.srcObject = null; } catch (_) { }
       }
       // Cleanup screen share
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(t => t.stop());
         screenStreamRef.current = null;
       }
-    } catch (_) {}
+    } catch (_) { }
   };
 
   const startScreenShare = async () => {
@@ -331,18 +332,18 @@ const DynamicExam = () => {
         audio: false,
         preferCurrentTab: false // Don't allow just current tab
       });
-      
+
       console.log('[ScreenShare] Got screen stream with tracks:', stream.getTracks().map(t => `${t.kind}:${t.label}`));
-      
+
       // Validate that user shared entire screen/monitor, not just a window or tab
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack && videoTrack.getSettings) {
         const settings = videoTrack.getSettings();
         console.log('[ScreenShare] Track settings:', settings);
-        
+
         const displaySurface = settings.displaySurface;
         console.log('[ScreenShare] Display surface:', displaySurface);
-        
+
         // Check if it's a monitor (entire screen) share
         if (displaySurface === 'window' || displaySurface === 'browser') {
           console.error('[ScreenShare] User shared window/tab instead of full screen. Rejecting...');
@@ -350,33 +351,33 @@ const DynamicExam = () => {
           setPermError('❌ You must share your ENTIRE SCREEN (not just a window or tab). Please try again and select "Entire Screen" or "Screen".');
           return false;
         }
-        
+
         if (displaySurface !== 'monitor') {
           console.warn('[ScreenShare] Display surface is not "monitor", but continuing:', displaySurface);
           // Some browsers might not report 'monitor' exactly, so we'll allow if not window/browser
         }
       }
-      
+
       screenStreamRef.current = stream;
       setScreenStream(stream);
-      
+
       // Handle when user stops sharing via browser UI
       stream.getVideoTracks()[0].addEventListener('ended', () => {
         console.log('[ScreenShare] User stopped screen sharing');
         screenStreamRef.current = null;
         setScreenStream(null);
-        
+
         // If screen sharing stops during exam, show warning and potentially block
         if (stage === 'exam') {
           setToastMsg('⚠️ Screen sharing stopped! You must share your screen to continue the exam.');
           setShowToast(true);
           setTimeout(() => setShowToast(false), 5000);
-          
+
           // Optionally force user back to permission screen
           setStage('warning');
         }
       });
-      
+
       console.log('[ScreenShare] ✅ Fullscreen sharing validated and started');
       return true;
     } catch (error) {
@@ -420,51 +421,51 @@ const DynamicExam = () => {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Media devices not supported");
       }
-      
+
       // Enhanced video constraints for better quality
-      const videoConstraints = selectedVideoDevice 
+      const videoConstraints = selectedVideoDevice
         ? {
-            deviceId: { exact: selectedVideoDevice },
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            frameRate: { ideal: 30, max: 30 }
-          }
+          deviceId: { exact: selectedVideoDevice },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 30 }
+        }
         : {
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            frameRate: { ideal: 30, max: 30 }
-          };
-      
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 30 }
+        };
+
       const audioConstraints = selectedAudioDevice
         ? {
-            deviceId: { exact: selectedAudioDevice },
-            echoCancellation: true,
-            noiseSuppression: true
-          }
+          deviceId: { exact: selectedAudioDevice },
+          echoCancellation: true,
+          noiseSuppression: true
+        }
         : {
-            echoCancellation: true,
-            noiseSuppression: true
-          };
-      
+          echoCancellation: true,
+          noiseSuppression: true
+        };
+
       const constraints = {
         video: videoConstraints,
         audio: audioConstraints
       };
-      
+
       console.log('[Camera] Requesting media with constraints:', constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('[Camera] Got stream with tracks:', stream.getTracks().map(t => `${t.kind}:${t.label}`));
-      
+
       streamRef.current = stream;
       if (videoRef.current) {
-        try { videoRef.current.srcObject = stream; } catch (_) {}
+        try { videoRef.current.srcObject = stream; } catch (_) { }
       }
       const vTrack = stream.getVideoTracks()[0];
       const aTrack = stream.getAudioTracks()[0];
-      
+
       console.log('[Camera] Video track:', vTrack?.label, 'State:', vTrack?.readyState);
       console.log('[Camera] Audio track:', aTrack?.label, 'State:', aTrack?.readyState);
-      
+
       setCamOK(Boolean(vTrack && vTrack.readyState === "live"));
       setMicOK(Boolean(aTrack && aTrack.readyState === "live"));
 
@@ -529,7 +530,7 @@ const DynamicExam = () => {
     // Save stream for proctoring but DON'T stop tracks
     proctorStreamRef.current = streamRef.current;
     setProctorStream(streamRef.current); // Update state to trigger WebRTC hook
-    
+
     // Request screen sharing (REQUIRED for video proctoring - must share full screen)
     if (proctorSettings.enableVideoProctoring) {
       const screenShareSuccess = await startScreenShare();
@@ -539,13 +540,13 @@ const DynamicExam = () => {
         return; // Block exam entry
       }
     }
-    
+
     // All permissions verified
     setPermVerified(true);
-    
+
     // Keep video reference but don't cleanup
     setShowPermModal(false);
-    
+
     const enterFullscreen = async () => {
       const element = containerRef.current || document.documentElement;
       try {
@@ -987,7 +988,7 @@ const DynamicExam = () => {
         const questionTypeSnapshot = await get(questionTypeRef);
         const questionType = questionTypeSnapshot.val() || 'mcq';
 
-        console.log( marks[questionId]||0 );
+        console.log(marks[questionId] || 0);
 
         questionDetails.push({
           id: questionId,
@@ -995,17 +996,17 @@ const DynamicExam = () => {
           type: questionType,
           mark: marks[questionId] || 0
         });
-          totalMarks += marks[questionId] || 0;
-        }
+        totalMarks += marks[questionId] || 0;
+      }
 
-      
+
 
       // Calculate score percentage
       const score = questionIds.length > 0
-        ? Math.round(( totalMarks / questionIds.length) )
+        ? Math.round((totalMarks / questionIds.length))
         : 0;
-      
-      
+
+
 
       setResults({
         score,
@@ -1039,7 +1040,7 @@ const DynamicExam = () => {
     try {
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
       const statusRefSnapshot = await get(statusRef);
-      console.log( statusRefSnapshot.val());
+      console.log(statusRefSnapshot.val());
       const examstatus = ref(database, `Exam/${testid}/Properties/status`);
       const examstatusSnapshot = await get(examstatus);
       if (examstatusSnapshot.val().toLowerCase() === "completed" || (statusRefSnapshot.exists() && statusRefSnapshot.val() === "completed")) {
@@ -1062,121 +1063,180 @@ const DynamicExam = () => {
   };
 
   return (
-    <div ref={containerRef} className="h-screen bg-gray-100 dark:bg-gray-900">
+    <div ref={containerRef} className="fixed inset-0 top-16 bg-gray-100 dark:bg-gray-900 overflow-hidden flex flex-col z-40">
       {stage === "loading" && (
         <LoadingPage message="Loading exam, please wait..." />
       )}
 
       {stage === "instructions" && (
-        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50 dark:bg-gray-900">
-          <div className="w-full max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-            {/* Header */}
-            <div className="bg-blue-600 dark:bg-blue-700 px-6 py-4">
-              <h1 className="text-2xl font-bold text-white">Exam Instructions</h1>
-              <p className="text-blue-100">Please read the instructions carefully before starting</p>
-            </div>
+        <div className="flex flex-col h-full bg-gradient-to-br from-[#f8fafc] via-white to-[#eff6ff] dark:from-[#0f172a] dark:via-[#020617] dark:to-[#0f172a] relative overflow-hidden">
+          {/* Background decorative elements */}
+          <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+            <div className="absolute top-[-15%] right-[-5%] w-[50%] h-[50%] rounded-full bg-blue-500/20 dark:bg-blue-600/10 blur-[100px]" />
+            <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/20 dark:bg-indigo-600/10 blur-[120px]" />
+          </div>
 
-            <div className="p-6 md:p-8">
-              {/* Exam Overview */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 mb-8">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{examName || 'Loading Exam...'}</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full h-full flex flex-col z-10 overflow-hidden text-slate-800 dark:text-slate-100"
+          >
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center">
-                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-gray-700 dark:text-gray-300">
-                        <span className="font-medium">Duration:</span> {duration ? `${Math.floor(duration)} minutes` : 'Loading...'}
-                      </span>
+
+            <div className="p-5 sm:p-8 lg:p-10 gap-8 sm:gap-12 flex flex-col lg:flex-row flex-1 overflow-y-auto min-h-0 hide-scrollbar">
+              {/* Left Column: Exam Info */}
+              <div className="lg:w-[35%] space-y-6">
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4, duration: 0.5 }}
+                  className="px-2"
+                >
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-3">
+                    <BadgeInfo className="w-6 h-6 text-blue-500" />
+                    {examName || 'Assessment Details'}
+                  </h2>
+
+                  <div className="space-y-2 mt-8">
+                    <div className="group flex items-center py-4 border-b border-slate-200/70 dark:border-slate-700/50">
+                      <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mr-4">
+                        <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Duration</p>
+                        <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{duration ? `${Math.floor(duration)} Minutes` : 'Loading...'}</p>
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                      <span className="text-gray-700 dark:text-gray-300">
-                        <span className="font-medium">Questions:</span> {Questions?.length || 0} total
-                      </span>
+
+                    <div className="group flex items-center py-4 border-b border-slate-200/70 dark:border-slate-700/50">
+                      <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mr-4">
+                        <FileText className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Total Questions</p>
+                        <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{Questions?.length || 0} Questions</p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Question Types:</h4>
-                    {configdata && (
-                      <div className="space-y-1">
+                  {configdata && Object.keys(configdata).some(k => configdata[k] > 0) && (
+                    <div className="mt-8 pt-4">
+                      <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-[0.1em]">Question Types</h4>
+                      <div className="flex flex-wrap gap-3">
                         {Object.entries(configdata).map(([type, count]) => (
                           count > 0 && (
-                            <div key={type} className="flex justify-between items-center">
-                              <span className="text-gray-700 dark:text-gray-300">{type}</span>
-                              <span className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-full">
-                                {count} {count === 1 ? 'question' : 'questions'}
+                            <div key={type} className="flex items-center text-slate-700 dark:text-slate-300">
+                              <span className="text-sm font-semibold mr-2">{type}</span>
+                              <span className="px-2 py-0.5 text-xs font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 rounded-lg">
+                                {count}
                               </span>
                             </div>
                           )
                         ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                </motion.div>
+              </div>
+
+              {/* Right Column: Instructions list */}
+              <div className="lg:w-[65%] space-y-6 flex flex-col justify-between">
+                <div className="space-y-6">
+                  <motion.h3
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-3"
+                  >
+                    <ShieldAlert className="w-6 h-6 text-red-500" />
+                    Mandatory Rules
+                  </motion.h3>
+
+                  <motion.ul
+                    initial="hidden"
+                    animate="show"
+                    variants={{
+                      hidden: { opacity: 0 },
+                      show: {
+                        opacity: 1,
+                        transition: { staggerChildren: 0.1, delayChildren: 0.7 }
+                      }
+                    }}
+                    className="space-y-6"
+                  >
+                    {[
+                      {
+                        icon: <Maximize className="w-5 h-5" />,
+                        title: "Fullscreen Required",
+                        desc: "This exam must be taken in full-screen mode. The test will automatically start in full-screen.",
+                        color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20", show: true
+                      },
+                      {
+                        icon: <AlertTriangle className="w-5 h-5" />,
+                        title: "Violations Tracked",
+                        desc: "Exiting full screen will be tracked as a violation. Multiple violations may result in exam termination.",
+                        color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20", show: proctorSettings.enableFullscreen
+                      },
+                      {
+                        icon: <Monitor className="w-5 h-5" />,
+                        title: "Video Proctoring",
+                        desc: "Video proctoring is enabled. Your camera will monitor for multiple persons or no person during the exam.",
+                        color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20", show: proctorSettings.enableVideoProctoring
+                      },
+                      {
+                        icon: <Cpu className="w-5 h-5" />,
+                        title: "No Exiting or Refreshing",
+                        desc: "Do not refresh the page or switch tabs during the exam, as this may be flagged as suspicious activity.",
+                        color: "text-red-500", bg: "bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20", show: true
+                      }
+                    ].filter(item => item.show).map((item, index) => (
+                      <motion.li
+                        key={index}
+                        variants={{
+                          hidden: { opacity: 0, x: 20 },
+                          show: { opacity: 1, x: 0 }
+                        }}
+                        whileHover={{ x: 5 }}
+                        className="flex items-start py-4 group border-b border-slate-200/60 dark:border-slate-700/50 last:border-0"
+                      >
+                        <div className={`mt-0.5 mr-5 p-2.5 rounded-xl flex-shrink-0 transition-colors duration-300 ${item.bg} ${item.color}`}>
+                          {item.icon}
+                        </div>
+                        <div>
+                          <h4 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-1.5 transition-colors">{item.title}</h4>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-medium">{item.desc}</p>
+                        </div>
+                      </motion.li>
+                    ))}
+                  </motion.ul>
                 </div>
-              </div>
-
-              {/* Instructions */}
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Important Instructions</h3>
-                <ul className="space-y-3 text-gray-700 dark:text-gray-300">
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                    <span>This exam must be taken in full-screen mode. The test will automatically start in full-screen.</span>
-                  </li>
-                  {proctorSettings.enableFullscreen && (
-                    <li className="flex items-start">
-                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <span>Exiting full screen will be tracked as a violation. Multiple violations may result in exam termination.</span>
-                    </li>
-                  )}
-                  {proctorSettings.enableVideoProctoring && (
-                    <li className="flex items-start">
-                      <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      <span>Video proctoring is enabled. Your camera will monitor for multiple persons or no person during the exam.</span>
-                    </li>
-                  )}
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                    </svg>
-                    <span>Do not refresh the page or switch tabs during the exam, as this may be flagged as suspicious activity.</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    <span>Your progress is automatically saved. You can resume the exam if you get disconnected.</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
-                <button
-                  onClick={proctorSettings.enableVideoProctoring ? openPermissionModal : startExam}
-                  className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                {/* Action Buttons */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.9, type: "spring", stiffness: 200 }}
+                  className="pt-6 mt-auto"
                 >
-                  <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Start Exam Now
-                </button>
+                  <button
+                    onClick={proctorSettings.enableVideoProctoring ? openPermissionModal : startExam}
+                    className="group relative w-full inline-flex items-center justify-center p-0.5 mb-2 overflow-hidden text-base font-bold text-white rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 hover:text-white shadow-xl hover:shadow-indigo-500/30 transition-shadow focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-800"
+                  >
+                    <span className="relative w-full flex items-center justify-center px-8 py-5 transition-all ease-in duration-75 bg-blue-600 dark:bg-blue-600 rounded-2xl group-hover:bg-opacity-0">
+                      <svg className="w-5 h-5 mr-3 transition-transform duration-300 group-hover:-rotate-12 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      I Understand, Start Exam
+                    </span>
+                  </button>
+                  <p className="mt-4 text-sm font-medium text-center text-slate-500 dark:text-slate-400">
+                    By clicking start, you agree to comply with all rules and policies.
+                  </p>
+                </motion.div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -1210,30 +1270,30 @@ const DynamicExam = () => {
       )}
 
       {stage === "warning" && (
-            <>
-              <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} isViolationReady={isViolationReady} enableViolationTracking={proctorSettings.enableFullscreen} />
-              <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
-                <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
-                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{examName}</h1>
-                  {/* <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p> */}
-                  <p className="text-sm text-gray-500">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
-                  <button
-                    onClick={proctorSettings.enableVideoProctoring ? openPermissionModal : returnToFullScreen}
-                    className="px-6 py-3 rounded-md font-semibold text-white transition-colors bg-red-600 hover:bg-red-700"
-                  >
-                    Return to Fullscreen
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+        <>
+          <FullscreenTracker violation={violation} setviolation={setviolation} testid={testid} isViolationReady={isViolationReady} enableViolationTracking={proctorSettings.enableFullscreen} />
+          <div className="flex items-center justify-center h-full bg-gray-100 dark:bg-gray-900">
+            <div className="w-full max-w-3xl mx-auto p-8 rounded-xl shadow-lg bg-white dark:bg-gray-800 text-center space-y-6">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{examName}</h1>
+              {/* <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">{Questions.length} {Questions[0].type} questions, {violation} violations</p> */}
+              <p className="text-sm text-gray-500">You exited fullscreen mode. Please return to fullscreen to continue your test.</p>
+              <button
+                onClick={proctorSettings.enableVideoProctoring ? openPermissionModal : returnToFullScreen}
+                className="px-6 py-3 rounded-md font-semibold text-white transition-colors bg-red-600 hover:bg-red-700"
+              >
+                Return to Fullscreen
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {stage === "resume" && (
         <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
           <div className="w-full max-w-lg mx-auto">
             {/* Main Card */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-              
+
               {/* Header with Icon */}
               <div className="bg-yellow-50 dark:bg-yellow-900/10 px-6 py-8 border-b border-yellow-100 dark:border-yellow-900/20">
                 <div className="flex items-center gap-4">
@@ -1311,7 +1371,7 @@ const DynamicExam = () => {
           <div className="w-full max-w-lg mx-auto">
             {/* Main Card */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-              
+
               {/* Header with Icon */}
               <div className="bg-red-50 dark:bg-red-900/10 px-6 py-8 border-b border-red-100 dark:border-red-900/20">
                 <div className="flex items-center gap-4">
@@ -1399,149 +1459,142 @@ const DynamicExam = () => {
       )}
 
       {stage === "completed" && (
-        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-          <div className="w-full max-w-2xl mx-auto">
-            {/* Main Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-              
-              {/* Header */}
-              <div className="bg-green-50 dark:bg-green-900/10 px-6 py-8 border-b border-green-100 dark:border-green-900/20">
-                <div className="flex items-center gap-4">
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Exam Completed</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{examName}</p>
-                  </div>
-                </div>
-              </div>
+        <div className="flex flex-col h-full bg-gradient-to-br from-[var(--bg-light-start,var(--tw-gradient-from))] via-[var(--tw-gradient-via,white)] to-[var(--bg-light-end,var(--tw-gradient-to))] dark:from-[#0f172a] dark:via-[#020617] dark:to-[#0f172a] relative overflow-hidden"
+          style={{ '--bg-light-start': '#f0fdf4', '--bg-light-end': '#dcfce3' }}>
+          {/* Background decorative elements */}
+          <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+            <div className="absolute top-[-15%] right-[-5%] w-[50%] h-[50%] rounded-full bg-green-500/20 dark:bg-green-600/10 blur-[100px]" />
+            <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-500/20 dark:bg-emerald-600/10 blur-[120px]" />
+          </div>
 
-              {/* Content */}
-              <div className="px-6 py-6 space-y-6">
-                {/* User Greeting */}
-                <div>
-                  <p className="text-gray-700 dark:text-gray-300">
-                    Congratulations <span className="font-medium text-gray-900 dark:text-white">{user?.name || 'User'}</span>!
-                  </p>
-                  <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full h-full flex flex-col z-10 overflow-hidden text-slate-800 dark:text-slate-100"
+          >
+          
+
+            {/* Content Area */}
+            <div className="p-5 sm:p-8 lg:p-10 gap-8 sm:gap-12 flex flex-col lg:flex-row flex-1 overflow-y-auto min-h-0 hide-scrollbar">
+              <div className="w-full max-w-3xl mx-auto space-y-6">
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.5 }}
+                  className="bg-white/50 dark:bg-slate-800/40 rounded-3xl p-6 sm:p-8 border border-white/60 dark:border-slate-700/50 shadow-sm backdrop-blur-md text-center"
+                >
+                  <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+                    Congratulations, <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400">{user?.name || 'User'}</span>!
+                  </h2>
+                  <p className="text-slate-600 dark:text-slate-400">
                     You have successfully completed the exam. Your results are shown below.
                   </p>
-                </div>
+                </motion.div>
 
-            {loadingResults ? (
-              <div className="py-8 text-center">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-green-500 border-r-transparent"></div>
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Calculating your results...</p>
-              </div>
-            ) : results ? (
-              <>
-                {/* Results Summary */}
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">Your Results</p>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg px-4 py-3 text-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Score</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {results.score}%
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg px-4 py-3 text-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Correct</p>
-                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {results.correctCount}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg px-4 py-3 text-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {results.totalQuestions}
-                      </p>
-                    </div>
-                  </div>
-
-                  {results.questions && results.questions.length > 0 && (
-                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">Question Breakdown</p>
-                      <div className="max-h-64 overflow-y-auto space-y-2">
-                        {results.questions.map((q, index) => (
-                          <div 
-                            key={index}
-                            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                Q{index + 1}
-                              </p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {q.type} • {q.mark || 0} pts
-                              </p>
-                            </div>
-                            <span 
-                              className={`ml-2 px-3 py-1 text-xs font-medium rounded-full ${
-                                q.correct
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                                  : q.mark > 0 
-                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' 
-                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                              }`}
-                            >
-                              {q.correct ? '✓' : q.mark > 0 ? '~' : '✗'}
-                            </span>
-                          </div>
-                        ))}
+                {loadingResults ? (
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className="py-12 flex flex-col items-center justify-center space-y-4"
+                  >
+                    <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-solid border-green-500 border-r-transparent"></div>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Calculating your results...</p>
+                  </motion.div>
+                ) : results ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+                    className="space-y-6"
+                  >
+                    {/* Results Summary Metrics */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-900/50">
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Score</p>
+                        <p className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-teal-600">
+                          {results.score}%
+                        </p>
+                      </div>
+                      <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900/50">
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Correct</p>
+                        <p className="text-4xl font-black text-blue-600 dark:text-blue-400">
+                          {results.correctCount}
+                        </p>
+                      </div>
+                      <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900/50">
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Total Questions</p>
+                        <p className="text-4xl font-black text-slate-800 dark:text-slate-200">
+                          {results.totalQuestions}
+                        </p>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Exam Info */}
-                {configdata && Object.entries(configdata).some(([_, count]) => count > 0) && (
-                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">Exam Summary</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(configdata).map(([type, count]) => (
-                        count > 0 && (
-                          <div key={type} className="bg-gray-50 dark:bg-gray-900/50 rounded-md px-3 py-2">
-                            <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{type.toLowerCase()}</p>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">{count} {count === 1 ? 'Q' : 'Qs'}</p>
-                          </div>
-                        )
-                      ))}
-                    </div>
+                    {results.questions && results.questions.length > 0 && (
+                      <div className="mt-8 bg-white/50 dark:bg-slate-800/40 rounded-3xl p-6 border border-white/60 dark:border-slate-700/50 shadow-sm backdrop-blur-md">
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4">
+                          <FileText className="w-5 h-5 text-emerald-500" />
+                          Question Breakdown
+                        </h3>
+                        <div className="max-h-72 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                          {results.questions.map((q, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between p-4 bg-white/80 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-emerald-200 transition-colors"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-base font-bold text-slate-800 dark:text-slate-100">
+                                  Question {index + 1}
+                                </p>
+                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                                  {q.type} • {q.mark || 0} pts
+                                </p>
+                              </div>
+                              <div
+                                className={`flex items-center justify-center w-10 h-10 rounded-full shadow-sm border ${q.correct
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400'
+                                    : q.mark > 0
+                                      ? 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400'
+                                      : 'bg-red-50 border-red-200 text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+                                  }`}
+                              >
+                                {q.correct ? <CheckCircle2 className="w-6 h-6" /> : q.mark > 0 ? '~' : '✗'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : (
+                  <div className="py-12 bg-white/50 dark:bg-slate-800/40 rounded-3xl p-8 border border-white/60 dark:border-slate-700/50 text-center">
+                    <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+                    <p className="text-lg font-medium text-slate-700 dark:text-slate-300">Unable to load results.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Please check your dashboard later.</p>
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="py-8 text-center">
-                <p className="text-gray-500 dark:text-gray-400">Unable to load results. Please check your dashboard later.</p>
-              </div>
-            )}
-              </div>
 
-              {/* Footer */}
-              <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
-                  View detailed results anytime in your dashboard
-                </p>
+                {/* Action Buttons */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 }}
+                  className="pt-6 mt-auto text-center"
+                >
+                  <button
+                    onClick={() => window.location.href = '/'}
+                    className="group relative inline-flex items-center justify-center p-0.5 mb-2 overflow-hidden text-base font-bold text-white rounded-2xl bg-gradient-to-br from-green-600 to-emerald-600 hover:text-white shadow-xl hover:shadow-emerald-500/30 transition-shadow focus:outline-none focus:ring-4 focus:ring-emerald-300 dark:focus:ring-emerald-800 w-full sm:w-auto min-w-[200px]"
+                  >
+                    <span className="relative w-full flex items-center justify-center px-8 py-4 transition-all ease-in duration-75 bg-emerald-600 dark:bg-emerald-600 rounded-2xl group-hover:bg-opacity-0">
+                      ← Back to Dashboard
+                    </span>
+                  </button>
+                  <p className="mt-4 text-sm font-medium text-center text-slate-500 dark:text-slate-400">
+                    View detailed results anytime in your dashboard
+                  </p>
+                </motion.div>
+
               </div>
             </div>
-
-            {/* Back to Dashboard Link */}
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => window.location.href = '/'}
-                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-              >
-                ← Back to Dashboard
-              </button>
-            </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -1622,33 +1675,33 @@ const DynamicExam = () => {
                         {camOK ? '✓ Connected' : camOK === false ? '✗ Blocked' : 'Checking...'}
                       </span>
                     </div>
-                  
-                  {videoDevices.length > 0 && (
-                    <select 
-                      value={selectedVideoDevice} 
-                      onChange={(e) => { setSelectedVideoDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
-                      className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      {videoDevices.map((device, idx) => (
-                        <option key={device.deviceId} value={device.deviceId}>
-                          {device.label || `Camera ${idx + 1}`}
-                        </option>
-                      ))}
-                    </select>
-                  )}
 
-                  <div className="relative aspect-video w-full bg-gray-900 rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                    {isChecking && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                        <div className="text-white text-center">
-                          <div className="w-10 h-10 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                          <p className="text-sm">Initializing...</p>
-                        </div>
-                      </div>
+                    {videoDevices.length > 0 && (
+                      <select
+                        value={selectedVideoDevice}
+                        onChange={(e) => { setSelectedVideoDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
+                        className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {videoDevices.map((device, idx) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Camera ${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
                     )}
+
+                    <div className="relative aspect-video w-full bg-gray-900 rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                      {isChecking && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                          <div className="text-white text-center">
+                            <div className="w-10 h-10 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                            <p className="text-sm">Initializing...</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
                   {/* Microphone Section */}
                   <div className="space-y-3">
@@ -1659,57 +1712,57 @@ const DynamicExam = () => {
                       </span>
                     </div>
 
-                  {audioDevices.length > 0 && (
-                    <select 
-                      value={selectedAudioDevice} 
-                      onChange={(e) => { setSelectedAudioDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
-                      className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      {audioDevices.map((device, idx) => (
-                        <option key={device.deviceId} value={device.deviceId}>
-                          {device.label || `Microphone ${idx + 1}`}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                    {audioDevices.length > 0 && (
+                      <select
+                        value={selectedAudioDevice}
+                        onChange={(e) => { setSelectedAudioDevice(e.target.value); setTimeout(startPermissionCheck, 100); }}
+                        className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {audioDevices.map((device, idx) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Microphone ${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
 
-                  <div className="space-y-3">
-                    <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
-                      <p className="text-[10px] sm:text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Audio Level</p>
-                      <div className="h-8 sm:h-10 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden relative">
-                        <div className="absolute inset-y-0 left-0 bg-green-500 transition-all duration-150" style={{ width: `${audioLevel}%` }}></div>
+                    <div className="space-y-3">
+                      <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
+                        <p className="text-[10px] sm:text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Audio Level</p>
+                        <div className="h-8 sm:h-10 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden relative">
+                          <div className="absolute inset-y-0 left-0 bg-green-500 transition-all duration-150" style={{ width: `${audioLevel}%` }}></div>
+                        </div>
+                        <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-2">Speak to test microphone</p>
                       </div>
-                      <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-2">Speak to test microphone</p>
-                    </div>
 
-                    {/* AI Model Status */}
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-md p-3 sm:p-4 border border-blue-200 dark:border-blue-800">
-                      <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">AI Proctoring Model</p>
-                      <div className="flex items-center gap-2">
-                        {aiLoading && (
-                          <>
-                            <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
-                            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Loading model...</span>
-                          </>
-                        )}
-                        {aiError && (
-                          <>
-                            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                            </svg>
-                            <span className="text-xs sm:text-sm text-red-600">Error: {aiError}</span>
-                          </>
-                        )}
-                        {modelReady && (
-                          <>
-                            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            <span className="text-xs sm:text-sm text-green-600 font-medium">Model Ready</span>
-                          </>
-                        )}
+                      {/* AI Model Status */}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-md p-3 sm:p-4 border border-blue-200 dark:border-blue-800">
+                        <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">AI Proctoring Model</p>
+                        <div className="flex items-center gap-2">
+                          {aiLoading && (
+                            <>
+                              <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+                              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Loading model...</span>
+                            </>
+                          )}
+                          {aiError && (
+                            <>
+                              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-xs sm:text-sm text-red-600">Error: {aiError}</span>
+                            </>
+                          )}
+                          {modelReady && (
+                            <>
+                              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-xs sm:text-sm text-green-600 font-medium">Model Ready</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
                     </div>
                   </div>
                 </div>
@@ -1732,24 +1785,24 @@ const DynamicExam = () => {
 
             {/* Footer Actions */}
             <div className="px-4 sm:px-6 py-3 sm:py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 flex-shrink-0">
-              <button 
-                onClick={startPermissionCheck} 
-                disabled={isChecking} 
+              <button
+                onClick={startPermissionCheck}
+                disabled={isChecking}
                 className="w-full sm:w-auto px-4 py-2 text-xs sm:text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isChecking ? "Testing..." : "Retest"}
               </button>
-              
+
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-                <button 
-                  onClick={closePermissionModal} 
+                <button
+                  onClick={closePermissionModal}
                   className="w-full sm:w-auto px-4 py-2 text-xs sm:text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  onClick={continueAfterPermissions} 
-                  disabled={proctorSettings.enableVideoProctoring && (!camOK || !micOK || !modelReady)} 
+                <button
+                  onClick={continueAfterPermissions}
+                  disabled={proctorSettings.enableVideoProctoring && (!camOK || !micOK || !modelReady)}
                   className="w-full sm:w-auto px-5 py-2 text-xs sm:text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Start Exam

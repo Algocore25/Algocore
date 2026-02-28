@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply antialiased text-gray-900;
+    @apply antialiased text-gray-900 bg-gray-50 dark:bg-gray-900 dark:text-white transition-colors duration-300;
   }
 
   /* Hide scrollbar for Chrome, Safari and Opera */
@@ -38,7 +38,7 @@
     background-image:
       linear-gradient(to right, #e2e8f0 1px, transparent 1px),
       linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
-    background-size: 24px 24px;
+    background-size: 40px 40px;
     background-attachment: fixed;
     opacity: 0.8;
   }
@@ -47,9 +47,9 @@
     background-image:
       linear-gradient(to right, #334155 1px, transparent 1px),
       linear-gradient(to bottom, #334155 1px, transparent 1px);
-    background-size: 50px 50px;
+    background-size: 40px 40px;
     background-attachment: fixed;
-    opacity: 0.2;
+    opacity: 0.3;
   }
 }
 

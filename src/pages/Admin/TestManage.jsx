@@ -27,21 +27,32 @@ const TestManage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [enableVideoProctoring, setEnableVideoProctoring] = useState(true);
   const [blockOnViolations, setBlockOnViolations] = useState(false);
+  const [allowedLanguages, setAllowedLanguages] = useState(['python', 'javascript', 'java', 'cpp', 'c']);
+
+  const availableLanguages = [
+    { id: 'python', label: 'Python' },
+    { id: 'javascript', label: 'JavaScript' },
+    { id: 'java', label: 'Java' },
+    { id: 'cpp', label: 'C++' },
+    { id: 'c', label: 'C' }
+  ];
   // Initialize state with default values
   const [questionsPerType, setQuestionsPerType] = useState({
     mcq: 0,
+    msq: 0,
     programming: 0,
     sql: 0,
-    other: 0
+    nat: 0
   });
 
   // Categorize questions
   const getQuestionCategories = useCallback((questions = []) => {
     const categories = {
       mcq: { name: 'MCQ', count: 0, selected: 0 },
-      programming: { name: 'programming', count: 0, selected: 0 },
+      msq: { name: 'MSQ', count: 0, selected: 0 },
+      programming: { name: 'Programming', count: 0, selected: 0 },
       sql: { name: 'SQL', count: 0, selected: 0 },
-      other: { name: 'Other', count: 0, selected: 0 }
+      nat: { name: 'NAT', count: 0, selected: 0 }
     };
 
     if (!questions || typeof questions !== 'object') return categories;
@@ -55,12 +66,14 @@ const TestManage = () => {
 
       if (typeStr === 'mcq') {
         categories.mcq.count++;
-      } else if (typeStr === 'programming' || typeStr === 'programming') {
+      } else if (typeStr === 'msq') {
+        categories.msq.count++;
+      } else if (typeStr === 'programming') {
         categories.programming.count++;
       } else if (typeStr === 'sql') {
         categories.sql.count++;
-      } else if (typeStr) {
-        categories.other.count++;
+      } else if (typeStr === 'numeric' || typeStr === 'nat') {
+        categories.nat.count++;
       }
     });
 
@@ -72,9 +85,10 @@ const TestManage = () => {
 
       selectedTypes.forEach(type => {
         if (type === 'mcq') categories.mcq.selected++;
-        else if (type === 'programming' || type === 'programming') categories.programming.selected++;
+        else if (type === 'msq') categories.msq.selected++;
+        else if (type === 'programming') categories.programming.selected++;
         else if (type === 'sql') categories.sql.selected++;
-        else if (type) categories.other.selected++;
+        else if (type === 'numeric' || type === 'nat') categories.nat.selected++;
       });
     }
 
@@ -98,20 +112,22 @@ const TestManage = () => {
       const config = test.configure.questionsPerType;
       setQuestionsPerType({
         mcq: Number(config.mcq) || 0,
+        msq: Number(config.msq) || 0,
         programming: Number(config.programming) || 0,
         sql: Number(config.sql) || 0,
-        other: Number(config.other) || 0
+        nat: Number(config.nat) || 0
       });
     } else if (test?.questions) {
       // Initialize with default values if no config exists
       const defaultValues = {
         mcq: 0,
+        msq: 0,
         programming: 0,
         sql: 0,
-        other: 0
+        nat: 0
       };
       setQuestionsPerType(defaultValues);
-      
+
       // Save default config to Firebase if it doesn't exist
       const saveDefaultConfig = async () => {
         try {
@@ -137,12 +153,12 @@ const TestManage = () => {
         if (testSnapshot.exists()) {
           const testData = testSnapshot.val();
           setTest(testData);
-          
+
           // Set test title from database
           if (testData.name) {
             setTestTitle(testData.name);
           }
-          
+
           // Calculate question statistics
           const stats = getQuestionCategories(testData.questions);
           setQuestionStats(stats);
@@ -155,8 +171,8 @@ const TestManage = () => {
           // Set proctoring settings if available
           if (testData.proctorSettings) {
             setEnableVideoProctoring(
-              testData.proctorSettings.enableVideoProctoring === undefined 
-                ? true 
+              testData.proctorSettings.enableVideoProctoring === undefined
+                ? true
                 : testData.proctorSettings.enableVideoProctoring
             );
             setBlockOnViolations(
@@ -167,7 +183,7 @@ const TestManage = () => {
           // Load saved configuration if exists
           const configRef = ref(database, `Exam/${testId}/configure`);
           const configSnapshot = await get(configRef);
-          
+
           if (configSnapshot.exists() && configSnapshot.val().questionsPerType) {
             const savedConfig = configSnapshot.val().questionsPerType;
             // Update questionsPerType state with saved values
@@ -177,9 +193,9 @@ const TestManage = () => {
               sql: Number(savedConfig.sql) || 0,
               other: Number(savedConfig.other) || 0
             };
-            
+
             setQuestionsPerType(updatedQuestionsPerType);
-            
+
             // Update test data with the loaded config
             setTest(prev => ({
               ...prev,
@@ -214,16 +230,16 @@ const TestManage = () => {
       if (snapshot.exists()) {
         const settings = snapshot.val();
         console.log('[TestManage] ProctorSettings from Firebase:', settings);
-        
+
         setEnableVideoProctoring(
-          settings.enableVideoProctoring === undefined 
-            ? true 
+          settings.enableVideoProctoring === undefined
+            ? true
             : settings.enableVideoProctoring
         );
         setBlockOnViolations(
           settings.blockOnViolations === true
         );
-        
+
         // Update test state
         setTest(prev => ({
           ...prev,
@@ -250,7 +266,7 @@ const TestManage = () => {
         const durationValue = snapshot.val();
         console.log('[TestManage] Duration from Firebase:', durationValue);
         setDuration(durationValue);
-        
+
         // Update test state
         setTest(prev => ({
           ...prev,
@@ -259,6 +275,31 @@ const TestManage = () => {
       } else {
         console.log('[TestManage] No duration found in Firebase, using default');
         setDuration(60); // Default 60 minutes
+      }
+    });
+
+    return () => unsubscribe();
+  }, [testId]);
+
+  // Real-time listener for allowedLanguages changes
+  useEffect(() => {
+    if (!testId) return;
+
+    const allowedLanguagesRef = ref(database, `Exam/${testId}/allowedLanguages`);
+    const unsubscribe = onValue(allowedLanguagesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const langs = snapshot.val();
+        console.log('[TestManage] allowedLanguages from Firebase:', langs);
+        setAllowedLanguages(langs);
+
+        // Update test state
+        setTest(prev => ({
+          ...prev,
+          allowedLanguages: langs
+        }));
+      } else {
+        console.log('[TestManage] No allowedLanguages found in Firebase, using default');
+        setAllowedLanguages(['python', 'javascript', 'java', 'cpp', 'c']);
       }
     });
 
@@ -275,7 +316,7 @@ const TestManage = () => {
         const nameValue = snapshot.val();
         console.log('[TestManage] Test name from Firebase:', nameValue);
         setTestTitle(nameValue);
-        
+
         // Update test state
         setTest(prev => ({
           ...prev,
@@ -378,14 +419,14 @@ const TestManage = () => {
   // Function to handle question type changes
   const handleQuestionTypeChange = useCallback(async (key, value, max) => {
     const numValue = Math.min(parseInt(value) || 0, max);
-    
+
     // Optimistically update local state
     setQuestionsPerType(prev => {
       const newState = {
         ...prev,
         [key]: numValue
       };
-      
+
       // Update Firebase in the background
       const updateFirebase = async () => {
         try {
@@ -393,7 +434,7 @@ const TestManage = () => {
             questionsPerType: newState,
             updatedAt: Date.now()
           });
-          
+
           // Update the test state with the new configuration
           setTest(prevTest => ({
             ...prevTest,
@@ -406,7 +447,7 @@ const TestManage = () => {
         } catch (error) {
           console.error('Error updating question configuration:', error);
           toast.error('Failed to update configuration');
-          
+
           // Revert local state on error
           setQuestionsPerType(prev => ({
             ...prev,
@@ -414,9 +455,9 @@ const TestManage = () => {
           }));
         }
       };
-      
+
       updateFirebase();
-      
+
       return newState;
     });
   }, [testId]);
@@ -429,7 +470,7 @@ const TestManage = () => {
 
   if (!test) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="min-h-[calc(100vh-4rem)] -mt-4 -mx-4 bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Test not found</h3>
           <p className="text-gray-600 dark:text-gray-300 mb-4">The requested test could not be found.</p>
@@ -445,7 +486,7 @@ const TestManage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-[calc(100vh-4rem)] -mt-4 -mx-4 bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -775,14 +816,12 @@ const TestManage = () => {
                             }
                           });
                         }}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                          enableVideoProctoring ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'
-                        }`}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${enableVideoProctoring ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'
+                          }`}
                       >
                         <span
-                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            enableVideoProctoring ? 'translate-x-5' : 'translate-x-0'
-                          }`}
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${enableVideoProctoring ? 'translate-x-5' : 'translate-x-0'
+                            }`}
                         />
                       </button>
                     </div>
@@ -810,18 +849,51 @@ const TestManage = () => {
                             }
                           });
                         }}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                          blockOnViolations ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'
-                        }`}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${blockOnViolations ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'
+                          }`}
                       >
                         <span
-                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            blockOnViolations ? 'translate-x-5' : 'translate-x-0'
-                          }`}
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${blockOnViolations ? 'translate-x-5' : 'translate-x-0'
+                            }`}
                         />
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {/* Allowed Languages Configuration */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Allowed Languages for Coding Questions</label>
+                  <div className="flex flex-wrap gap-3 p-3 border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 rounded-lg">
+                    {availableLanguages.map((lang) => (
+                      <label key={lang.id} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={allowedLanguages.includes(lang.id)}
+                          onChange={async (e) => {
+                            let newLangs;
+                            if (e.target.checked) {
+                              newLangs = [...allowedLanguages, lang.id];
+                            } else {
+                              if (allowedLanguages.length > 1) {
+                                newLangs = allowedLanguages.filter(l => l !== lang.id);
+                              } else {
+                                toast.error("At least one language must be allowed.");
+                                return;
+                              }
+                            }
+                            setAllowedLanguages(newLangs);
+                            await handleSaveTest({ allowedLanguages: newLangs });
+                          }}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
+                        />
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-300">{lang.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Select which programming languages test takers are allowed to use.
+                  </p>
                 </div>
 
               </div>

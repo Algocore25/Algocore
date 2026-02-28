@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ref, onValue, get, query, orderByKey, limitToFirst, startAfter } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import { database } from '../../firebase';
 import {
   FiUser,
@@ -51,18 +51,19 @@ const AdminMonitor = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [selectedCourseName, setSelectedCourseName] = useState(null);
 
   const [Students, setStudents] = useState([]);
 
   const [loadingStates, setLoadingStates] = useState({
-    details: true,
+    submissions: true,
+    userProgress: true,
+    users: true,
     courses: true,
+    activityTime: true,
+    students: true
   });
-
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [lastUserKey, setLastUserKey] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [scanStats, setScanStats] = useState({ scanned: 0, found: 0 });
+  const [activeTab, setActiveTab] = useState('students');
 
 
   const [filters, setFilters] = useState({
@@ -71,145 +72,58 @@ const AdminMonitor = () => {
     sortOrder: 'asc' // 'asc' or 'desc'
   });
 
-  // Fetch course structure and first page of users
-  const fetchInitialData = useCallback(async () => {
+  // Extract fetch logic into reusable function
+  const fetchAllData = useCallback(async () => {
     try {
-      setLoading(true);
-
-      // 1. Fetch lightweight structure (Courses) and Students list
-      const [coursesSnap, studentsSnap] = await Promise.all([
+      const [
+        submissionsSnap,
+        progressSnap,
+        usersSnap,
+        coursesSnap,
+        studentsSnap,
+        activityTimeSnap
+      ] = await Promise.all([
+        get(ref(database, 'Submissions')),
+        get(ref(database, 'userprogress')),
+        get(ref(database, 'users')),
         get(ref(database, 'AlgoCore')),
-        get(ref(database, 'Students'))
+        get(ref(database, 'Students')),
+        get(ref(database, 'Activitytime'))
       ]);
 
+      // Set all data at once
+      setSubmissions(submissionsSnap.val() || {});
+      setUserProgress(progressSnap.val() || {});
+      setUsers(usersSnap.val() || {});
       setCourses(coursesSnap.val() || {});
       setStudents(studentsSnap.val() || []);
-      setLoadingStates(prev => ({ ...prev, courses: false }));
+      setActivityTime(activityTimeSnap.val() || {});
 
-      // 2. Fetch first page of users (Limit 20)
-      const usersQuery = query(ref(database, 'users'), orderByKey(), limitToFirst(20));
-      const usersSnap = await get(usersQuery);
+      // Batch loading state updates
+      setLoadingStates({
+        submissions: false,
+        userProgress: false,
+        users: false,
+        courses: false,
+        students: false,
+        activityTime: false
+      });
 
-      const usersData = usersSnap.val() || {};
-      const userKeys = Object.keys(usersData);
-
-      setUsers(usersData);
-
-      // 3. fetchUserData and Smart Scan logic will be handled by a unified function
-      // checking the first batch manually to init
-      if (userKeys.length > 0) {
-        setLastUserKey(userKeys[userKeys.length - 1]);
-        setHasMore(userKeys.length === 20);
-        setScanStats(prev => ({ ...prev, scanned: userKeys.length }));
-
-        await loadUserData(userKeys);
-
-        // Check if we need to auto-load more because we found 0 students
-        // We can't easily check "found" count here synchronously due to setUsers being async-ish in updates
-        // But we can check filteredUsers in a useEffect or just let user click Load More if empty.
-        // Better: Let's run a "Smart Scan" init
-      } else {
-        setHasMore(false);
-      }
-
-      setLoading(false);
-      setLoadingStates(prev => ({ ...prev, details: false }));
       setRefreshing(false);
     } catch (error) {
-      console.error('Error fetching initial data:', error);
+      console.error('Error fetching data:', error);
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  const loadUserData = async (uids) => {
-    // In parallel, fetch submissions, progress, and activity for these specific UIDs
-    const promises = uids.map(async (uid) => {
-      const [subSnap, progSnap, actSnap] = await Promise.all([
-        get(ref(database, `Submissions/${uid}`)),
-        get(ref(database, `userprogress/${uid}`)),
-        get(ref(database, `Activitytime/${uid}`))
-      ]);
-
-      return {
-        uid,
-        submissions: subSnap.val(),
-        progress: progSnap.val(),
-        activity: actSnap.val()
-      };
-    });
-
-    const results = await Promise.all(promises);
-
-    setSubmissions(prev => {
-      const next = { ...prev };
-      results.forEach(r => { if (r.submissions) next[r.uid] = r.submissions; });
-      return next;
-    });
-
-    setUserProgress(prev => {
-      const next = { ...prev };
-      results.forEach(r => { if (r.progress) next[r.uid] = r.progress; });
-      return next;
-    });
-
-    setActivityTime(prev => {
-      const next = { ...prev };
-      results.forEach(r => { if (r.activity) next[r.uid] = r.activity; });
-      return next;
-    });
-  };
-
-  const loadMoreUsers = async () => {
-    if (!lastUserKey || loadingMore) return;
-
-    setLoadingMore(true);
-    try {
-      // Fetch next batch
-      const usersQuery = query(
-        ref(database, 'users'),
-        orderByKey(),
-        startAfter(lastUserKey),
-        limitToFirst(20)
-      );
-
-      const usersSnap = await get(usersQuery);
-      const usersData = usersSnap.val() || {};
-      const userKeys = Object.keys(usersData);
-
-      if (userKeys.length > 0) {
-        setUsers(prev => ({ ...prev, ...usersData }));
-        setLastUserKey(userKeys[userKeys.length - 1]);
-        setHasMore(userKeys.length === 20);
-        setScanStats(prev => ({ ...prev, scanned: prev.scanned + userKeys.length }));
-
-        await loadUserData(userKeys);
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      console.error("Error loading more users:", error);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
   const handleRefresh = async () => {
     setRefreshing(true);
-    // Reset Everything
-    setSubmissions({});
-    setUserProgress({});
-    setUsers({});
-    setActivityTime({});
-    setActivityTime({});
-    setLastUserKey(null);
-    setHasMore(true);
-    setScanStats({ scanned: 0, found: 0 });
-    await fetchInitialData();
+    await fetchAllData();
   };
 
   useEffect(() => {
-    fetchInitialData();
+    fetchAllData();
 
     // Disabled real-time listeners for better performance
     // Uncomment if you need real-time updates
@@ -290,8 +204,17 @@ const AdminMonitor = () => {
 
     // Pre-calculate total questions for each course (cache)
     const courseTotals = {};
+    const availableCoursesStats = {};
     availableCourses.forEach(course => {
       courseTotals[course] = calculateTotalQuestions(course);
+      availableCoursesStats[course] = {
+        name: course,
+        totalQuestions: courseTotals[course],
+        totalEnrolledUsers: studentEmailSet.size,
+        startedUsers: 0,
+        completedUsers: 0,
+        totalProgressSum: 0
+      };
     });
 
     // FIRST: Process ALL users from the users object
@@ -430,11 +353,19 @@ const AdminMonitor = () => {
           }
 
           if (totalQuestions > 0) {
+            const percentageRaw = (completed / totalQuestions) * 100;
             processedUsers[userId].courseProgress[course] = {
               completed,
               total: totalQuestions,
-              percentage: ((completed / totalQuestions) * 100).toFixed(1)
+              percentage: percentageRaw.toFixed(1)
             };
+            if (percentageRaw > 0) {
+              availableCoursesStats[course].startedUsers++;
+              availableCoursesStats[course].totalProgressSum += percentageRaw;
+              if (percentageRaw >= 100) {
+                availableCoursesStats[course].completedUsers++;
+              }
+            }
           } else {
             processedUsers[userId].courseProgress[course] = {
               completed: 0,
@@ -472,12 +403,19 @@ const AdminMonitor = () => {
       }
     });
 
+    // Compute average course stats
+    Object.values(availableCoursesStats).forEach(stat => {
+      stat.averageProgress = stat.totalEnrolledUsers > 0
+        ? (stat.totalProgressSum / stat.totalEnrolledUsers).toFixed(1)
+        : '0.0';
+    });
 
     return {
       users: Object.values(processedUsers),
-      courses: Array.from(availableCourses)
+      courses: Array.from(availableCourses),
+      courseStats: Object.values(availableCoursesStats)
     };
-  }, [submissions, userProgress, users, courses, activityTime]);
+  }, [submissions, userProgress, users, courses, activityTime, Students]);
 
   // Add new function to format percentage
   const formatPercentage = (value) => {
@@ -595,7 +533,7 @@ const AdminMonitor = () => {
     .find(([key, isLoading]) => isLoading)?.[0] || 'Complete';
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-[calc(100vh-4rem)] -mt-4 -mx-4 bg-gray-50 dark:bg-gray-900">
       {/* Top Loading Progress Bar - Thin Line */}
       {(loading || refreshing) && (
         <div className="fixed top-0 left-0 right-0 z-50 group">
@@ -653,258 +591,445 @@ const AdminMonitor = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <FiFilter className="mr-2 text-gray-600 dark:text-zinc-400" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-300">Filters & Sort</h2>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-zinc-300">Search</label>
-              {/* Search box */}
-              <div className="relative">
-                <FiSearch className="absolute left-3 top-3 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search users..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-zinc-300">Sort By</label>
-                {/* Sort dropdown */}
-                <select
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  value={filters.sortBy}
-                  onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
-                >
-                  <option value="name">Name</option>
-                  <option value="attempted">Total Attempted</option>
-                  <option value="overall">Overall Progress</option>
-                  <option value="activity">Last Activity</option>
-                  <option value="activeTime">Time Spent</option>
-                  {processedData.courses.map(course => (
-                    <option key={course} value={`course_${course}`}>{course} Progress</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex-none">
-                <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-zinc-300">Order</label>
-                {/* Order button */}
-                <button
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                  onClick={() => setFilters(prev => ({
-                    ...prev,
-                    sortOrder: prev.sortOrder === 'asc' ? 'desc' : 'asc'
-                  }))}
-                >
-                  {filters.sortOrder === 'asc' ? '↑ Ascending' : '↓ Descending'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Students Grid */}
-        <motion.div
-          layout
-          className={`grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 ${loading ? 'opacity-50 pointer-events-none' : ''}`}
-        >
-          <AnimatePresence>
-            {loading && filteredUsers.length === 0 ? (
-              // Skeleton loaders while loading
-              Array.from({ length: 6 }).map((_, idx) => (
-                <div key={`skeleton-${idx}`} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
-                      <div className="ml-3">
-                        <div className="h-4 w-32 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
-                        <div className="h-3 w-48 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="text-center">
-                        <div className="h-8 w-12 bg-gray-300 dark:bg-gray-600 rounded mx-auto mb-2"></div>
-                        <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded mx-auto"></div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full mb-4"></div>
-                  <div className="space-y-2">
-                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                    <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              filteredUsers.map(user => (
-                <motion.div
-                  key={user.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.3 }}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
-                >
-                  <div className="p-6">
-                    {/* User header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
-                          {user?.photo ? (
-                            <img
-                              src={user.photo}
-                              alt={user.name || "User"}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <FiUser className="text-blue-600" />
-                          )}
-                        </div>
-
-                        <div className="ml-3">
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-300">{user.name}</h3>
-                          <p className="text-sm text-gray-600 dark:text-zinc-400">{user.email}</p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setSelectedUser(user)}
-                        className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-                      >
-                        <FiEye size={20} />
-                      </button>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="grid grid-cols-3 gap-3 mb-4">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-gray-900 dark:text-white">{user.stats.attempted}</div>
-                        <div className="text-xs text-gray-600 dark:text-gray-300">Attempted</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-base font-semibold text-blue-600 dark:text-blue-400">
-                          {user.lastActivity ? (
-                            <div className="flex flex-col items-center">
-                              <FiActivity className="text-blue-600 dark:text-blue-400 mb-1" size={18} />
-                              <span className="text-[10px]">{new Date(user.lastActivity).toLocaleDateString()}</span>
-                              <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                                {new Date(user.lastActivity).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">No activity</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">Last Active</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-base font-semibold text-green-600 dark:text-green-400">
-                          {user.activeTime > 0 ? (
-                            <div className="flex flex-col items-center">
-                              <FiClock className="text-green-600 dark:text-green-400 mb-1" size={18} />
-                              <span className="text-xs font-bold">
-                                {Math.floor(user.activeTime / (1000 * 60 * 60))}h {Math.floor((user.activeTime % (1000 * 60 * 60)) / (1000 * 60))}m
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">0h 0m</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">Time Spent</div>
-                      </div>
-                    </div>
-
-                    {/* Overall Progress */}
-                    <div className="mt-4 mb-6">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Overall Progress</span>
-                        <span className="text-sm font-bold text-gray-900 dark:text-white">
-                          {user.overallProgress ? formatPercentage(user.overallProgress.percentage) : '0.0%'}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                        <div
-                          className="bg-blue-600 dark:bg-blue-500 h-3 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${user.overallProgress ?
-                              Math.min(100, Math.max(0, parseFloat(user.overallProgress.percentage) || 0)) : 0}%`
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-
-
-                    {/* Course Progress */}
-                    <div className="space-y-2">
-                      {sortedCourseNames.map(course => {
-                        const progress = user.courseProgress && user.courseProgress[course] ?
-                          user.courseProgress[course] : { percentage: '0.0', completed: 0, total: 0 };
-
-                        return (
-                          <div key={course} className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">{course}</span>
-                            <span className="font-medium text-blue-600 dark:text-blue-400">
-                              {formatPercentage(progress.percentage)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </AnimatePresence>
-        </motion.div>
-
-        {/* Load More Button */}
-        {hasMore && !loading && (
-          <div className="flex flex-col items-center mt-8 pb-8 gap-2">
+      {/* Tabs */}
+      <div className="max-w-7xl mx-auto px-4 mt-6">
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="-mb-px flex space-x-8">
             <button
-              onClick={loadMoreUsers}
-              disabled={loadingMore}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              onClick={() => setActiveTab('students')}
+              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'students'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
             >
-              {loadingMore ? (
-                <>
-                  <FiRefreshCw className="animate-spin" />
-                  Scanning DB...
-                </>
-              ) : (
-                'Load More Users'
-              )}
+              Students View
             </button>
-          </div>
-        )}
+            <button
+              onClick={() => setActiveTab('courses')}
+              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'courses'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+            >
+              Courses View
+            </button>
+          </nav>
+        </div>
       </div>
 
+      {/* Filters */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {activeTab === 'students' && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <FiFilter className="mr-2 text-gray-600 dark:text-zinc-400" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-zinc-300">Filters & Sort</h2>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-zinc-300">Search</label>
+                {/* Search box */}
+                <div className="relative">
+                  <FiSearch className="absolute left-3 top-3 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search users..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                    value={filters.search}
+                    onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-zinc-300">Sort By</label>
+                  {/* Sort dropdown */}
+                  <select
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    value={filters.sortBy}
+                    onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+                  >
+                    <option value="name">Name</option>
+                    <option value="attempted">Total Attempted</option>
+                    <option value="overall">Overall Progress</option>
+                    <option value="activity">Last Activity</option>
+                    <option value="activeTime">Time Spent</option>
+                    {processedData.courses.map(course => (
+                      <option key={course} value={`course_${course}`}>{course} Progress</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex-none">
+                  <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-zinc-300">Order</label>
+                  {/* Order button */}
+                  <button
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                    onClick={() => setFilters(prev => ({
+                      ...prev,
+                      sortOrder: prev.sortOrder === 'asc' ? 'desc' : 'asc'
+                    }))}
+                  >
+                    {filters.sortOrder === 'asc' ? '↑ Ascending' : '↓ Descending'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Content Area */}
+        {activeTab === 'students' ? (
+          <motion.div
+            layout
+            className={`grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+          >
+            <AnimatePresence>
+              {loading && filteredUsers.length === 0 ? (
+                // Skeleton loaders while loading
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <div key={`skeleton-${idx}`} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
+                        <div className="ml-3">
+                          <div className="h-4 w-32 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
+                          <div className="h-3 w-48 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="text-center">
+                          <div className="h-8 w-12 bg-gray-300 dark:bg-gray-600 rounded mx-auto mb-2"></div>
+                          <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded mx-auto"></div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full mb-4"></div>
+                    <div className="space-y-2">
+                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                filteredUsers.map(user => (
+                  <motion.div
+                    key={user.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.3 }}
+                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
+                  >
+                    <div className="p-6">
+                      {/* User header */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
+                            {user?.photo ? (
+                              <img
+                                src={user.photo}
+                                alt={user.name || "User"}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <FiUser className="text-blue-600" />
+                            )}
+                          </div>
+
+                          <div className="ml-3">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-300">{user.name}</h3>
+                            <p className="text-sm text-gray-600 dark:text-zinc-400">{user.email}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedUser(user)}
+                          className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                        >
+                          <FiEye size={20} />
+                        </button>
+                      </div>
+
+                      {/* Stats */}
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-gray-900 dark:text-white">{user.stats.attempted}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-300">Attempted</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-base font-semibold text-blue-600 dark:text-blue-400">
+                            {user.lastActivity ? (
+                              <div className="flex flex-col items-center">
+                                <FiActivity className="text-blue-600 dark:text-blue-400 mb-1" size={18} />
+                                <span className="text-[10px]">{new Date(user.lastActivity).toLocaleDateString()}</span>
+                                <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                                  {new Date(user.lastActivity).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">No activity</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">Last Active</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-base font-semibold text-green-600 dark:text-green-400">
+                            {user.activeTime > 0 ? (
+                              <div className="flex flex-col items-center">
+                                <FiClock className="text-green-600 dark:text-green-400 mb-1" size={18} />
+                                <span className="text-xs font-bold">
+                                  {Math.floor(user.activeTime / (1000 * 60 * 60))}h {Math.floor((user.activeTime % (1000 * 60 * 60)) / (1000 * 60))}m
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">0h 0m</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">Time Spent</div>
+                        </div>
+                      </div>
+
+                      {/* Overall Progress */}
+                      <div className="mt-4 mb-6">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Overall Progress</span>
+                          <span className="text-sm font-bold text-gray-900 dark:text-white">
+                            {user.overallProgress ? formatPercentage(user.overallProgress.percentage) : '0.0%'}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                          <div
+                            className="bg-blue-600 dark:bg-blue-500 h-3 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${user.overallProgress ?
+                                Math.min(100, Math.max(0, parseFloat(user.overallProgress.percentage) || 0)) : 0}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+
+
+                      {/* Course Progress */}
+                      <div className="space-y-2">
+                        {sortedCourseNames.map(course => {
+                          const progress = user.courseProgress && user.courseProgress[course] ?
+                            user.courseProgress[course] : { percentage: '0.0', completed: 0, total: 0 };
+
+                          return (
+                            <div key={course} className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600 dark:text-gray-400">{course}</span>
+                              <span className="font-medium text-blue-600 dark:text-blue-400">
+                                {formatPercentage(progress.percentage)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </AnimatePresence>
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {processedData.courseStats && processedData.courseStats.map(course => (
+              <motion.div
+                key={course.name}
+                layout
+                onClick={() => setSelectedCourseName(course.name)}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow p-6 cursor-pointer"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <FiBookOpen className="text-indigo-600" size={20} />
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-zinc-300">{course.name}</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{course.totalQuestions} Questions</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="text-center bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg py-3">
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{course.totalEnrolledUsers}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Enrolled</div>
+                  </div>
+                  <div className="text-center bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg py-3">
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{course.startedUsers}</div>
+                    <div className="text-xs text-blue-800 dark:text-blue-300 mt-1">Started</div>
+                  </div>
+                  <div className="text-center bg-green-50 dark:bg-green-900/20 p-2 rounded-lg py-3">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">{course.completedUsers}</div>
+                    <div className="text-xs text-green-800 dark:text-green-300 mt-1">Completed</div>
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Average Progress ({course.totalEnrolledUsers} students)</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      {formatPercentage(course.averageProgress)}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                    <div
+                      className="bg-indigo-600 dark:bg-indigo-500 h-3 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, parseFloat(course.averageProgress) || 0))}%`
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+            {(!processedData.courseStats || processedData.courseStats.length === 0) && (
+              <div className="col-span-full py-12 text-center text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                <FiBookOpen className="mx-auto h-12 w-12 mb-4 text-gray-300 dark:text-gray-600" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-200 mb-2">No Courses Found</h3>
+                <p>Course statistics will appear here when courses are available and users start answering questions.</p>
+              </div>
+            )}
+          </div>
+        )
+        }
+      </div >
+
       {/* User Detail Modal */}
-      {selectedUser && (
+      {
+        selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    {selectedUser.name} - Submissions
+                  </h2>
+                  <button
+                    onClick={() => setSelectedUser(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <FiXCircle size={24} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="space-y-4">
+                  {getUserSubmissions(selectedUser).length > 0 ? (
+                    getUserSubmissions(selectedUser).map((submission, index) => (
+                      <div key={index} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-3 h-3 rounded-full ${submission.status === 'correct' ? 'bg-green-500' :
+                              submission.status === 'wrong' ? 'bg-red-500' :
+                                'bg-gray-400'
+                              }`}></div>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">
+                              {submission.course} - {submission.subcourse} - {submission.question}
+                            </span>
+                            <span className={`text-xs px-2 py-1 rounded-full ${submission.type === 'mcq'
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                              }`}>
+                              {submission.type === 'mcq' ? 'MCQ' : submission.language || 'CODE'}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {submission.timestamp !== 'mcq-entry' && (
+                              <span className="text-sm text-gray-500 dark:text-gray-400">
+                                {formatCustomTimestamp(submission.timestamp)}
+                              </span>
+                            )}
+                            {submission.type !== 'mcq' && submission.code && (
+                              <button
+                                onClick={() => setSelectedSubmission(submission)}
+                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                              >
+                                <FiCode />
+                              </button>
+                            )}
+                            {submission.type === 'mcq' && (
+                              <span className="text-sm text-gray-500 dark:text-gray-400">
+                                MCQ Answer
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                      No submissions or progress found for this user.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )
+      }
+
+      {/* Code Viewer Modal */}
+      {
+        selectedSubmission && selectedSubmission.type !== 'mcq' && selectedSubmission.code && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      {selectedSubmission.question}
+                    </h2>
+                    <p className="text-sm text-gray-600">
+                      {selectedSubmission.language} - {selectedSubmission.status}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedSubmission(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <FiXCircle size={24} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                  <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
+                    {selectedSubmission.code}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Course Detail Modal */}
+      {selectedCourseName && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {selectedUser.name} - Submissions
+                  {selectedCourseName} - Student Progress
                 </h2>
                 <button
-                  onClick={() => setSelectedUser(null)}
+                  onClick={() => setSelectedCourseName(null)}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <FiXCircle size={24} />
@@ -914,94 +1039,62 @@ const AdminMonitor = () => {
 
             <div className="p-6">
               <div className="space-y-4">
-                {getUserSubmissions(selectedUser).length > 0 ? (
-                  getUserSubmissions(selectedUser).map((submission, index) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-3 h-3 rounded-full ${submission.status === 'correct' ? 'bg-green-500' :
-                            submission.status === 'wrong' ? 'bg-red-500' :
-                              'bg-gray-400'
-                            }`}></div>
-                          <span className="font-medium text-gray-900 dark:text-gray-100">
-                            {submission.course} - {submission.subcourse} - {submission.question}
-                          </span>
-                          <span className={`text-xs px-2 py-1 rounded-full ${submission.type === 'mcq'
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                            }`}>
-                            {submission.type === 'mcq' ? 'MCQ' : submission.language || 'CODE'}
-                          </span>
+                {processedData.users
+                  .filter(user => user.courseProgress[selectedCourseName] && parseFloat(user.courseProgress[selectedCourseName].percentage) > 0)
+                  .sort((a, b) => parseFloat(b.courseProgress[selectedCourseName].percentage) - parseFloat(a.courseProgress[selectedCourseName].percentage))
+                  .map(user => {
+                    const progress = user.courseProgress[selectedCourseName];
+                    return (
+                      <div key={user.id} className="border rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center w-full sm:w-1/3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                            {user.photo ? (
+                              <img src={user.photo} alt={user.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <FiUser className="text-blue-600" />
+                            )}
+                          </div>
+                          <div className="ml-3 truncate">
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-zinc-300 truncate">{user.name}</h3>
+                            <p className="text-xs text-gray-600 dark:text-zinc-400 truncate">{user.email}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          {submission.timestamp !== 'mcq-entry' && (
-                            <span className="text-sm text-gray-500 dark:text-gray-400">
-                              {formatCustomTimestamp(submission.timestamp)}
+                        <div className="w-full sm:flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Progress</span>
+                            <span className="text-xs font-bold text-gray-900 dark:text-white">
+                              {formatPercentage(progress.percentage)}
                             </span>
-                          )}
-                          {submission.type !== 'mcq' && submission.code && (
-                            <button
-                              onClick={() => setSelectedSubmission(submission)}
-                              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                            >
-                              <FiCode />
-                            </button>
-                          )}
-                          {submission.type === 'mcq' && (
-                            <span className="text-sm text-gray-500 dark:text-gray-400">
-                              MCQ Answer
-                            </span>
-                          )}
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.max(0, parseFloat(progress.percentage) || 0))}%` }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1 text-right">{progress.completed} / {progress.total} Completed</div>
                         </div>
+                        <button
+                          onClick={() => {
+                            setSelectedCourseName(null);
+                            setSelectedUser(user);
+                          }}
+                          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md text-sm transition-colors whitespace-nowrap w-full sm:w-auto"
+                        >
+                          View Details
+                        </button>
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-                    No submissions or progress found for this user.
-                  </div>
+                    );
+                  })}
+                {processedData.users.filter(user => user.courseProgress[selectedCourseName] && parseFloat(user.courseProgress[selectedCourseName].percentage) > 0).length === 0 && (
+                  <div className="text-center text-gray-500 py-6">No students have started this course yet.</div>
                 )}
               </div>
             </div>
-
           </div>
         </div>
       )}
-
-      {/* Code Viewer Modal */}
-      {selectedSubmission && selectedSubmission.type !== 'mcq' && selectedSubmission.code && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">
-                    {selectedSubmission.question}
-                  </h2>
-                  <p className="text-sm text-gray-600">
-                    {selectedSubmission.language} - {selectedSubmission.status}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedSubmission(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <FiXCircle size={24} />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
-                  {selectedSubmission.code}
-                </pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </div >
   );
 };
 

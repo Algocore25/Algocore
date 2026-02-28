@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FiTrash2, FiUserPlus, FiMail, FiUpload, FiDownload, FiUsers, FiCheck, FiX } from 'react-icons/fi';
+import { FiTrash2, FiUserPlus, FiMail, FiUpload, FiDownload, FiUsers, FiCheck, FiX, FiGlobe } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { ref, get, set, remove, push, update } from 'firebase/database';
 import { database } from '../../firebase';
@@ -21,6 +21,8 @@ const Students = ({ test, setTest, testId }) => {
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name'); // 'name' or 'email'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+  const [allowAllStudents, setAllowAllStudents] = useState(false);
+  const [isTogglingAllowAll, setIsTogglingAllowAll] = useState(false);
 
   // Fetch students
   const fetchStudents = useCallback(async () => {
@@ -75,8 +77,21 @@ const Students = ({ test, setTest, testId }) => {
       setLoading(false);
     };
 
+    const loadAllowAll = async () => {
+      try {
+        const allowAllRef = ref(database, `Exam/${testId}/allowAllStudents`);
+        const snapshot = await get(allowAllRef);
+        if (snapshot.exists()) {
+          setAllowAllStudents(snapshot.val() === true);
+        }
+      } catch (err) {
+        console.error('Error loading allowAllStudents:', err);
+      }
+    };
+
     if (testId) {
       loadStudents();
+      loadAllowAll();
     }
   }, [testId, fetchStudents]);
 
@@ -94,7 +109,7 @@ const Students = ({ test, setTest, testId }) => {
       }
 
       const studentEmails = studentsSnapshot.val();
-      
+
       if (!Array.isArray(studentEmails)) {
         toast.error('Invalid students data format');
         return;
@@ -107,7 +122,7 @@ const Students = ({ test, setTest, testId }) => {
 
       // Map emails to student objects with names
       const studentsWithNames = [];
-      
+
       for (const email of studentEmails) {
         // Find user by email in users collection
         const userEntry = Object.entries(usersData).find(
@@ -130,6 +145,77 @@ const Students = ({ test, setTest, testId }) => {
       setLoadingAllStudents(false);
     }
   }, []);
+
+  // Toggle allow all students
+  const toggleAllowAll = async (value) => {
+    setIsTogglingAllowAll(true);
+    try {
+      const allowAllRef = ref(database, `Exam/${testId}/allowAllStudents`);
+      await set(allowAllRef, value);
+      setAllowAllStudents(value);
+      toast.success(value ? 'All students can now access this exam' : 'Only eligible students can access this exam');
+    } catch (error) {
+      console.error('Error toggling allowAllStudents:', error);
+      toast.error('Failed to update setting');
+    } finally {
+      setIsTogglingAllowAll(false);
+    }
+  };
+
+  // Add all students from database at once
+  const addAllStudentsFromDB = async () => {
+    setIsSaving(true);
+    try {
+      const studentsRef = ref(database, 'Students');
+      const studentsSnapshot = await get(studentsRef);
+      if (!studentsSnapshot.exists()) {
+        toast.error('No students found in database');
+        return;
+      }
+      const studentEmails = studentsSnapshot.val();
+      if (!Array.isArray(studentEmails)) {
+        toast.error('Invalid students data format');
+        return;
+      }
+
+      const usersRef = ref(database, 'users');
+      const usersSnapshot = await get(usersRef);
+      const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
+
+      const eligibleRef = ref(database, `Exam/${testId}/Eligible`);
+      const snapshot = await get(eligibleRef);
+      const currentStudents = snapshot.exists() ? snapshot.val() : {};
+
+      let addedCount = 0;
+      let skippedCount = 0;
+      const newStudents = { ...currentStudents };
+
+      for (const email of studentEmails) {
+        if (Object.values(currentStudents).includes(email)) {
+          skippedCount++;
+          continue;
+        }
+        const userEntry = Object.entries(usersData).find(([uid, userData]) => userData.email === email);
+        const name = userEntry ? userEntry[1].name || email : email;
+        newStudents[name] = email;
+        addedCount++;
+      }
+
+      if (addedCount > 0) {
+        await set(eligibleRef, newStudents);
+        setManualStudents(newStudents);
+        setEnrolledStudents(Object.keys(newStudents));
+        toast.success(`Added ${addedCount} student(s)${skippedCount > 0 ? `. Skipped ${skippedCount} duplicate(s).` : ''}`);
+      } else {
+        toast.success('All students already added');
+      }
+    } catch (error) {
+      console.error('Error adding all students:', error);
+      toast.error('Failed to add all students');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Add selected students from the student selector
   const addSelectedStudents = useCallback(async () => {
@@ -384,6 +470,51 @@ const Students = ({ test, setTest, testId }) => {
 
   return (
     <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+      {/* Allow All Students Toggle */}
+      <div className="mb-6 p-4 rounded-lg border-2 border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FiGlobe className="h-5 w-5 text-blue-500" />
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Allow All Students</h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400">When enabled, any registered student can access this exam without being individually added.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => toggleAllowAll(!allowAllStudents)}
+            disabled={isTogglingAllowAll}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${allowAllStudents ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+              } ${isTogglingAllowAll ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${allowAllStudents ? 'translate-x-6' : 'translate-x-1'
+                }`}
+            />
+          </button>
+        </div>
+        {allowAllStudents && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-md">
+            <FiCheck className="h-3.5 w-3.5" />
+            <span>All registered students can access this exam</span>
+          </div>
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button
+          onClick={addAllStudentsFromDB}
+          disabled={isSaving}
+          className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors"
+        >
+          {isSaving ? (
+            <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-b-2 border-white mr-1.5"></div>Adding...</>
+          ) : (
+            <><FiUsers className="mr-1.5 h-3.5 w-3.5" />Add All Students from Database</>
+          )}
+        </button>
+      </div>
+
       {/* Search and Filter */}
       <div className="mb-4 flex flex-col sm:flex-row gap-3">
         <div className="flex-1">
@@ -499,7 +630,7 @@ const Students = ({ test, setTest, testId }) => {
                       onClick={() => {
                         const filteredEmails = new Set(
                           allStudents
-                            .filter(s => 
+                            .filter(s =>
                               s.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                               s.email.toLowerCase().includes(studentSearchQuery.toLowerCase())
                             )
@@ -568,7 +699,7 @@ const Students = ({ test, setTest, testId }) => {
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {allStudents
-                  .filter(student => 
+                  .filter(student =>
                     student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                     student.email.toLowerCase().includes(studentSearchQuery.toLowerCase())
                   )
@@ -584,7 +715,7 @@ const Students = ({ test, setTest, testId }) => {
                   .length > 0 ? (
                   <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {allStudents
-                      .filter(student => 
+                      .filter(student =>
                         student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                         student.email.toLowerCase().includes(studentSearchQuery.toLowerCase())
                       )
@@ -598,21 +729,21 @@ const Students = ({ test, setTest, testId }) => {
                         }
                       })
                       .map((student) => (
-                      <li key={student.email} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
-                        <label className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedStudents.has(student.email)}
-                            onChange={() => toggleStudentSelection(student.email)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <div className="ml-3 flex-1">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">{student.name}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{student.email}</p>
-                          </div>
-                        </label>
-                      </li>
-                    ))}
+                        <li key={student.email} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <label className="flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedStudents.has(student.email)}
+                              onChange={() => toggleStudentSelection(student.email)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <div className="ml-3 flex-1">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{student.name}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{student.email}</p>
+                            </div>
+                          </label>
+                        </li>
+                      ))}
                   </ul>
                 ) : (
                   <div className="p-4 text-center text-gray-500 dark:text-gray-400">

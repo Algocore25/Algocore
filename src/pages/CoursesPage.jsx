@@ -1,54 +1,57 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FaPython, FaJava, FaJs, FaCuttlefish } from "react-icons/fa";
-import { SiCplusplus, SiC } from "react-icons/si";
+import { FiClock, FiBookOpen } from 'react-icons/fi';
+import AnimatedBackground from '../components/AnimatedBackground';
 import { ref, get, child } from 'firebase/database';
 import { database } from '../firebase';
 import LoadingPage from './LoadingPage';
 import { useAuth } from '../context/AuthContext';
-
-const iconMap = {
-  python: <FaPython className="w-12 h-12 text-[#3776AB]" />,
-  java: <FaJava className="w-12 h-12 text-[#007396]" />,
-  javascript: <FaJs className="w-12 h-12 text-[#F7DF1E]" />,
-  c: <SiC className="w-12 h-12 text-[#555555]" />,
-  cpp: <SiCplusplus className="w-12 h-12 text-[#00599C]" />,
-};
+import { COURSE_ICONS, getCourseIcon } from '../utils/courseIcons';
 
 const CourseCard = ({ course }) => (
+  <Link
+    to={`/course/${course.id}`}
+    className="group relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-[2rem] p-6 md:p-8 border border-white/40 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 h-full flex flex-col overflow-hidden"
+  >
+    {/* Decorative gradient blur behind the card */}
+    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-
-
-  <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all duration-300 h-full flex flex-col hover:border-blue-400 dark:hover:border-blue-500">
-    <div className="text-blue-600 dark:text-blue-400 mb-4">
-      {iconMap[course.id] || <FaCuttlefish className="w-12 h-12" />}
-    </div>
-    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{course.title}</h3>
-    <p className="text-gray-600 dark:text-gray-400 mb-4 flex-grow">{course.description}</p>
-
-    <div className="mt-2 mb-4">
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-gray-600 dark:text-gray-300">Progress</span>
-        <span className="font-medium">{Math.round(course.progress || 0)}%</span>
+    <div className="mb-6 z-10 flex items-start justify-between">
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center border border-blue-100/50 dark:border-blue-800/30 transform group-hover:scale-105 group-hover:rotate-3 transition-transform duration-300 shadow-sm">
+        {getCourseIcon(course.icon || course.id, "w-8 h-8")}
       </div>
-      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+      <div className="w-10 h-10 rounded-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300 shadow-sm">
+        <svg className="w-5 h-5 translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </div>
+
+    <div className="z-10 flex-grow mb-6">
+      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+        {course.title}
+      </h3>
+      <p className="text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-2">
+        {course.description}
+      </p>
+    </div>
+
+    <div className="mt-auto z-10">
+      <div className="flex justify-between items-end text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+        <span className="uppercase tracking-wider text-xs text-gray-500 dark:text-gray-400">Completion</span>
+        <span className="text-blue-600 dark:text-blue-400 text-base">{Math.round(course.progress || 0)}%</span>
+      </div>
+      <div className="w-full bg-gray-200/60 dark:bg-gray-700/60 rounded-full h-2.5 overflow-hidden">
         <div
-          className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+          className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-700 ease-out relative"
           style={{ width: `${Math.round(course.progress || 0)}%` }}
-        ></div>
+        >
+          {/* Subtle shine on progress bar */}
+          <div className="absolute top-0 right-0 bottom-0 left-0 bg-gradient-to-b from-white/20 to-transparent" />
+        </div>
       </div>
     </div>
-
-    <Link
-      to={`/course/${course.id}`}
-      className="inline-flex items-center text-blue-600 dark:text-blue-400 font-medium hover:text-blue-800 dark:hover:text-blue-300 transition-colors mt-auto"
-    >
-      {(course.progress || 0) > 0 ? 'Continue Learning' : 'Start Learning'}
-      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-      </svg>
-    </Link>
-  </div>
+  </Link>
 );
 
 const CoursesPage = () => {
@@ -83,18 +86,15 @@ const CoursesPage = () => {
         const snapshot = await get(child(dbRef, 'Courses'));
 
         if (snapshot.exists()) {
-          let data = snapshot.val();
-
-          data = data.filter((course) => {
-            return course.disabled !== true;
-          });
-
-          setCourses(data);
+          const data = snapshot.val();
+          const dataArr = Array.isArray(data) ? data : Object.values(data);
+          const validCourses = dataArr.filter(Boolean);
+          setCourses(validCourses);
 
           // If user logged in, compute progress for each course
-          if (user && Array.isArray(data)) {
+          if (user && validCourses.length > 0) {
             const enriched = await Promise.all(
-              data.map(async (c) => {
+              validCourses.map(async (c) => {
                 try {
                   const [lessonsSnap, progressSnap] = await Promise.all([
                     get(child(dbRef, `AlgoCore/${c.id}/lessons`)),
@@ -127,6 +127,31 @@ const CoursesPage = () => {
     fetchCourses();
   }, [user]);
 
+  // Track scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      sessionStorage.setItem('coursesPageScrollPos', window.scrollY.toString());
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Restore scroll position after data loads
+  useEffect(() => {
+    if (!loading) {
+      const savedPosition = sessionStorage.getItem('coursesPageScrollPos');
+      if (savedPosition) {
+        // A small timeout ensures the DOM has laid out the new elements before scrolling
+        setTimeout(() => {
+          window.scrollTo({
+            top: parseInt(savedPosition, 10),
+            behavior: 'instant'
+          });
+        }, 0);
+      }
+    }
+  }, [loading]);
+
   if (loading) {
     return (
       <LoadingPage />
@@ -145,32 +170,58 @@ const CoursesPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 relative overflow-x-hidden flex flex-col">
-      <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern dark:bg-grid-pattern"></div>
-      <main className="relative flex-grow z-10">
+    <div className="min-h-screen relative overflow-x-hidden flex flex-col w-full">
+      <AnimatedBackground />
+      <main className="relative flex-grow z-10 w-full">
         {/* Hero Section */}
-        <section className="flex items-center justify-center py-16 px-4 sm:px-6 lg:px-8">
-          <div className="w-full flex flex-col items-center justify-center text-center">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-2">
-              Explore Our Courses
+        <section className="flex flex-col items-center justify-center py-20 px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-4xl flex flex-col items-center justify-center text-center">
+            <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium text-sm mb-8 border border-blue-200/60 dark:border-blue-800/60 shadow-sm backdrop-blur-sm">
+              <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400 mr-2 animate-pulse" />
+              Interactive Learning Ecosystem
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-gray-900 dark:text-white mb-6 tracking-tight leading-tight">
+              Master Programming <br className="hidden md:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600">Through Practice</span>
             </h1>
-            <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-blue-600 dark:text-blue-400 mb-4">
-              Master Programming Through Practice
-            </h2>
-            <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto mb-8">
-              No boring lectures - just real coding challenges to level up your skills
+
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto mb-4 leading-relaxed font-light">
+              No boring lectures — just immersive, hands-on coding challenges designed to level up your engineering skills instantly.
             </p>
           </div>
         </section>
 
         {/* Courses Section */}
         <section className="relative z-10 py-8 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {courses.map(course => (
-                <CourseCard key={course.id} course={course} />
-              ))}
-            </div>
+          <div className="max-w-7xl mx-auto space-y-16">
+            {Object.entries((courses || []).reduce((acc, course) => {
+              if (!course) return acc;
+              let section = course.section;
+              if (!section || section.trim() === '') return acc; // Skip courses with empty/no valid sections explicitly requested
+
+              if (!acc[section]) acc[section] = [];
+              acc[section].push(course);
+              return acc;
+            }, {})).map(([sectionName, sectionCourses]) => {
+              if (sectionCourses.length === 0) return null;
+
+              return (
+                <div key={sectionName}>
+                  <div className="flex items-center mb-10 mt-6 lg:mt-10">
+                    <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white pr-6 tracking-tight">
+                      {sectionName}
+                    </h3>
+                    <div className="flex-grow h-px bg-gradient-to-r from-gray-200 to-transparent dark:from-gray-700 dark:to-transparent"></div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 xl:gap-10">
+                    {sectionCourses.map(course => (
+                      <CourseCard key={course.id} course={course} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
 

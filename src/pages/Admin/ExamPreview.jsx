@@ -38,28 +38,32 @@ const ExamPreview = ({ test, testId, duration }) => {
         // Get configuration for questions per type
         const config = test?.configure?.questionsPerType || {};
         const mcqCount = parseInt(config.mcq) || 0;
+        const msqCount = parseInt(config.msq) || 0;
         const programmingCount = parseInt(config.programming) || 0;
         const sqlCount = parseInt(config.sql) || 0;
-        const otherCount = parseInt(config.other) || 0;
+        const natCount = parseInt(config.nat) || 0;
 
         // Group questions by type
         const questionsByType = {
           mcq: [],
+          msq: [],
           programming: [],
           sql: [],
-          other: []
+          nat: []
         };
 
         allQuestionsData.forEach(q => {
-          const type = q.type?.toLowerCase() || 'other';
+          const type = q.type?.toLowerCase() || '';
           if (type === 'mcq') {
             questionsByType.mcq.push(q);
+          } else if (type === 'msq') {
+            questionsByType.msq.push(q);
           } else if (type === 'programming') {
             questionsByType.programming.push(q);
           } else if (type === 'sql') {
             questionsByType.sql.push(q);
-          } else {
-            questionsByType.other.push(q);
+          } else if (type === 'numeric' || type === 'nat') {
+            questionsByType.nat.push(q);
           }
         });
 
@@ -85,6 +89,14 @@ const ExamPreview = ({ test, testId, duration }) => {
           selectedIds.push(...selected.map(q => q.id));
         }
 
+        // Select MSQ questions
+        if (msqCount > 0) {
+          const shuffled = shuffle(questionsByType.msq);
+          const selected = shuffled.slice(0, msqCount);
+          selectedQuestions.push(...selected);
+          selectedIds.push(...selected.map(q => q.id));
+        }
+
         // Select Programming questions
         if (programmingCount > 0) {
           const shuffled = shuffle(questionsByType.programming);
@@ -101,10 +113,10 @@ const ExamPreview = ({ test, testId, duration }) => {
           selectedIds.push(...selected.map(q => q.id));
         }
 
-        // Select Other questions
-        if (otherCount > 0) {
-          const shuffled = shuffle(questionsByType.other);
-          const selected = shuffled.slice(0, otherCount);
+        // Select NAT questions
+        if (natCount > 0) {
+          const shuffled = shuffle(questionsByType.nat);
+          const selected = shuffled.slice(0, natCount);
           selectedQuestions.push(...selected);
           selectedIds.push(...selected.map(q => q.id));
         }
@@ -195,7 +207,7 @@ const ExamPreview = ({ test, testId, duration }) => {
   };
 
   return (
-    <div ref={containerRef} className="h-screen bg-gray-50 dark:bg-gray-900">
+    <div ref={containerRef} className="h-[calc(100vh-11rem)] min-h-[500px] bg-gray-50 dark:bg-gray-900 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
       {!isFullscreen ? (
         <div className="flex items-center justify-center h-full">
           <div className="max-w-2xl mx-auto p-8 bg-white dark:bg-gray-800 rounded-xl shadow-2xl text-center">
@@ -224,10 +236,15 @@ const ExamPreview = ({ test, testId, duration }) => {
                 {test?.configure?.questionsPerType && (
                   <div className="pt-2 border-t border-blue-200 dark:border-blue-700">
                     <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">Question Distribution:</p>
-                    <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-5 gap-2 text-xs">
                       {parseInt(test.configure.questionsPerType.mcq) > 0 && (
                         <div className="bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
                           <span className="font-medium text-green-700 dark:text-green-300">MCQ: {test.configure.questionsPerType.mcq}</span>
+                        </div>
+                      )}
+                      {parseInt(test.configure.questionsPerType.msq) > 0 && (
+                        <div className="bg-indigo-100 dark:bg-indigo-900/30 px-2 py-1 rounded">
+                          <span className="font-medium text-indigo-700 dark:text-indigo-300">MSQ: {test.configure.questionsPerType.msq}</span>
                         </div>
                       )}
                       {parseInt(test.configure.questionsPerType.programming) > 0 && (
@@ -240,9 +257,9 @@ const ExamPreview = ({ test, testId, duration }) => {
                           <span className="font-medium text-yellow-700 dark:text-yellow-300">SQL: {test.configure.questionsPerType.sql}</span>
                         </div>
                       )}
-                      {parseInt(test.configure.questionsPerType.other) > 0 && (
-                        <div className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                          <span className="font-medium text-gray-700 dark:text-gray-300">Other: {test.configure.questionsPerType.other}</span>
+                      {parseInt(test.configure.questionsPerType.nat) > 0 && (
+                        <div className="bg-orange-100 dark:bg-orange-900/30 px-2 py-1 rounded">
+                          <span className="font-medium text-orange-700 dark:text-orange-300">NAT: {test.configure.questionsPerType.nat}</span>
                         </div>
                       )}
                     </div>
@@ -267,123 +284,121 @@ const ExamPreview = ({ test, testId, duration }) => {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
-      {/* Navbar */}
-      <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">{test?.name || 'Exam Preview'}</h1>
-          <span className="px-3 py-1 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
-            PREVIEW MODE
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-4">
-          {/* Duration */}
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">{duration} min</span>
-          </div>
-
-          {/* Progress */}
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-              {activeQuestion + 1} / {previewQuestions.length}
-            </span>
-            <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300"
-                style={{ width: `${((activeQuestion + 1) / previewQuestions.length) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={goToPreviousQuestion}
-              disabled={activeQuestion === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <FiChevronLeft className="w-4 h-4" />
-              <span>Previous</span>
-            </button>
-            <button
-              onClick={goToNextQuestion}
-              disabled={activeQuestion === previewQuestions.length - 1}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <span>Next</span>
-              <FiChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* Question Navigation Sidebar */}
-        {isMenuOpen && (
-          <div className="w-64 bg-white dark:bg-gray-800 shadow-lg border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="font-medium text-gray-900 dark:text-white">Questions</h3>
+        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
+          {/* Navbar */}
+          <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center space-x-4">
               <button
-                onClick={() => setIsMenuOpen(false)}
-                className="p-1 text-gray-400 hover:text-gray-500"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none"
               >
-                <FiX size={20} />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
               </button>
+              <h1 className="text-lg font-semibold text-gray-900 dark:text-white">{test?.name || 'Exam Preview'}</h1>
+              <span className="px-3 py-1 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
+                PREVIEW MODE
+              </span>
             </div>
-            <div>
-              {previewQuestions.map((question, index) => (
+
+            <div className="flex items-center space-x-4">
+              {/* Duration */}
+              <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">{duration} min</span>
+              </div>
+
+              {/* Progress */}
+              <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  {activeQuestion + 1} / {previewQuestions.length}
+                </span>
+                <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300"
+                    style={{ width: `${((activeQuestion + 1) / previewQuestions.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Navigation */}
+              <div className="flex items-center space-x-2">
                 <button
-                  key={index}
-                  onClick={() => {
-                    goToQuestion(index);
-                    setIsMenuOpen(false);
-                  }}
-                  className={`w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-                    activeQuestion === index
-                      ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
-                      : 'text-gray-700 dark:text-gray-300'
-                  }`}
+                  onClick={goToPreviousQuestion}
+                  disabled={activeQuestion === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <div className="flex items-center">
-                    <span className={`w-6 h-6 flex items-center justify-center rounded-full mr-2 text-sm font-medium ${
-                      activeQuestion === index
-                        ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-200'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                    }`}>
-                      {index + 1}
-                    </span>
-                    <div className="flex flex-col flex-1">
-                      <span className="truncate text-sm font-medium">
-                        {question.title || `Question ${index + 1}`}
-                      </span>
-                      <span className="text-[11px] uppercase tracking-wide font-semibold text-purple-600 dark:text-purple-300">
-                        {question.type}
-                      </span>
-                    </div>
-                  </div>
+                  <FiChevronLeft className="w-4 h-4" />
+                  <span>Previous</span>
                 </button>
-              ))}
+                <button
+                  onClick={goToNextQuestion}
+                  disabled={activeQuestion === previewQuestions.length - 1}
+                  className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <span>Next</span>
+                  <FiChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </nav>
+
+          <div className="flex flex-1 overflow-hidden">
+            {/* Question Navigation Sidebar */}
+            {isMenuOpen && (
+              <div className="w-64 bg-white dark:bg-gray-800 shadow-lg border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <h3 className="font-medium text-gray-900 dark:text-white">Questions</h3>
+                  <button
+                    onClick={() => setIsMenuOpen(false)}
+                    className="p-1 text-gray-400 hover:text-gray-500"
+                  >
+                    <FiX size={20} />
+                  </button>
+                </div>
+                <div>
+                  {previewQuestions.map((question, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        goToQuestion(index);
+                        setIsMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${activeQuestion === index
+                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
+                        : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                    >
+                      <div className="flex items-center">
+                        <span className={`w-6 h-6 flex items-center justify-center rounded-full mr-2 text-sm font-medium ${activeQuestion === index
+                          ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-200'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                          }`}>
+                          {index + 1}
+                        </span>
+                        <div className="flex flex-col flex-1">
+                          <span className="truncate text-sm font-medium">
+                            {question.title || `Question ${index + 1}`}
+                          </span>
+                          <span className="text-[11px] uppercase tracking-wide font-semibold text-purple-600 dark:text-purple-300">
+                            {question.type}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <DynamicComponent question={questionIds[activeQuestion]} />
             </div>
           </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <DynamicComponent question={questionIds[activeQuestion]} />
-        </div>
-      </div>
         </div>
       )}
     </div>

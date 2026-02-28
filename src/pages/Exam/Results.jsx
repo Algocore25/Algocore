@@ -37,11 +37,15 @@ const Results = () => {
                 console.log(dataArray);
 
                 // ✅ Filter: Only eligible AND completed exams
-                const filtered = dataArray.filter(test =>
-                    Array.isArray(Object.values(test.Eligible || {} )) &&
-                    Object.values(test.Eligible || {} ).includes(user?.email) &&
-                    (test.Properties.status === "Completed")
-                );
+                const filtered = dataArray.filter(test => {
+                    const isAllowAll = test.allowAllStudents === true;
+                    const isEligible = Array.isArray(Object.values(test.Eligible || {})) &&
+                        Object.values(test.Eligible || {}).includes(user?.email);
+                    return (
+                        (isAllowAll || isEligible) &&
+                        (test.Properties.status === "Completed")
+                    );
+                });
 
                 console.log("Eligible & Completed:", filtered);
 

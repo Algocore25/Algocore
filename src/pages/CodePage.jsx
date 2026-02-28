@@ -6,6 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useParams, useNavigate } from "react-router-dom";
 
 import { Icons, languageTemplates } from './constants';
+import { registerIntelliSense, INTELLISENSE_OPTIONS } from '../hooks/useMonacoIntelliSense';
 
 import { database } from "../firebase";
 import { ref, get, set, child } from "firebase/database";
@@ -26,7 +27,7 @@ import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry
 function CodePage({ data, navigation }) {
   const [code, setCode] = useState("");
   const [runsubmit, setRunSubmit] = useState('none');
-  
+
   // Prevent copy, cut, and paste
   useEffect(() => {
     const preventDefault = (e) => {
@@ -34,7 +35,7 @@ function CodePage({ data, navigation }) {
       e.stopPropagation();
       return false;
     };
-    
+
     // Disable right-click context menu
     const preventContextMenu = (e) => {
       e.preventDefault();
@@ -47,13 +48,13 @@ function CodePage({ data, navigation }) {
       // Block all paste events
       e.preventDefault();
       e.stopPropagation();
-      
+
       // Clear clipboard data if possible
       if (e.clipboardData) {
         e.clipboardData.setData('text/plain', '');
         e.clipboardData.clearData();
       }
-      
+
       // Show a message to the user
       toast.error('Copy-paste is disabled in this environment');
       return false;
@@ -65,44 +66,44 @@ function CodePage({ data, navigation }) {
       e.stopPropagation();
       return false;
     };
-    
+
     // Add event listeners with capture phase
     const options = { capture: true, passive: false };
-    
+
     // Block copy/paste events
     document.addEventListener('copy', preventDefault, options);
     document.addEventListener('cut', preventDefault, options);
     document.addEventListener('paste', blockPaste, options);
     document.addEventListener('contextmenu', preventContextMenu, options);
-    
+
     // Block drag and drop
     document.addEventListener('drop', blockDragDrop, options);
     document.addEventListener('dragover', blockDragDrop, options);
-    
+
     // Disable keyboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+X, etc.)
     const preventShortcuts = (e) => {
       const isPaste = (e.ctrlKey || e.metaKey) && ['v', 'V', 'Insert'].includes(e.key);
       const isCopy = (e.ctrlKey || e.metaKey) && ['c', 'C', 'c', 'C', 'Insert', 'F3', 'F16', 'F24'].includes(e.key);
       const isCut = (e.ctrlKey || e.metaKey) && ['x', 'X', 'Delete'].includes(e.key);
-      
+
       if (isPaste || isCopy || isCut) {
         e.preventDefault();
         e.stopPropagation();
-        
+
         // Clear any selected text
         window.getSelection().removeAllRanges();
-        
+
         // Show feedback
         if (isPaste) {
           toast.error('Pasting is disabled in this environment');
         }
-        
+
         return false;
       }
     };
-    
+
     document.addEventListener('keydown', preventShortcuts, { capture: true });
-    
+
     // Block contentEditable elements
     const blockEditable = (e) => {
       if (e.target.isContentEditable) {
@@ -111,16 +112,16 @@ function CodePage({ data, navigation }) {
         return false;
       }
     };
-    
+
     document.addEventListener('paste', blockEditable, { capture: true });
-    
+
     // Block iframe events
     window.addEventListener('blur', () => {
       if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
         document.activeElement.blur();
       }
     });
-    
+
     // Cleanup function
     return () => {
       document.removeEventListener('copy', preventDefault, options);
@@ -131,7 +132,7 @@ function CodePage({ data, navigation }) {
       document.removeEventListener('dragover', blockDragDrop, options);
       document.removeEventListener('keydown', preventShortcuts, { capture: true });
       document.removeEventListener('paste', blockEditable, { capture: true });
-      window.removeEventListener('blur', () => {});
+      window.removeEventListener('blur', () => { });
     };
   }, []);
   const [activeTab, setActiveTab] = useState('description');
@@ -245,48 +246,6 @@ function CodePage({ data, navigation }) {
       const { input, expectedOutput } = testCases[i];
       const { run: result } = await executeCode(selectedLanguage, code, input);
 
-      // regex
-
-      if (questionData.testcases[2]?.input === "regex2") {
-        const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
-        console.log(result.output);
-        console.log(questionData.testcases[2]?.expectedOutput);
-        const regex = new RegExp(
-          // "Parent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild => PPID: (\\d+), PID: (\\d+)\\nChild process finished\\.|Child => PPID: (\\d+), PID: (\\d+)\\nParent => PID: (\\d+)\\nWaiting for child process to finish\\.\\nChild process finished\\."
-          /^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
-        console.log(regex.test(result.output))
-        updatedResults[i] = {
-          input,
-          expected: expectedOutput,
-          output: result.output,
-          passed: regex.test(result.output),
-          status: 'done',
-        };
-        setTestResults([...updatedResults]);
-        await new Promise(res => setTimeout(res, 300));
-        continue;
-      }
-      if (questionData.testcases[2]?.input === "regex") {
-        const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
-        console.log(result.output);
-        console.log(questionData.testcases[2]?.expectedOutput);
-        const regex = new RegExp(
-          /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/
-        );
-        console.log(regex.test(result.output))
-        updatedResults[i] = {
-          input,
-          expected: expectedOutput,
-          output: result.output,
-          passed: regex.test(result.output),
-          status: 'done',
-        };
-
-        setTestResults([...updatedResults]);
-        await new Promise(res => setTimeout(res, 300));
-        continue;
-      }
-
 
 
       const resultlist = result.output ? result.output.split("\n") : ["No output received."];
@@ -369,50 +328,7 @@ function CodePage({ data, navigation }) {
 
 
 
-          // regex
-
-          if (questionData.testcases[2]?.input === "regex2") {
-            const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
-            console.log(result.output);
-            console.log(questionData.testcases[2]?.expectedOutput);
-            const regex = new RegExp(
-              /^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
-            console.log(regex.test(result.output))
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
-          }
-          else if (questionData.testcases[2]?.input === "regex") {
-            const passed = result.output.match(questionData.testcases[2]?.expectedOutput);
-            console.log(result.output);
-            console.log(questionData.testcases[2]?.expectedOutput);
-            const regex = new RegExp(
-              /^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
-            console.log(regex.test(result.output))
-            updatedResults[i] = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: !passed && !firstFailureShown
-            };
-            if (!passed && !firstFailureShown) {
-              firstFailureShown = true;
-              // Auto-expand the first failed test case
-              setTestCaseTab(i);
-            }
-          }
+       
 
 
 
@@ -435,7 +351,7 @@ function CodePage({ data, navigation }) {
 
 
 
-          else {
+  
 
             const resultOutput = result.output || '';
             const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
@@ -458,7 +374,7 @@ function CodePage({ data, navigation }) {
               setTestCaseTab(i);
             }
 
-          }
+          
 
 
 
@@ -591,7 +507,7 @@ function CodePage({ data, navigation }) {
     const dbRef = ref(database);
 
     try {
-      const snapshot = await get(child(dbRef, `/AlgoCore/${course}/allowedLanguages`));
+      const snapshot = await get(child(dbRef, `/AlgoCore/${course}/course/allowedLanguages`));
 
       if (!snapshot.exists()) {
         console.warn("No data found in Firebase.");
@@ -599,9 +515,23 @@ function CodePage({ data, navigation }) {
       }
 
       const data = snapshot.val();
-      console.log(data)
-      setallowlanguages(data);
-      console.log(allowlanguages);
+      console.log(data);
+      let normalizedArray = [];
+      if (Array.isArray(data)) {
+        normalizedArray = data;
+      } else {
+        normalizedArray = Object.values(data);
+      }
+
+      const mappedLangs = normalizedArray.map(lang => {
+        const l = String(lang).toLowerCase();
+        if (l === 'c/c++' || l === 'c++' || l === 'c') return 'cpp';
+        return l;
+      });
+
+      setallowlanguages(mappedLangs);
+      setSelectedLanguage(prev => mappedLangs.includes(prev) ? prev : mappedLangs[0] || 'cpp');
+      console.log("Allowed languages mapped:", mappedLangs);
 
     } catch (error) {
       console.error("Failed to fetch templates:", error);
@@ -648,7 +578,8 @@ function CodePage({ data, navigation }) {
   }, [questionId]);
 
   // Fixed Monaco Editor layout handling
-  const handleEditorDidMount = useCallback((editor) => {
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    registerIntelliSense(editor, monaco);
     editorRef.current = editor;
 
     // Clean up previous observer
@@ -951,12 +882,7 @@ function CodePage({ data, navigation }) {
             <div className="space-y-6">
 
               {
-                (questionData?.testcases?.length >= 3 && questionData?.testcases?.[2].input === "regex") ?
-                  (
-                    <h1>No input</h1>
-                  )
-                  :
-                  (
+                  
 
 
                     <div>
@@ -1043,7 +969,7 @@ function CodePage({ data, navigation }) {
                         </div>
                       </div>
                     </div>
-                  )
+                  
               }
             </div>
           )}
@@ -1171,7 +1097,7 @@ function CodePage({ data, navigation }) {
             {/* Navigation Buttons */}
             {navigation?.showNavigation && (
               <>
-                <button
+                {/* <button
                   onClick={navigation.onPrevious}
                   // disabled={navigation.currentQuestionIndex === 0}
                   className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium text-[11px] transition-all duration-200 ${navigation.currentQuestionIndex === 0 || false
@@ -1181,8 +1107,8 @@ function CodePage({ data, navigation }) {
                 >
                   <navigation.NavigationIcons.ChevronLeft />
                   Previous
-                </button>
-
+                </button> */}
+                {/* 
                 <button
                   onClick={navigation.onNext}
                   // disabled={navigation.currentQuestionIndex === navigation.totalQuestions - 1}
@@ -1193,7 +1119,7 @@ function CodePage({ data, navigation }) {
                 >
                   {navigation.currentQuestionIndex === navigation.totalQuestions - 1 ? 'Next Chapter' : 'Next'}
                   <navigation.NavigationIcons.ChevronRight />
-                </button>
+                </button> */}
               </>
             )}
           </div>
@@ -1208,6 +1134,7 @@ function CodePage({ data, navigation }) {
             onChange={handleCodeChange}
             onMount={handleEditorDidMount}
             options={{
+              ...INTELLISENSE_OPTIONS,
               minimap: { enabled: false },
               fontSize: 14,
               lineNumbers: 'on',
@@ -1218,7 +1145,7 @@ function CodePage({ data, navigation }) {
               tabSize: 2,
               dragAndDrop: true,
               formatOnPaste: true,
-              formatOnType: true
+              formatOnType: true,
             }}
           />
         </div>

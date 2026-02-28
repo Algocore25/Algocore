@@ -7,6 +7,8 @@ const TestsSidebar = ({ activeTab, setActiveTab }) => {
     { id: 'results', label: 'Results', icon: '📊' },
     { id: 'edit-tests', label: 'Edit Tests', icon: '👥' },
     { id: 'add-questions', label: 'Add Questions', icon: '➕' },
+    { id: 'manage-courses', label: 'Manage Courses', icon: '📚' },
+    { id: 'bulk-add', label: 'Bulk Add Data', icon: '📦' },
   ];
 
   return (
@@ -22,8 +24,8 @@ const TestsSidebar = ({ activeTab, setActiveTab }) => {
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive
-                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                   }`}
                 whileHover={{ x: 4 }}
                 whileTap={{ scale: 0.98 }}

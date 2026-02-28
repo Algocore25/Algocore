@@ -27,7 +27,7 @@ export default function DesktopOnlyPage({ children, desktopBreakpoint = 1024 }) 
 
   // If user chooses "View anyway" we'll show the desktop UI even on small viewports.
   if (!isMobile || forceShowDesktop) {
-    return <div className="min-h-screen bg-gray-50">{children}</div>;
+    return <>{children}</>;
   }
 
   // Mobile fallback UI with SVG illustration and helpful actions
@@ -83,7 +83,7 @@ export default function DesktopOnlyPage({ children, desktopBreakpoint = 1024 }) 
             onClick={(e) => {
               e.preventDefault();
               // Helpful hint: user can request desktop site via browser menu
-            //   alert("Tip: in many mobile browsers you can select 'Request Desktop Site' from the menu.");
+              //   alert("Tip: in many mobile browsers you can select 'Request Desktop Site' from the menu.");
             }}
             className="px-5 py-2 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition"
             aria-label="How to open on desktop"

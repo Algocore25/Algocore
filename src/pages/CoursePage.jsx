@@ -1,41 +1,79 @@
-
-
-import React, { useState, useEffect } from 'react';
-import { FaChevronRight, FaStar, FaBook, FaAward, FaChevronDown, FaCheck } from 'react-icons/fa';
+import React, { useState, useEffect, useCallback } from 'react';
+import { FaChevronDown, FaCheck, FaBook } from 'react-icons/fa';
 import { ref, get, child } from 'firebase/database';
 import { database } from '../firebase';
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
+import { ChevronDown, ChevronRight, Lock, PlayCircle, StopCircle, RefreshCw, XCircle } from 'lucide-react';
 import LoadingPage from './LoadingPage';
 
-const CoursePage = () => {
-  const [courseData, setCourseData] = useState(null);
-  const [practiceTopics, setPracticeTopics] = useState([]);
-  const [userProgress, setUserProgress] = useState({});
-  const [progressPercent, setProgressPercent] = useState(0);
+// ─── Difficulty badge colour ───────────────────────────────────────────────────
+const diffColor = (d = '') => {
+  const l = d.toLowerCase();
+  if (l === 'easy') return 'text-emerald-600 dark:text-emerald-400';
+  if (l === 'medium') return 'text-amber-500 dark:text-amber-400';
+  if (l === 'hard') return 'text-red-500 dark:text-red-400';
+  return 'text-gray-500 dark:text-gray-400';
+};
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [openTopic, setOpenTopic] = useState(null);
+// ─── Skeleton loader for topics ───────────────────────────────────────────────
+const TopicSkeleton = () => (
+  <div className="space-y-3">
+    {[1, 2, 3, 4].map(i => (
+      <div key={i} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary p-4 animate-pulse">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-2/3" />
+          </div>
+          <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full hidden sm:block" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+// ─── Helper: topic progress ────────────────────────────────────────────────────
+const calcTopicProgress = (topic) => {
+  const total = topic?.problems?.length || 0;
+  const completed = (topic?.problems || []).filter(p => p.status === 'Completed').length;
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { total, completed, percent };
+};
+
+// ─── Component ─────────────────────────────────────────────────────────────────
+const CoursePage = () => {
   const { course } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Local storage keys per course
+  // Phase 1 — schema
+  const [courseData, setCourseData] = useState(null);
+  const [schemaLoading, setSchemaLoading] = useState(true);
+  const [schemaError, setSchemaError] = useState(null);
+
+  // Phase 2 — topics + progress
+  const [practiceTopics, setPracticeTopics] = useState([]);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [topicsLoading, setTopicsLoading] = useState(true);
+
+  // UI state
+  const [openTopic, setOpenTopic] = useState(null);
+
+  // localStorage keys
   const openTopicKey = `coursePageOpenTopic:${course}`;
   const scrollKey = `coursePageScroll:${course}`;
 
-  // Restore open topic from localStorage (once on course change)
+  // ── Restore open topic ──────────────────────────────────────────────────────
   useEffect(() => {
-    const savedOpen = localStorage.getItem(openTopicKey);
-    if (savedOpen !== null) {
-      const idx = parseInt(savedOpen, 10);
+    const saved = localStorage.getItem(openTopicKey);
+    if (saved !== null) {
+      const idx = parseInt(saved, 10);
       if (!Number.isNaN(idx)) setOpenTopic(idx);
     }
   }, [course]);
 
-  // Persist open topic whenever it changes
   useEffect(() => {
     if (openTopic === null || openTopic === undefined) {
       localStorage.removeItem(openTopicKey);
@@ -44,248 +82,206 @@ const CoursePage = () => {
     }
   }, [openTopic, openTopicKey]);
 
-  // Restore scroll position after data loads
+  // ── Restore & track scroll ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!loading) {
+    if (!topicsLoading) {
       const savedY = localStorage.getItem(scrollKey);
       if (savedY !== null) {
         const y = parseInt(savedY, 10);
-        if (!Number.isNaN(y)) {
-          // Defer to ensure layout is ready
-          requestAnimationFrame(() => window.scrollTo(0, y));
-        }
+        if (!Number.isNaN(y)) requestAnimationFrame(() => window.scrollTo(0, y));
       }
     }
-  }, [loading, scrollKey]);
+  }, [topicsLoading, scrollKey]);
 
-  // Track and persist scroll position (throttled via rAF)
   useEffect(() => {
     let ticking = false;
     const onScroll = () => {
       if (!ticking) {
         ticking = true;
         requestAnimationFrame(() => {
-          try {
-            localStorage.setItem(scrollKey, String(window.scrollY || window.pageYOffset || 0));
-          } catch (e) {
-            // ignore storage failures
-          } finally {
-            ticking = false;
-          }
+          try { localStorage.setItem(scrollKey, String(window.scrollY || 0)); }
+          catch (_) { }
+          finally { ticking = false; }
         });
       }
     };
-
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, [scrollKey]);
 
+  // ── PHASE 1 — fetch course schema (fast, tiny payload) ─────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setSchemaLoading(true);
+    setSchemaError(null);
 
-  const fetchUserProgress = async () => {
+    get(child(ref(database), `AlgoCore/${course}/course`))
+      .then(snap => {
+        if (cancelled) return;
+        if (snap.exists()) {
+          setCourseData(snap.val());
+        } else {
+          setSchemaError('Course not found.');
+        }
+      })
+      .catch(err => {
+        if (!cancelled) setSchemaError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setSchemaLoading(false);
+      });
 
-    if (!user) {
-      return {};
-    }
+    return () => { cancelled = true; };
+  }, [course]);
 
-    // console.log(user);
+  // ── PHASE 2 — fetch lessons + all question difficulties IN PARALLEL ─────────
+  useEffect(() => {
+    if (schemaLoading || schemaError) return; // wait for phase 1
 
-    try {
-      const dbRef = ref(database);
-      const snapshot = await get(child(dbRef, `userprogress/${user.uid}/${course}`));
+    let cancelled = false;
+    setTopicsLoading(true);
 
-      console.log(`userprogress/${user.uid}/${course}`);
-      console.log("Snapshot:", snapshot.val());
+    async function loadTopicsAndProgress() {
+      try {
+        const dbRef = ref(database);
 
+        // Fire lessons + user-progress in parallel (2 requests)
+        const [lessonsSnap, progressSnap] = await Promise.all([
+          get(child(dbRef, `AlgoCore/${course}/lessons`)),
+          user?.uid ? get(child(dbRef, `userprogress/${user.uid}/${course}`)) : Promise.resolve(null),
+        ]);
 
-      return snapshot.exists() ? snapshot.val() : {};
-    } catch (error) {
-      console.error('Error fetching user progress:', error);
-      return {};
-    }
-  };
+        if (cancelled) return;
 
-  const fetchPracticeTopics = async () => {
-    try {
-      const dbRef = ref(database);
-      const snapshot = await get(child(dbRef, `/AlgoCore/${course}/lessons`));
+        const progressData = progressSnap?.exists() ? progressSnap.val() : {};
 
-      if (!snapshot.exists()) {
-        console.log('No data available');
-        return [];
-      }
-
-      const data = snapshot.val();
-      const practiceTopics = [];
-      const progressData = await fetchUserProgress();
-
-      console.log(data);
-
-
-      // Process each topic
-      Object.keys(data).forEach(topicKey => {
-        const topicData = data[topicKey];
-
-        // Skip if it's not a topic object
-        if (typeof topicData !== 'object' || !topicData.description) {
+        if (!lessonsSnap.exists()) {
+          setPracticeTopics([]);
+          setTopicsLoading(false);
           return;
         }
 
-        const problems = [];
+        const lessonsData = lessonsSnap.val();
 
-        console.log(topicData);
+        // Collect all unique question names across all topics (deduplicated)
+        const allQuestionNames = new Set();
+        Object.values(lessonsData).forEach(topicData => {
+          if (typeof topicData === 'object' && topicData.description && Array.isArray(topicData.questions)) {
+            topicData.questions.forEach(q => allQuestionNames.add(q));
+          }
+        });
 
-        topicData.questions?.forEach(problemData => {
-          console.log(problemData);
+        // Fetch ALL question difficulties in one parallel burst
+        const diffMap = {};
+        await Promise.all(
+          [...allQuestionNames].map(async qName => {
+            try {
+              const snap = await get(child(dbRef, `questions/${qName}`));
+              diffMap[qName] = (snap.exists() && snap.val().difficulty) ? snap.val().difficulty : 'Easy';
+            } catch (_) {
+              diffMap[qName] = 'Easy';
+            }
+          })
+        );
 
-          problems.push({
-            name: problemData,
-            status: 'Not Started', // Default status
-            difficulty: "Easy",
-            question: problemData,
+        if (cancelled) return;
+
+        // Build topic objects
+        const topics = [];
+        Object.keys(lessonsData).forEach(topicKey => {
+          const td = lessonsData[topicKey];
+          if (typeof td !== 'object' || !td.description) return;
+
+          const topicProgress = progressData[topicKey] || {};
+
+          const problems = (td.questions || []).map(qName => {
+            let status = 'Not Started';
+            if (qName in topicProgress) {
+              status = topicProgress[qName] === true ? 'Completed' : 'Not Completed';
+            }
+            return { name: qName, difficulty: diffMap[qName] || 'Easy', status };
+          });
+
+          topics.push({
+            title: topicKey,
+            description: td.description,
+            status: td.status,
+            order: td.order || 0,
+            problems,
           });
         });
 
-        // Create the topic object
-        practiceTopics.push({
-          title: topicKey,
-          description: topicData.description,
-          problems: problems,
-          status: topicData.status
-        });
-      });
+        topics.sort((a, b) => a.order - b.order);
 
+        // Calculate overall progress %
+        let total = 0, completed = 0;
+        topics.forEach(t => t.problems.forEach(p => {
+          total++;
+          if (p.status === 'Completed') completed++;
+        }));
 
-      return practiceTopics;
-    } catch (error) {
-      console.error('Error fetching data from Firebase:', error);
-      throw error;
-    }
-  };
-
-  const updateProblemStatusesWithProgress = (topics, progress) => {
-    if (!progress || typeof progress !== 'object') return topics;
-
-    return topics.map(topic => {
-      const topicProgress = progress[topic.title] || {};
-
-      const updatedProblems = topic.problems.map(problem => {
-        let status = 'Not Started'; // default
-
-        if (problem.name in topicProgress) {
-          status = topicProgress[problem.name] === true ? 'Completed' : 'Not Completed';
+        if (!cancelled) {
+          setPracticeTopics(topics);
+          setProgressPercent(total > 0 ? Math.round((completed / total) * 100) : 0);
+          setTopicsLoading(false);
         }
-
-        return {
-          ...problem,
-          status: status
-        };
-      });
-
-      return {
-        ...topic,
-        problems: updatedProblems
-      };
-    });
-  };
-
-  const calculateProgressPercent = (topics) => {
-    let total = 0;
-    let completed = 0;
-
-    topics.forEach(topic => {
-      topic.problems.forEach(problem => {
-        total++;
-        if (problem.status === 'Completed') completed++;
-      });
-    });
-
-    return total > 0 ? Math.round((completed / total) * 100) : 0;
-  };
-
-  const calculateTopicProgress = (topic) => {
-    const total = topic?.problems?.length || 0;
-    const completed = (topic?.problems || []).filter(p => p.status === 'Completed').length;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, percent };
-  };
-
-
-
-  useEffect(() => {
-
-    async function executeAfterBoth() {
-      try {
-        setLoading(true);
-
-        const dbRef = ref(database);
-        const snapshot = await get(child(dbRef, `AlgoCore/${course}/course`));
-
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          setCourseData(data);
-
-        }
-        else {
-          throw new Error('Failed to fetch course data');
-        }
-
-        const [topics, progress] = await Promise.all([
-          fetchPracticeTopics(),
-          fetchUserProgress()
-        ]);
-
-        const updatedTopics = updateProblemStatusesWithProgress(topics, progress);
-        setPracticeTopics(updatedTopics);
-
-        // Set the % value
-        const progressVal = calculateProgressPercent(updatedTopics);
-        setProgressPercent(progressVal);
-
       } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err.message);
-        setPracticeTopics(null);
-      } finally {
-        setLoading(false);
+        if (!cancelled) {
+          console.error('Error loading topics:', err);
+          setTopicsLoading(false);
+        }
       }
     }
 
+    loadTopicsAndProgress();
+    return () => { cancelled = true; };
+  }, [course, user, schemaLoading, schemaError]);
 
+  // Track scroll position per course
+  useEffect(() => {
+    const handleScroll = () => {
+      if (course) {
+        sessionStorage.setItem(`courseScroll_${course}`, window.scrollY.toString());
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [course]);
 
-    executeAfterBoth();
+  // Restore scroll position when completely loaded
+  useEffect(() => {
+    if (!topicsLoading && !schemaLoading && course) {
+      const savedPosition = sessionStorage.getItem(`courseScroll_${course}`);
+      if (savedPosition) {
+        setTimeout(() => {
+          window.scrollTo({
+            top: parseInt(savedPosition, 10),
+            behavior: 'instant'
+          });
+        }, 0);
+      }
+    }
+  }, [topicsLoading, schemaLoading, course]);
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
-
-
-  }, [course, user]);
-
-  if (loading) {
-    <LoadingPage />
-    // return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
-  }
-
-  if (error) {
-    return <div className="flex justify-center items-center min-h-screen">Error: {error}</div>;
-  }
-
-  if (!courseData) {
-    return null;
-  }
+  if (schemaLoading) return <LoadingPage />;
+  if (schemaError) return (
+    <div className="flex justify-center items-center min-h-screen text-red-500">{schemaError}</div>
+  );
+  if (!courseData) return null;
 
   const { title, description, stats } = courseData;
-  const totalProblems = practiceTopics.reduce((count, topic) => count + topic.problems.length, 0);
-
-  const completedProblems = practiceTopics.reduce(
-    (count, topic) => count + topic.problems.filter(p => p.status === 'Completed').length,
-    0
-  );
-
+  const totalProblems = practiceTopics.reduce((n, t) => n + t.problems.length, 0);
+  const completedProblems = practiceTopics.reduce((n, t) => n + t.problems.filter(p => p.status === 'Completed').length, 0);
 
   return (
-    <div className="bg-gray-50 dark:bg-dark-primary text-gray-900 dark:text-gray-100 min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="relative text-gray-900 dark:text-gray-100 min-h-screen flex flex-col w-full">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
+
+            {/* ── Course Header ── */}
             <div className="flex items-center mb-4">
               <div className="bg-blue-100 dark:bg-blue-900/50 p-3 rounded-lg mr-4">
                 <FaBook className="w-8 h-8 text-blue-600 dark:text-blue-400" />
@@ -294,28 +290,28 @@ const CoursePage = () => {
             </div>
             <p className="text-gray-600 dark:text-gray-300 mb-4">{description}</p>
 
-            {/* Progress Bar */}
-            {/* Progress Bar */}
-            {user && (
+            {/* ── Progress Bar ── */}
+            {user && !topicsLoading && (
               <div className="mb-6">
                 <h3 className="text-lg font-semibold mb-2">Course Progress</h3>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
                   <div
                     className="bg-blue-600 h-4 rounded-full transition-all duration-500 ease-in-out"
                     style={{ width: `${progressPercent}%` }}
-                  ></div>
+                  />
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{progressPercent}% Completed</p>
                 <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{completedProblems} Problems Completed</p>
               </div>
             )}
 
+            {/* Stats row */}
             <div className="flex items-center space-x-6 text-sm text-gray-600 dark:text-gray-400 mb-6">
-              <span>{totalProblems} Problems</span>
-
-              <span>{stats.level}</span>
+              {topicsLoading
+                ? <span className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                : <span>{totalProblems} Problems</span>}
+              <span>{stats?.level}</span>
             </div>
-
 
             {!user && (
               <div className="border-t border-b border-gray-200 dark:border-dark-tertiary py-4 mb-8">
@@ -326,91 +322,111 @@ const CoursePage = () => {
             )}
 
             <h2 className="text-2xl font-bold mb-4">Problems</h2>
-            <div className="space-y-4">
-              {practiceTopics.map((topic, index) => {
-                const { total, completed, percent } = calculateTopicProgress(topic);
-                return (
-                  <div key={index} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
-                    <div
-                      className="p-4 flex justify-between items-center cursor-pointer"
-                      onClick={() => setOpenTopic(openTopic === index ? null : index)}
-                    >
-                      <div className="flex items-center">
-                        <div className="bg-gray-100 dark:bg-dark-tertiary rounded-full w-10 h-10 flex items-center justify-center mr-4 font-bold text-lg">{index + 1}</div>
-                        <div>
-                          <h3 className="font-semibold text-lg">{topic.title.replace(/^[^a-zA-Z]*([a-zA-Z].*)$/, '$1')}</h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">{topic.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="hidden sm:block">
-                          <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div className="bg-blue-600 h-2 rounded-full transition-all duration-500" style={{ width: `${percent}%` }}></div>
-                          </div>
-                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-right">{completed}/{total}</div>
-                        </div>
-                        <span className="text-sm text-gray-600 dark:text-gray-300 sm:hidden">{percent}%</span>
-                        <FaChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${openTopic === index ? 'rotate-180' : ''}`} />
-                      </div>
-                    </div>
-                    {openTopic === index && topic.problems.length > 0 && (
-                      <div className="border-t border-gray-200 dark:border-dark-tertiary">
-                        <table className="w-full text-left text-sm">
-                          <thead className="text-gray-500 dark:text-gray-400">
-                            <tr>
-                              <th className="p-4 font-medium">Problem Name</th>
-                              <th className="p-4 font-medium">Status</th>
-                              <th className="p-4 font-medium">Difficulty</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {topic.problems.map((problem, pIndex) => (
-                              <tr 
-                                key={pIndex} 
-                                className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked' ? 'opacity-60' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
-                              >
-                                <td
-                                  className={`p-4 flex items-center ${topic.status === 'blocked' 
-                                    ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' 
-                                    : 'text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'}`}
-                                  onClick={() => {
-                                    if (topic.status !== 'blocked') {
-                                      navigate(`/problem/${course}/${topic.title}/${problem.name}`);
-                                    }
-                                  }}
-                                >
-                                  {problem.status === 'Completed' && (
-                                    <FaCheck className="text-green-500 mr-2" />
-                                  )}
-                                  {problem.name}
-                                  {topic.status === 'blocked' && (
-                                    <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded">
-                                      Locked
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-4">
-                                  <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                    }`}>
-                                    {problem.status}
-                                  </span>
-                                </td>
-                                <td className="p-4 text-green-600 dark:text-green-400">{problem.difficulty}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
-          
+            {/* ── Topics ── */}
+            {topicsLoading ? (
+              <TopicSkeleton />
+            ) : practiceTopics.length === 0 ? (
+              <p className="text-gray-500 dark:text-gray-400">No topics found for this course.</p>
+            ) : (
+              <div className="space-y-4">
+                {practiceTopics.map((topic, index) => {
+                  const { total, completed, percent } = calcTopicProgress(topic);
+                  const isOpen = openTopic === index;
+                  return (
+                    <div key={index} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
+                      {/* Topic header */}
+                      <div
+                        className="p-4 flex justify-between items-center cursor-pointer"
+                        onClick={() => setOpenTopic(isOpen ? null : index)}
+                      >
+                        <div className="flex items-center">
+                          <div className="bg-gray-100 dark:bg-dark-tertiary rounded-full w-10 h-10 flex items-center justify-center mr-4 font-bold text-lg shrink-0">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {topic.title.replace(/^[^a-zA-Z]*([a-zA-Z].*)$/, '$1')}
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{topic.description}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <div className="hidden sm:block">
+                            <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="bg-blue-600 h-2 rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-right">{completed}/{total}</div>
+                          </div>
+                          <span className="text-sm text-gray-600 dark:text-gray-300 sm:hidden">{percent}%</span>
+                          <FaChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                      </div>
+
+                      {/* Problem list */}
+                      {isOpen && topic.problems.length > 0 && (
+                        <div className="border-t border-gray-200 dark:border-dark-tertiary">
+                          <table className="w-full text-left text-sm">
+                            <thead className="text-gray-500 dark:text-gray-400">
+                              <tr>
+                                <th className="p-4 font-medium">Problem Name</th>
+                                <th className="p-4 font-medium">Status</th>
+                                <th className="p-4 font-medium">Difficulty</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {topic.problems.map((problem, pIndex) => (
+                                <tr
+                                  key={pIndex}
+                                  className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked'
+                                    ? 'opacity-60'
+                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                    }`}
+                                >
+                                  <td
+                                    className={`p-4 flex items-center ${topic.status === 'blocked'
+                                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                      : 'text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'
+                                      }`}
+                                    onClick={() => {
+                                      if (topic.status !== 'blocked') {
+                                        navigate(`/problem/${course}/${topic.title}/${problem.name}`);
+                                      }
+                                    }}
+                                  >
+                                    {problem.status === 'Completed' && <FaCheck className="text-green-500 mr-2 shrink-0" />}
+                                    {problem.name}
+                                    {topic.status === 'blocked' && (
+                                      <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded">
+                                        Locked
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="p-4">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                      : problem.status === 'Not Completed'
+                                        ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
+                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                      }`}>
+                                      {problem.status}
+                                    </span>
+                                  </td>
+                                  <td className={`p-4 font-medium ${diffColor(problem.difficulty)}`}>
+                                    {problem.difficulty}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

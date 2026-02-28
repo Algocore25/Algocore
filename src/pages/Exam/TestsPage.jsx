@@ -17,23 +17,23 @@ const TestsPage = () => {
 
 
   return (
-        <div className="flex h-[calc(100vh)] bg-gray-50 dark:bg-dark-primary overflow-hidden">
+    <div className="fixed inset-0 top-16 flex bg-gray-50 dark:bg-dark-primary overflow-hidden">
       <TestsSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <main className="flex-1 p-8 overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Tests</h1>
         </div>
-        
+
         {activeTab === 'available-tests' && (
-  
-          <AvailableTests/>
+
+          <AvailableTests />
 
 
         )}
 
         {activeTab === 'download-results' && (
 
-          <Results/>
+          <Results />
 
         )}
 

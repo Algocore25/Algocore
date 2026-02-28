@@ -62,7 +62,7 @@ const ActivityCalendar = ({ submissions }) => {
   const monthLabels = useMemo(() => {
     const labels = [];
     const seenMonths = new Set();
-    
+
     weeks.forEach((week, weekIndex) => {
       for (const day of week) {
         const monthYear = `${day.date.getFullYear()}-${day.date.getMonth()}`;
@@ -76,7 +76,7 @@ const ActivityCalendar = ({ submissions }) => {
         }
       }
     });
-    
+
     return labels;
   }, [weeks]);
 
@@ -89,32 +89,24 @@ const ActivityCalendar = ({ submissions }) => {
     return "bg-[#216e39] dark:bg-[#39d353]";
   };
 
-  const cellSize = 32;
-  const cellGap = 4;
+  const cellSize = 12;
+  const cellGap = 3;
   const weekWidth = cellSize + cellGap;
 
   return (
-    <div className="w-full overflow-x-auto bg-white dark:bg-[#0d1117] rounded-lg border border-[#d0d7de] dark:border-[#30363d] p-6">
+    <div className="w-full bg-white dark:bg-[#0d1117] rounded-lg border border-[#d0d7de] dark:border-[#30363d] p-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
-        <h3 className="text-lg font-semibold text-[#1f2328] dark:text-[#e6edf3]">
+      <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+        <h3 className="text-sm font-semibold text-[#1f2328] dark:text-[#e6edf3]">
           {submissions.length} submissions in the last 6 months
         </h3>
-        <div className="flex items-center gap-2 text-sm text-[#656d76] dark:text-[#7d8590]">
-          <span>Less</span>
-          {[0, 2, 4, 6, 8].map((v, i) => (
-            <div key={i} className={`w-3 h-3 rounded-sm ${getColor(v)} border border-[rgba(27,31,36,0.06)] dark:border-transparent`} />
-          ))}
-          <span>More</span>
-        </div>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex gap-2">
         {/* Day labels */}
-        <div 
-          className="hidden sm:flex flex-col text-xs text-[#656d76] dark:text-[#7d8590]" 
-          style={{ 
-            paddingTop: '24px',
+        <div
+          className="hidden sm:flex flex-col text-[10px] text-[#656d76] dark:text-[#7d8590] mt-[20px]"
+          style={{
             gap: `${cellGap}px`
           }}
         >
@@ -130,8 +122,8 @@ const ActivityCalendar = ({ submissions }) => {
         {/* Grid section */}
         <div className="flex-1 min-w-0">
           {/* Month labels */}
-          <div 
-            className="relative text-xs font-medium text-[#656d76] dark:text-[#7d8590] mb-2" 
+          <div
+            className="relative text-xs font-medium text-[#656d76] dark:text-[#7d8590] mb-2"
             style={{ height: '20px' }}
           >
             {monthLabels.map(({ weekIndex, label }) => (
@@ -148,49 +140,37 @@ const ActivityCalendar = ({ submissions }) => {
           </div>
 
           {/* Weekly columns */}
-          <div 
-            className="flex overflow-x-auto pb-2" 
+          <div
+            className="flex overflow-x-auto pb-2"
             style={{ gap: `${cellGap}px` }}
           >
             {weeks.map((week, i) => (
-              <div 
-                key={i} 
-                className="flex flex-col flex-shrink-0" 
+              <div
+                key={i}
+                className="flex flex-col flex-shrink-0"
                 style={{ gap: `${cellGap}px` }}
               >
                 {week.map((day, j) => {
                   const isToday = day.dateStr === today.toISOString().split("T")[0];
                   const hasSubmissions = day.count > 0;
-                  
+
                   return (
                     <div
                       key={j}
-                      title={`${day.date.toLocaleDateString("en-US", { 
-                        weekday: "short", 
-                        month: "short", 
-                        day: "numeric", 
-                        year: "numeric" 
+                      title={`${day.date.toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric"
                       })}: ${day.count} submission${day.count === 1 ? "" : "s"}`}
-                      className={`rounded-md ${getColor(
+                      className={`rounded-sm ${getColor(
                         day.count
-                      )} ${isToday ? "ring-2 ring-[#0969da] dark:ring-[#58a6ff]" : ""} cursor-pointer transition-all duration-100 hover:ring-2 hover:ring-[#656d76] dark:hover:ring-[#7d8590] hover:scale-105 border border-[rgba(27,31,36,0.06)] dark:border-transparent relative flex flex-col items-center justify-center`}
+                      )} ${isToday ? "ring-1 ring-[#0969da] dark:ring-[#58a6ff]" : ""} cursor-pointer transition-colors border border-[rgba(27,31,36,0.06)] dark:border-transparent relative`}
                       style={{
                         width: `${cellSize}px`,
                         height: `${cellSize}px`,
                       }}
-                    >
-                      {/* Day number */}
-                      <span className={`text-[10px] font-semibold leading-none ${hasSubmissions ? 'text-white' : 'text-[#656d76] dark:text-[#7d8590]'}`}>
-                        {day.dayOfMonth}
-                      </span>
-                      
-                      {/* Submission count */}
-                      {hasSubmissions && (
-                        <span className="text-[8px] font-bold text-white mt-0.5 leading-none">
-                          ({day.count})
-                        </span>
-                      )}
-                    </div>
+                    />
                   );
                 })}
               </div>
@@ -198,10 +178,16 @@ const ActivityCalendar = ({ submissions }) => {
           </div>
         </div>
       </div>
-
-      <p className="mt-4 text-sm text-[#656d76] dark:text-[#7d8590]">
-        Hover over a day to see full details
-      </p>
+      <div className="mt-4 flex flex-wrap justify-between items-center text-xs text-[#656d76] dark:text-[#7d8590]">
+        <a href="#" className="hover:text-[#0969da] dark:hover:text-[#58a6ff]">Learn how we count contributions</a>
+        <div className="flex items-center gap-1">
+          <span className="mr-1">Less</span>
+          {[0, 2, 4, 6, 8].map((v, i) => (
+            <div key={i} className={`w-[11px] h-[11px] rounded-sm ${getColor(v)} border border-[rgba(27,31,36,0.06)] dark:border-transparent`} />
+          ))}
+          <span className="ml-1">More</span>
+        </div>
+      </div>
     </div>
   );
 };
