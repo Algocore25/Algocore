@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ref, get } from "firebase/database";
+import { ref, get, set, remove } from "firebase/database";
 import { database } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 import ActivityCalendar from "./ActivityCalendar";
 import LoadingPage from "./LoadingPage";
 import AnimatedBackground from "../components/AnimatedBackground";
@@ -44,6 +45,13 @@ const GRADIENTS = [
 ];
 const avatarGradient = (name = '') => GRADIENTS[name.charCodeAt(0) % GRADIENTS.length];
 
+// GitHub icon
+const GitHubIcon = () => (
+    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
+    </svg>
+);
+
 // ─── Error screen ──────────────────────────────────────────────────────────
 function ErrorScreen({ emoji, title, desc, username, onHome }) {
     return (
@@ -63,29 +71,23 @@ function ErrorScreen({ emoji, title, desc, username, onHome }) {
     );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon, accent }) {
-    return (
-        <div className={`relative overflow-hidden rounded-2xl p-5 border ${accent.border} ${accent.bg}`}>
-            <div className={`absolute -right-4 -top-4 w-20 h-20 rounded-full opacity-10 ${accent.orb}`} />
-            <div className={`text-2xl mb-1 ${accent.icon}`}>{icon}</div>
-            <div className={`text-2xl font-black ${accent.val}`}>{value}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{label}</div>
-        </div>
-    );
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PublicProfilePage() {
     const { username } = useParams();
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     const [state, setState] = useState("loading");
     const [profile, setProfile] = useState(null);
+    const [profileUid, setProfileUid] = useState(null);
     const [submissions, setSubmissions] = useState([]);
     const [activeTab, setActiveTab] = useState("activity");
     const [page, setPage] = useState(0);
     const [copiedLink, setCopiedLink] = useState(false);
+    const [isFollowing, setIsFollowing] = useState(false);
+    const [followLoading, setFollowLoading] = useState(false);
+    const [followerCount, setFollowerCount] = useState(0);
+    const [followingCount, setFollowingCount] = useState(0);
     const PAGE_SIZE = 10;
 
     useEffect(() => {
@@ -104,6 +106,8 @@ export default function PublicProfilePage() {
 
                 if (!foundUid) { setState("notfound"); return; }
                 if (!foundProfile.isPublic) { setState("private"); return; }
+
+                setProfileUid(foundUid);
 
                 // Progress
                 const progSnap = await get(ref(database, `userprogress/${foundUid}`));
@@ -134,6 +138,16 @@ export default function PublicProfilePage() {
                 }
                 subList.sort((a, b) => b.timestamp - a.timestamp);
 
+                // Follow counts
+                const [followersSnap, followingSnap] = await Promise.all([
+                    get(ref(database, `follows/${foundUid}/followers`)),
+                    get(ref(database, `follows/${foundUid}/following`)),
+                ]);
+                const fCount = followersSnap.exists() ? Object.keys(followersSnap.val()).length : 0;
+                const fgCount = followingSnap.exists() ? Object.keys(followingSnap.val()).length : 0;
+                setFollowerCount(fCount);
+                setFollowingCount(fgCount);
+
                 const acceptRate = total > 0 ? Math.round((accepted / total) * 100) : 0;
                 const displayName = foundProfile.displayName || username;
                 const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -141,9 +155,17 @@ export default function PublicProfilePage() {
                 setProfile({
                     username, displayName, photoURL: foundProfile.photoURL || null,
                     joinDate: fmtJoin(foundProfile.joinedAt || null),
+                    githubLink: foundProfile.githubLink || '',
                     totalSubmissions: total, acceptedSubmissions: accepted, acceptRate, initials
                 });
                 setSubmissions(subList);
+
+                // Check if current viewer is following this profile
+                if (user && user.uid !== foundUid) {
+                    const followSnap = await get(ref(database, `follows/${user.uid}/following/${foundUid}`));
+                    setIsFollowing(followSnap.exists());
+                }
+
                 setState("found");
             } catch (e) {
                 console.error(e);
@@ -151,12 +173,35 @@ export default function PublicProfilePage() {
             }
         };
         load();
-    }, [username]);
+    }, [username, user]);
 
     const handleCopy = () => {
         navigator.clipboard.writeText(window.location.href);
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
+    };
+
+    const handleFollowToggle = async () => {
+        if (!user || !profileUid) return;
+        setFollowLoading(true);
+        try {
+            if (isFollowing) {
+                await Promise.all([
+                    remove(ref(database, `follows/${user.uid}/following/${profileUid}`)),
+                    remove(ref(database, `follows/${profileUid}/followers/${user.uid}`)),
+                ]);
+                setIsFollowing(false);
+                setFollowerCount(c => Math.max(0, c - 1));
+            } else {
+                await Promise.all([
+                    set(ref(database, `follows/${user.uid}/following/${profileUid}`), true),
+                    set(ref(database, `follows/${profileUid}/followers/${user.uid}`), true),
+                ]);
+                setIsFollowing(true);
+                setFollowerCount(c => c + 1);
+            }
+        } catch (e) { console.error(e); }
+        setFollowLoading(false);
     };
 
     if (state === "loading") return <LoadingPage />;
@@ -165,6 +210,7 @@ export default function PublicProfilePage() {
 
     const paged = submissions.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
     const grad = avatarGradient(profile.displayName);
+    const isOwn = user && user.uid === profileUid;
 
     return (
         <div className="min-h-screen relative text-gray-900 dark:text-gray-100 w-full flex flex-col">
@@ -184,8 +230,21 @@ export default function PublicProfilePage() {
                                     : profile.initials}
                             </div>
 
-                            {/* Copy + Back */}
-                            <div className="sm:ml-auto flex items-center gap-2">
+                            {/* Actions */}
+                            <div className="sm:ml-auto flex items-center gap-2 flex-wrap">
+                                {/* Follow / Unfollow button — only if logged in and not own profile */}
+                                {user && !isOwn && (
+                                    <button
+                                        onClick={handleFollowToggle}
+                                        disabled={followLoading}
+                                        className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-lg border transition disabled:opacity-50 ${isFollowing
+                                            ? 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:text-red-600'
+                                            : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+                                            }`}
+                                    >
+                                        {followLoading ? '…' : isFollowing ? 'Unfollow' : '+ Follow'}
+                                    </button>
+                                )}
                                 <button
                                     onClick={handleCopy}
                                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
@@ -203,7 +262,7 @@ export default function PublicProfilePage() {
                         </div>
 
                         {/* Name + username */}
-                        <div className="mb-5 space-y-0.5">
+                        <div className="mb-4 space-y-0.5">
                             <h1 className="text-xl font-bold text-gray-900 dark:text-white">{profile.displayName}</h1>
                             <p className="text-sm font-mono text-gray-500 dark:text-gray-400">@{profile.username}</p>
                             <div className="flex items-center gap-3 flex-wrap text-xs text-gray-400 dark:text-gray-500 pt-1">
@@ -214,15 +273,29 @@ export default function PublicProfilePage() {
                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                     Public
                                 </span>
+                                {/* GitHub link */}
+                                {profile.githubLink && (
+                                    <a
+                                        href={profile.githubLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium transition"
+                                    >
+                                        <GitHubIcon />
+                                        {profile.githubLink.replace('https://github.com/', '')}
+                                    </a>
+                                )}
                             </div>
                         </div>
 
                         {/* Stats strip */}
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                             {[
                                 { label: 'Submissions', value: profile.totalSubmissions },
                                 { label: 'Accepted', value: profile.acceptedSubmissions },
-                                { label: 'Acceptance Rate', value: `${profile.acceptRate}%` },
+                                { label: 'Acceptance %', value: `${profile.acceptRate}%` },
+                                { label: 'Followers', value: followerCount },
+                                { label: 'Following', value: followingCount },
                             ].map(({ label, value }) => (
                                 <div key={label} className="bg-white/40 dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50 rounded-lg px-4 py-3">
                                     <div className="text-lg font-bold text-gray-900 dark:text-white">{value}</div>
@@ -318,4 +391,3 @@ export default function PublicProfilePage() {
         </div>
     );
 }
-

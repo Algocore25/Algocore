@@ -314,13 +314,7 @@ function CodePage({ question }) {
         const { run: result } = await executeCode(selectedLanguage, code, input);
 
         let passed = false;
-        if (questionData?.testcases[2]?.input === "regex2") {
-          const regex = new RegExp(/^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
-          passed = regex.test(result.output);
-        } else if (questionData?.testcases[2]?.input === "regex") {
-          const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
-          passed = regex.test(result.output);
-        } else {
+   
           const resultlist = result.output ? result.output.split("\n") : ["No output received."];
           while (resultlist[resultlist.length - 1] === "") resultlist.pop();
 
@@ -329,7 +323,7 @@ function CodePage({ question }) {
 
           passed = resultlist.length === expectedLines.length &&
             resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
-        }
+        
 
         const currentResult = {
           input,
@@ -452,24 +446,14 @@ function CodePage({ question }) {
           const { run: result } = await executeCode(selectedLanguage, code, testInput);
 
           let passed = false;
-          // regex
-          if (questionData?.testcases[2]?.input === "regex2") {
-            const regex = new RegExp(/^PID of example\.c = \d+\n(?:[A-Za-z]{3} ){2}\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
-            passed = regex.test(result.output);
-          }
-          else if (questionData?.testcases[2]?.input === "regex") {
-            const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
-            passed = regex.test(result.output);
-          }
-          else {
+        
             const resultOutput = result.output || '';
             const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
             const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
 
             passed = resultLines.length === expectedLines.length &&
               resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
-          }
-
+          
           const currentResult = {
             input: testInput,
             expected: expectedOutput,
@@ -933,12 +917,7 @@ function CodePage({ question }) {
             <div className="space-y-6">
 
               {
-                (questionData?.testcases?.length >= 3 && questionData?.testcases?.[2].input === "regex") ?
-                  (
-                    <h1>No input</h1>
-                  )
-                  :
-                  (
+                
 
 
                     <div>
@@ -1047,7 +1026,7 @@ function CodePage({ question }) {
                         </div>
                       </div>
                     </div>
-                  )
+                  
               }
             </div>
           )}

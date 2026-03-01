@@ -14,7 +14,7 @@ import { ref, get, set, child } from "firebase/database";
 import AnimatedTestResults from './AnimatedTestResults';
 import { executeCode } from './api';
 import { useAuth } from '../context/AuthContext';
-import AISuggestionsTab from '../components/AISuggestions';
+
 
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -1018,13 +1018,7 @@ function CodePage({ data, navigation }) {
               )}
             </div>
           )}
-          {activeTab === 'suggestions' && (
-            <AISuggestionsTab
-              questionData={questionData}
-              userCode={code}
-              userId={user.uid}
-            />
-          )}
+
         </div>
       </div>
 

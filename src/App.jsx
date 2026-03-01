@@ -27,6 +27,7 @@ const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
+const SearchUsersPage = lazy(() => import('./pages/SearchUsersPage'));
 
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
@@ -92,6 +93,7 @@ function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/u/:username" element={<PublicProfilePage />} />
+              <Route path="/search" element={<SearchUsersPage />} />
               <Route path="*" element={<NotFoundPage />} />
 
               <Route path="/proctoring" element={<VideoProctor />} />

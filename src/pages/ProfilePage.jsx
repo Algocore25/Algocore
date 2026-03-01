@@ -81,6 +81,8 @@ const Ic = {
   Copy: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>,
   Link: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
   Warning: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
+  GitHub: () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" /></svg>,
+  Users: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
 };
 
 // ─── Confirmation Modal ───────────────────────────────────────────────────────
@@ -131,6 +133,27 @@ function ProfilePage() {
   const [isPublic, setIsPublic] = useState(false);
   const [publicSaving, setPublicSaving] = useState(false);
 
+  // GitHub link
+  const [githubLink, setGithubLink] = useState('');
+  const [editingGithub, setEditingGithub] = useState(false);
+  const [githubDraft, setGithubDraft] = useState('');
+  const [githubSaving, setGithubSaving] = useState(false);
+
+  // Follow / Followers
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followerList, setFollowerList] = useState([]); // [{ username, displayName, photoURL }]
+  const [followingList, setFollowingList] = useState([]);
+  const [socialLoading, setSocialLoading] = useState(false);
+
+  // Search / find users
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchUsers, setSearchUsers] = useState([]);
+  const [searchFollowingSet, setSearchFollowingSet] = useState(new Set());
+  const [searchLoadingFollow, setSearchLoadingFollow] = useState(new Set());
+  const [searchLoaded, setSearchLoaded] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+
   // Reset progress
   const [courses, setCourses] = useState([]);
   const [resetModal, setResetModal] = useState(null); // { course }
@@ -168,9 +191,12 @@ function ProfilePage() {
         await set(ref(database, `users/${user.uid}/profile/username`), profileNode.username);
       }
 
-      // Read public flag
+      // Read public flag — default to TRUE for new users
       const publicSnap = await get(child(dbRef, `users/${user.uid}/profile/isPublic`));
-      const pub = publicSnap.exists() ? publicSnap.val() : false;
+      const pub = publicSnap.exists() ? publicSnap.val() : true;
+      if (!publicSnap.exists()) {
+        await set(ref(database, `users/${user.uid}/profile/isPublic`), true);
+      }
       setIsPublic(pub);
 
       // Display name fallback: profile.displayName → auth name → email prefix
@@ -186,6 +212,11 @@ function ProfilePage() {
       }
 
 
+      // GitHub link
+      const gh = profileNode.githubLink || '';
+      setGithubLink(gh);
+      setGithubDraft(gh);
+
       setProfileData({
         username: profileNode.username,
         displayName,
@@ -196,6 +227,14 @@ function ProfilePage() {
         acceptedSubmissions: 0,
       });
       setNameDraft(displayName);
+
+      // Follow counts
+      const [followersSnap, followingSnap] = await Promise.all([
+        get(ref(database, `follows/${user.uid}/followers`)),
+        get(ref(database, `follows/${user.uid}/following`)),
+      ]);
+      setFollowerCount(followersSnap.exists() ? Object.keys(followersSnap.val()).length : 0);
+      setFollowingCount(followingSnap.exists() ? Object.keys(followingSnap.val()).length : 0);
 
       // 2. Load progress → list of courses + accepted count
       const progressSnap = await get(child(dbRef, `userprogress/${user.uid}`));
@@ -375,6 +414,105 @@ function ProfilePage() {
     } catch (e) {
       setEmailLinkMsg({ type: 'error', text: e.message || 'Failed to send reset email.' });
     }
+  };
+
+  // ── Load search users (lazy — called once when tab opens) ──────────────
+  const loadSearchUsers = async () => {
+    if (searchLoaded) return;
+    setSearchLoading(true);
+    try {
+      const [usersSnap, followSnap] = await Promise.all([
+        get(ref(database, 'users')),
+        get(ref(database, 'follows')),
+      ]);
+      const followData = followSnap.exists() ? followSnap.val() : {};
+      const list = [];
+      if (usersSnap.exists()) {
+        usersSnap.forEach(s => {
+          if (s.key === user.uid) return; // skip self
+          const p = s.child('profile').val();
+          if (!p || !p.isPublic || !p.username) return;
+          const followers = followData[s.key]?.followers
+            ? Object.keys(followData[s.key].followers).length : 0;
+          list.push({
+            uid: s.key,
+            username: p.username,
+            displayName: p.displayName || p.username,
+            photoURL: p.photoURL || null,
+            githubLink: p.githubLink || '',
+            followers,
+          });
+        });
+      }
+      list.sort((a, b) => b.followers - a.followers);
+      setSearchUsers(list);
+      const myFollowing = followData[user.uid]?.following
+        ? new Set(Object.keys(followData[user.uid].following)) : new Set();
+      setSearchFollowingSet(myFollowing);
+      setSearchLoaded(true);
+    } catch (e) { console.error(e); }
+    setSearchLoading(false);
+  };
+
+  // ── Follow toggle from search tab ────────────────────────────────────────
+  const handleSearchFollow = async (e, targetUid) => {
+    e.stopPropagation();
+    setSearchLoadingFollow(prev => new Set(prev).add(targetUid));
+    const curFollowing = searchFollowingSet.has(targetUid);
+    try {
+      if (curFollowing) {
+        await Promise.all([
+          remove(ref(database, `follows/${user.uid}/following/${targetUid}`)),
+          remove(ref(database, `follows/${targetUid}/followers/${user.uid}`)),
+        ]);
+        setSearchFollowingSet(prev => { const n = new Set(prev); n.delete(targetUid); return n; });
+        setSearchUsers(prev => prev.map(u => u.uid === targetUid ? { ...u, followers: Math.max(0, u.followers - 1) } : u));
+        setFollowingCount(c => Math.max(0, c - 1));
+      } else {
+        await Promise.all([
+          set(ref(database, `follows/${user.uid}/following/${targetUid}`), true),
+          set(ref(database, `follows/${targetUid}/followers/${user.uid}`), true),
+        ]);
+        setSearchFollowingSet(prev => new Set(prev).add(targetUid));
+        setSearchUsers(prev => prev.map(u => u.uid === targetUid ? { ...u, followers: u.followers + 1 } : u));
+        setFollowingCount(c => c + 1);
+      }
+    } catch (e) { console.error(e); }
+    setSearchLoadingFollow(prev => { const n = new Set(prev); n.delete(targetUid); return n; });
+  };
+
+  // ── Save GitHub link ──────────────────────────────────────────────────────
+  const handleSaveGithub = async () => {
+    setGithubSaving(true);
+    const val = githubDraft.trim();
+    await set(ref(database, `users/${user.uid}/profile/githubLink`), val);
+    setGithubLink(val);
+    setEditingGithub(false);
+    setGithubSaving(false);
+  };
+
+  // ── Load social lists ────────────────────────────────────────────────────
+  const loadSocialLists = async () => {
+    setSocialLoading(true);
+    try {
+      const allSnap = await get(ref(database, 'users'));
+      const userMap = {};
+      if (allSnap.exists()) {
+        allSnap.forEach(s => {
+          const p = s.child('profile').val() || {};
+          userMap[s.key] = { username: p.username || s.key, displayName: p.displayName || s.key, photoURL: p.photoURL || null };
+        });
+      }
+      const [followersSnap, followingSnap] = await Promise.all([
+        get(ref(database, `follows/${user.uid}/followers`)),
+        get(ref(database, `follows/${user.uid}/following`)),
+      ]);
+      const frs = followersSnap.exists() ? Object.keys(followersSnap.val()).map(uid => userMap[uid]).filter(Boolean) : [];
+      const fng = followingSnap.exists() ? Object.keys(followingSnap.val()).map(uid => userMap[uid]).filter(Boolean) : [];
+      setFollowerList(frs);
+      setFollowingList(fng);
+    } catch (e) { console.error(e); }
+    setSocialLoading(false);
   };
 
   // ── Copy public link ───────────────────────────────────────────────────────
@@ -562,19 +700,51 @@ function ProfilePage() {
             </div>
 
             {/* Meta row */}
-            <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400 mb-6">
+            <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400 mb-4">
               <span className="flex items-center gap-1.5"><Ic.Mail />{profileData.email}</span>
               <span className="flex items-center gap-1.5"><Ic.Calendar />Joined {profileData.joinDate}</span>
               {isPublic && <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400"><Ic.Globe />Public</span>}
             </div>
 
+            {/* GitHub link row */}
+            <div className="flex items-center gap-2 mb-5">
+              {editingGithub ? (
+                <>
+                  <span className="text-gray-400"><Ic.GitHub /></span>
+                  <input
+                    value={githubDraft}
+                    onChange={e => setGithubDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveGithub(); if (e.key === 'Escape') { setEditingGithub(false); setGithubDraft(githubLink); } }}
+                    placeholder="https://github.com/yourusername"
+                    className="text-sm bg-transparent border-b-2 border-gray-400 outline-none text-gray-700 dark:text-gray-200 w-72"
+                  />
+                  <button onClick={handleSaveGithub} disabled={githubSaving} className="text-green-500 hover:text-green-600 transition"><Ic.Check /></button>
+                  <button onClick={() => { setEditingGithub(false); setGithubDraft(githubLink); }} className="text-gray-400 hover:text-gray-600 transition"><Ic.X /></button>
+                </>
+              ) : (
+                <>
+                  {githubLink ? (
+                    <a href={githubLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition">
+                      <Ic.GitHub />
+                      <span className="font-mono">{githubLink.replace('https://github.com/', '')}</span>
+                    </a>
+                  ) : (
+                    <span className="text-sm text-gray-400 dark:text-gray-500 flex items-center gap-1.5"><Ic.GitHub />No GitHub linked</span>
+                  )}
+                  <button onClick={() => { setEditingGithub(true); setGithubDraft(githubLink); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition" title="Edit GitHub link"><Ic.Edit /></button>
+                </>
+              )}
+            </div>
+
             {/* Stats strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Total Submissions', value: profileData.totalSubmissions },
                 { label: 'Accepted', value: profileData.acceptedSubmissions },
                 { label: 'Acceptance Rate', value: `${acceptanceRate}%` },
                 { label: 'Time Spent', value: formatTime(totalTime) },
+                { label: 'Followers', value: followerCount },
+                { label: 'Following', value: followingCount },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-white/40 dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50 rounded-lg px-4 py-3">
                   <div className="text-lg font-bold text-gray-900 dark:text-white">{value}</div>
@@ -588,11 +758,11 @@ function ProfilePage() {
         {/* ── Tabs ── */}
         <div className="bg-white/50 dark:bg-dark-tertiary/50 backdrop-blur-md rounded-xl shadow-sm border border-gray-200/50 dark:border-dark-tertiary/50 overflow-hidden w-full">
           {/* Tab bar */}
-          <div className="flex border-b border-gray-200 dark:border-gray-700 px-2">
-            {["overview", "submissions", "linked-accounts", "reset-progress"].map(tab => (
+          <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 overflow-x-auto">
+            {["overview", "submissions", "find-users", "social", "linked-accounts", "reset-progress"].map(tab => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => { setActiveTab(tab); if (tab === 'social') loadSocialLists(); if (tab === 'find-users') loadSearchUsers(); }}
                 className={`px-5 py-4 text-sm font-medium capitalize transition-all duration-150 whitespace-nowrap ${activeTab === tab
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20'
                   : 'text-gray-600 dark:text-gray-400 hover:text-blue-500'
@@ -600,12 +770,83 @@ function ProfilePage() {
               >
                 {tab === 'reset-progress' ? '⚠️ Reset Progress'
                   : tab === 'linked-accounts' ? '🔗 Linked Accounts'
-                    : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    : tab === 'social' ? '👥 Social'
+                      : tab === 'find-users' ? '🔍 Find Users'
+                        : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
 
           <div className="p-6 sm:p-8">
+
+            {/* ── Find Users Tab ───────────────────────────────────────── */}
+            {activeTab === "find-users" && (
+              <div className="space-y-4">
+                {/* Search bar */}
+                <div className="relative">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search by username or name…"
+                    className="w-full pl-9 pr-8 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                      <Ic.X />
+                    </button>
+                  )}
+                </div>
+
+                {searchLoading ? (
+                  <div className="text-center py-10 text-gray-400">Loading users…</div>
+                ) : (() => {
+                  const q = searchQuery.trim().toLowerCase();
+                  const filtered = q
+                    ? searchUsers.filter(u => u.username.toLowerCase().includes(q) || u.displayName.toLowerCase().includes(q))
+                    : searchUsers;
+                  return filtered.length === 0 ? (
+                    <div className="text-center py-10">
+                      <div className="text-3xl mb-2">🔍</div>
+                      <p className="text-sm text-gray-400">{searchQuery ? 'No users found' : 'No public users yet'}</p>
+                    </div>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {filtered.map(u => {
+                        const grad = ['from-violet-500 to-indigo-600', 'from-blue-500 to-cyan-600', 'from-emerald-500 to-teal-600', 'from-rose-500 to-pink-600', 'from-amber-500 to-orange-600', 'from-fuchsia-500 to-purple-600'][(u.displayName.charCodeAt(0) || 0) % 6];
+                        const initials = u.displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                        const following = searchFollowingSet.has(u.uid);
+                        const busy = searchLoadingFollow.has(u.uid);
+                        return (
+                          <div key={u.uid} onClick={() => navigate(`/u/${u.username}`)} className="flex items-center gap-3 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 hover:border-blue-400 transition cursor-pointer group">
+                            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white text-sm font-bold shrink-0 overflow-hidden`}>
+                              {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : initials}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate group-hover:text-blue-500 transition">{u.displayName}</p>
+                              <p className="text-xs text-gray-400 font-mono truncate">@{u.username} · 👥 {u.followers}</p>
+                            </div>
+                            <button
+                              onClick={(e) => handleSearchFollow(e, u.uid)}
+                              disabled={busy}
+                              className={`shrink-0 px-3 py-1 text-xs font-semibold rounded-lg border transition disabled:opacity-50 ${following
+                                ? 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:text-red-600'
+                                : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                            >
+                              {busy ? '…' : following ? 'Unfollow' : '+ Follow'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             {/* ── Overview Tab ─────────────────────────────────────────── */}
             {activeTab === "overview" && (
@@ -684,6 +925,60 @@ function ProfilePage() {
                         className="px-4 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                         Next →
                       </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── Social Tab ────────────────────────────────────────────── */}
+            {activeTab === "social" && (
+              <div className="space-y-6">
+                {socialLoading ? (
+                  <div className="text-center py-10 text-gray-400">Loading…</div>
+                ) : (
+                  <>
+                    {/* Followers */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Followers ({followerCount})</h3>
+                      {followerList.length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-gray-500">No followers yet.</p>
+                      ) : (
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {followerList.map(u => (
+                            <button key={u.username} onClick={() => navigate(`/u/${u.username}`)} className="flex items-center gap-3 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 hover:border-blue-400 transition text-left">
+                              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0 overflow-hidden">
+                                {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : (u.displayName?.[0] || '?').toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{u.displayName}</p>
+                                <p className="text-xs text-gray-400 font-mono truncate">@{u.username}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Following */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Following ({followingCount})</h3>
+                      {followingList.length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-gray-500">Not following anyone yet.</p>
+                      ) : (
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {followingList.map(u => (
+                            <button key={u.username} onClick={() => navigate(`/u/${u.username}`)} className="flex items-center gap-3 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 hover:border-blue-400 transition text-left">
+                              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-sm font-bold shrink-0 overflow-hidden">
+                                {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : (u.displayName?.[0] || '?').toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{u.displayName}</p>
+                                <p className="text-xs text-gray-400 font-mono truncate">@{u.username}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

@@ -19,6 +19,7 @@
     "@heroicons/react": "^2.2.0",
     "@monaco-editor/react": "^4.6.0",
     "@mui/material": "^7.2.0",
+    "@xenova/transformers": "^2.17.2",
     "autoprefixer": "^10.4.17",
     "axios": "^1.10.0",
     "chart.js": "^4.5.0",
@@ -34,18 +35,22 @@
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.22.0",
     "react-toastify": "^11.0.5",
     "screenfull": "^6.0.2",
     "tailwindcss": "^3.4.1"
   },
   "devDependencies": {
+    "@craco/craco": "^7.1.0",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "react-scripts": "^5.0.1"
+    "react-scripts": "^5.0.1",
+    "url": "^0.11.4",
+    "worker-loader": "^3.0.8"
   },
   "browserslist": {
     "production": [
