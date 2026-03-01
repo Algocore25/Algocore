@@ -865,99 +865,104 @@ function CodePage({ data, navigation }) {
           )}
 
           {activeTab === 'testcases' && (
-
             <div className="space-y-6">
-
-              {
-
-
-
-                <div>
-                  <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white"> Manual Test Cases </h3>
-                  <div className="flex items-center gap-2 mb-4">
-                    {testCasesrun.map((_, idx) => (
-                      <button
-                        key={idx}
-                        className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
-                          }`}
-                        onClick={() => setTestCaseTab(idx)}
-                      >
-                        Case {idx + 1}
-                      </button>
-                    ))}
-                    <button
-                      className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
-                      onClick={() => {
-                        setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
-                        setTestCaseTab(testCasesrun.length);
-                      }}
-                    >
-                      +
-                    </button>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
+                    <Icons.Code2 size={20} />
                   </div>
-                  <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
-                        <textarea
-                          ref={inputRef}
-                          className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
-                          value={testCasesrun[testCaseTab]?.input || ''}
-                          onChange={e => {
-                            const updated = [...testCasesrun];
-                            updated[testCaseTab].input = e.target.value;
-                            setTestCases(updated);
-                            // Force update height after state update
-                            requestAnimationFrame(() => {
-                              adjustTextareaHeight(e.target);
-                            });
-                          }}
-                          onInput={e => adjustTextareaHeight(e.target)}
-                          placeholder="Enter input (supports multiple lines)"
-                          rows={1}
-                          style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
-                        <textarea
-                          ref={outputRef}
-                          className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
-                          value={testCasesrun[testCaseTab]?.expectedOutput || ''}
-                          onChange={e => {
-                            const updated = [...testCasesrun];
-                            updated[testCaseTab].expectedOutput = e.target.value;
-                            setTestCases(updated);
-                            // Force update height after state update
-                            requestAnimationFrame(() => {
-                              adjustTextareaHeight(e.target);
-                            });
-                          }}
-                          onInput={e => adjustTextareaHeight(e.target)}
-                          placeholder="Enter expected output (supports multiple lines)"
-                          rows={1}
-                          style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end mt-4">
-                      <button
-                        className="text-red-500 hover:text-red-700 font-medium"
-                        onClick={() => {
-                          const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
-                          setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Manual Test Cases</h3>
+                </div>
+                <button
+                  onClick={runCode}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+                >
+                  <Icons.Play size={16} />
+                  Run Tests
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 mb-6">
+                {testCasesrun.map((_, idx) => (
+                  <button
+                    key={idx}
+                    className={`group flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${testCaseTab === idx
+                      ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white shadow-md'
+                      : 'bg-white dark:bg-dark-secondary text-gray-500 dark:text-gray-400 border-gray-200 dark:border-dark-tertiary hover:border-gray-400 dark:hover:border-gray-600'
+                      }`}
+                    onClick={() => setTestCaseTab(idx)}
+                  >
+                    <span>Case {idx + 1}</span>
+                    {testCasesrun.length > 1 && testCaseTab === idx && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const updated = testCasesrun.filter((_, i) => i !== idx);
+                          setTestCases(updated);
                           setTestCaseTab(prev => Math.max(0, prev - 1));
                         }}
-                        disabled={testCasesrun.length <= 1}
-                        title="Delete this test case"
+                        className="p-0.5 rounded-md hover:bg-red-500/20 text-gray-400 hover:text-red-500 transition-colors"
                       >
-                        Delete Case
-                      </button>
+                        <Icons.X size={12} />
+                      </div>
+                    )}
+                  </button>
+                ))}
+                <button
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-dark-tertiary text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all border border-dashed border-gray-300 dark:border-gray-600"
+                  onClick={() => {
+                    setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
+                    setTestCaseTab(testCasesrun.length);
+                  }}
+                  title="Add New Case"
+                >
+                  <Icons.Plus size={18} />
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-dark-secondary rounded-2xl border border-gray-200 dark:border-dark-tertiary overflow-hidden shadow-sm">
+                <div className="p-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-dark-tertiary">
+                  <div className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Input Data</label>
+                      <span className="text-[10px] font-bold text-gray-400 italic">Standard In</span>
                     </div>
+                    <textarea
+                      ref={inputRef}
+                      className="w-full p-4 border-none focus:ring-0 bg-gray-50/50 dark:bg-dark-tertiary/20 rounded-xl text-gray-900 dark:text-gray-200 font-mono text-sm min-h-[120px] resize-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600"
+                      value={testCasesrun[testCaseTab]?.input || ''}
+                      onChange={e => {
+                        const updated = [...testCasesrun];
+                        updated[testCaseTab].input = e.target.value;
+                        setTestCases(updated);
+                        requestAnimationFrame(() => adjustTextareaHeight(e.target));
+                      }}
+                      placeholder="e.g. 5 10 15"
+                    />
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Expected Output</label>
+                      <span className="text-[10px] font-bold text-gray-400 italic">Correct Response</span>
+                    </div>
+                    <textarea
+                      ref={outputRef}
+                      className="w-full p-4 border-none focus:ring-0 bg-gray-50/50 dark:bg-dark-tertiary/20 rounded-xl text-gray-900 dark:text-gray-200 font-mono text-sm min-h-[120px] resize-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600"
+                      value={testCasesrun[testCaseTab]?.expectedOutput || ''}
+                      onChange={e => {
+                        const updated = [...testCasesrun];
+                        updated[testCaseTab].expectedOutput = e.target.value;
+                        setTestCases(updated);
+                        requestAnimationFrame(() => adjustTextareaHeight(e.target));
+                      }}
+                      placeholder="e.g. 30"
+                    />
                   </div>
                 </div>
-
-              }
+              </div>
+              <p className="mt-4 text-[11px] text-gray-400 dark:text-gray-500 text-center italic">
+                Tests are run against the current code version in the editor.
+              </p>
             </div>
           )}
 
@@ -1061,18 +1066,18 @@ function CodePage({ data, navigation }) {
           <div className="flex items-center gap-2">
             <button
               onClick={runCode}
-              className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
+              className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-dark-tertiary text-gray-700 dark:text-gray-300 font-bold text-xs transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
             >
-              <Icons.Play />
+              <Icons.Play size={14} className="group-hover:text-indigo-600 transition-colors" />
               Run Code
             </button>
 
             <button
               onClick={handleSubmit2}
-              className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xs transition-all shadow-lg shadow-green-500/20 active:scale-95"
             >
-              <Icons.ChevronRight />
-              Submit
+              <Icons.ChevronRight size={14} />
+              Submit Solution
             </button>
 
             {/* Navigation Buttons */}

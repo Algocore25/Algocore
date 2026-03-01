@@ -431,7 +431,7 @@ function ProfilePage() {
         usersSnap.forEach(s => {
           if (s.key === user.uid) return; // skip self
           const p = s.child('profile').val();
-          if (!p || !p.isPublic || !p.username) return;
+          if (!p || p.isPublic === false || !p.username) return;
           const followers = followData[s.key]?.followers
             ? Object.keys(followData[s.key].followers).length : 0;
           list.push({

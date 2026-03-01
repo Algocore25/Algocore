@@ -18,6 +18,7 @@ import CompilerPage from './pages/CompilerPage';
 import LoadingPage from './pages/LoadingPage';
 import AdminMonitor from './pages/Admin/AdminMonitor';
 import CpuApp from './pages/Visual/Cpu/CpuApp';
+import WhatsNewModal from './components/WhatsNewModal';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
@@ -73,6 +74,7 @@ function App() {
   return (
     <BrowserRouter basename='/'>
       <ActivityTracker> {/* Wrap everything with ActivityTracker */}
+        <WhatsNewModal />
         <Toaster position="top-center" reverseOrder={false} />
         <PageLayout>
           <CopyPasteGuard />

@@ -46,7 +46,7 @@ export default function SearchUsersPage() {
                 if (usersSnap.exists()) {
                     usersSnap.forEach(s => {
                         const p = s.child("profile").val();
-                        if (!p || !p.isPublic || !p.username) return;
+                        if (!p || p.isPublic === false || !p.username) return;
                         const followers = followData[s.key]?.followers
                             ? Object.keys(followData[s.key].followers).length
                             : 0;
@@ -206,8 +206,8 @@ export default function SearchUsersPage() {
                                             onClick={(e) => handleFollowToggle(e, u.uid)}
                                             disabled={busy}
                                             className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg border transition disabled:opacity-50 ${following
-                                                    ? 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:text-red-600 dark:hover:text-red-400'
-                                                    : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+                                                ? 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 hover:text-red-600 dark:hover:text-red-400'
+                                                : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
                                                 }`}
                                         >
                                             {busy ? '…' : following ? 'Unfollow' : '+ Follow'}

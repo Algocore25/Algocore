@@ -105,7 +105,7 @@ export default function PublicProfilePage() {
                 });
 
                 if (!foundUid) { setState("notfound"); return; }
-                if (!foundProfile.isPublic) { setState("private"); return; }
+                if (foundProfile.isPublic === false) { setState("private"); return; }
 
                 setProfileUid(foundUid);
 
