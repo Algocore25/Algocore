@@ -1,5 +1,6 @@
 import React from 'react';
 import Navbar from './Navbar';
+import ExamSideNotification from './ExamSideNotification';
 
 const PageLayout = ({ children }) => {
   return (
@@ -8,6 +9,9 @@ const PageLayout = ({ children }) => {
       <div className="fixed top-0 left-0 right-0 z-50">
         <Navbar />
       </div>
+
+      {/* Exam Side Toast Notifications */}
+      <ExamSideNotification />
 
       {/* Main Content - accounts for navbar height */}
       <main className="flex-1 pt-16 px-4 overflow-auto">

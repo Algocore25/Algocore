@@ -8,19 +8,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { X, Code as CodeIcon, List, Download, ChevronUp, ChevronDown } from 'lucide-react';
 
-const StatusBadge = ({ status }) => {
-  const styles = {
-    Correct: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    Wrong: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-    'Not Attended': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-  };
 
-  return (
-    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${styles[status]} mb-2`}>
-      {status}
-    </span>
-  );
-};
 
 const QuestionTypeBadge = ({ type }) => {
   const typeStyles = {
@@ -86,8 +74,13 @@ const LoadingSpinner = () => (
   </div>
 );
 
-export default function AdminResult() {
-  const { testid } = useParams();
+export default function AdminResult({ testId: propTestId }) {
+  const params = useParams();
+  // Handle both testId (camelCase) and testid (lowercase) parameter names, with prop fallback
+  const testid = propTestId || params.testid || params.testId;
+
+  console.log('[AdminResult] Component mounted/updated:', { propTestId, paramsTestid: params.testid, paramsTestId: params.testId, finalTestid: testid });
+
   const [results, setResults] = useState([]);
   const [testName, setTestName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -106,6 +99,7 @@ export default function AdminResult() {
   const [weights, setWeights] = useState({ mcq: 25, programming: 25, sql: 25, other: 25 });
   const [useWeightage, setUseWeightage] = useState(false);
   const [savingWeights, setSavingWeights] = useState(false);
+  const [error, setError] = useState(null);
 
   const normalizeType = (t) => {
     const s = String(t || '').toLowerCase();
@@ -123,8 +117,18 @@ export default function AdminResult() {
   const [ExamcodeSubmissions, setExamcodeSubmissions] = useState({});
 
   useEffect(() => {
+    console.log('[AdminResult useEffect] Starting with testid:', testid);
+
+    if (!testid) {
+      console.log('[AdminResult] No testid found, setting error');
+      setError('No Test ID provided in the URL');
+      setLoading(false);
+      return;
+    }
+
     const fetchreultdata = async () => {
       try {
+        console.log('[AdminResult] Fetching data for testid:', testid);
         // Batch all database reads at once
         const [
           studentSnapshot,
@@ -133,7 +137,9 @@ export default function AdminResult() {
           testInfoSnapshot,
           examQuestionsSnapshot,
           marksSnapshot,
-          examCodeSubmissionsSnapshot
+          examCodeSubmissionsSnapshot,
+          allowAllStudentsSnapshot,
+          examSnapshot
         ] = await Promise.all([
           get(ref(database, `Exam/${testid}/Eligible`)),
           get(ref(database, 'users')),
@@ -141,16 +147,31 @@ export default function AdminResult() {
           get(ref(database, `Exam/${testid}/name`)),
           get(ref(database, `Exam/${testid}/questions`)),
           get(ref(database, `Marks/${testid}`)),
-          get(ref(database, `ExamCodeSubmissions/${testid}`)) // Unused but reserved for future use,
+          get(ref(database, `ExamCodeSubmissions/${testid}`)), // Unused but reserved for future use,
+          get(ref(database, `Exam/${testid}/allowAllStudents`)),
+          get(ref(database, `Exam/${testid}`))
         ]);
 
+        console.log('[AdminResult] Data fetched successfully');
+
         // Process basic data
-        const studentEmails = Object.values(studentSnapshot.val() || {});
+        const allowAllStudents = allowAllStudentsSnapshot.val() === true;
+        const exam = examSnapshot.val() || {};
         const usersData = usersSnapshot.val() || {};
         const resultsData = resultsSnapshot.val() || {};
         const examQuestions = examQuestionsSnapshot.val() || {};
         const marksData = marksSnapshot.val() || {};
-        setTestName(testInfoSnapshot.val() || '');
+        const testNameValue = testInfoSnapshot.val() || '';
+
+        console.log('[AdminResult] Processed snapshots:', {
+          allowAllStudents,
+          usersDataKeys: Object.keys(usersData).length,
+          resultsDataKeys: Object.keys(resultsData).length,
+          examQuestionsKeys: Object.keys(examQuestions).length,
+          testNameValue
+        });
+
+        setTestName(testNameValue);
 
         setExamcodeSubmissions(examCodeSubmissionsSnapshot.val() || {});
 
@@ -190,20 +211,30 @@ export default function AdminResult() {
           console.error('Error loading weightage config:', e);
         }
 
-        if (!studentEmails.length) {
-          setLoading(false);
-          return;
+        // Determine student IDs based on allowAllStudents setting
+        let studentIds = [];
+        if (allowAllStudents) {
+          // If all students are allowed, get all students who have submissions
+          studentIds = Object.keys(resultsData).filter(uid => uid && usersData[uid]);
+        } else {
+          // Otherwise, only get eligible students
+          const studentEmails = Object.values(studentSnapshot.val() || {});
+
+          if (!studentEmails.length) {
+            setLoading(false);
+            return;
+          }
+
+          // Create email to UID mapping efficiently
+          const emailToUidMap = Object.fromEntries(
+            Object.entries(usersData).map(([uid, userData]) => [userData.email, uid])
+          );
+
+          // Get student UIDs from emails
+          studentIds = studentEmails
+            .map(email => emailToUidMap[email])
+            .filter(Boolean); // Remove undefined values
         }
-
-        // Create email to UID mapping efficiently
-        const emailToUidMap = Object.fromEntries(
-          Object.entries(usersData).map(([uid, userData]) => [userData.email, uid])
-        );
-
-        // Get student UIDs from emails
-        const studentIds = studentEmails
-          .map(email => emailToUidMap[email])
-          .filter(Boolean); // Remove undefined values
 
         if (!studentIds.length) {
           console.log('No matching users found for the provided emails');
@@ -290,6 +321,7 @@ export default function AdminResult() {
         setResults(studentResults);
       } catch (error) {
         console.error('Error fetching results:', error);
+        setError(`Failed to load results: ${error.message || 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
@@ -1704,6 +1736,14 @@ export default function AdminResult() {
   };
 
   if (loading) return <LoadingPage />;
+
+  if (error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <p className="text-red-800 dark:text-red-200">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] -mt-4 -mx-4 bg-gray-50 dark:bg-gray-900 p-6">

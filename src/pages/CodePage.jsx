@@ -146,6 +146,7 @@ function CodePage({ data, navigation }) {
   const [isDragging, setIsDragging] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(45);
   const [selectedLanguage, setSelectedLanguage] = useState('cpp');
+  const [isCompleted, setIsCompleted] = useState(false);
   const { theme } = useTheme();
   const [questionData, setQuestionData] = useState(null);
   const [courseData, setCourseData] = useState(null);
@@ -306,6 +307,7 @@ function CodePage({ data, navigation }) {
 
       await set(progressRef, isCorrect);
       console.log(`userprogress saved: ${questionId} = ${isCorrect}`);
+      setIsCompleted(isCorrect);
     } catch (error) {
       console.error("Error saving user progress:", error);
     }
@@ -557,7 +559,20 @@ function CodePage({ data, navigation }) {
     fetchData();
     loadCode();
     getAllowedLanguageTemplates();
-  }, [questionId]);
+
+    // Fetch completion status
+    const fetchCompletionStatus = async () => {
+      if (user?.uid) {
+        const progressRef = ref(
+          database,
+          `userprogress/${user.uid}/${course}/${subcourse}/${questionId}`
+        );
+        const progressSnapshot = await get(progressRef);
+        setIsCompleted(progressSnapshot.exists() && progressSnapshot.val() === true);
+      }
+    };
+    fetchCompletionStatus();
+  }, [questionId, user]);
 
   // Whenever the question changes, default back to description tab
   useEffect(() => {
@@ -815,7 +830,14 @@ function CodePage({ data, navigation }) {
           {activeTab === 'description' && (
             <div className="text-gray-700 dark:text-gray-400">
               <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)}</h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)}</h1>
+                  {isCompleted && (
+                    <svg className="w-6 h-6 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-4 mt-2">
                   <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">Easy</span>
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">

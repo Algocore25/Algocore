@@ -22,29 +22,233 @@ import "react-toastify/dist/ReactToastify.css";
 import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry";
 import { decodeShort } from '../utils/urlEncoder';
 
-// Helper: Render pipe-separated SQL output as a styled table
-const SqlResultTable = ({ text, className = '' }) => {
+// Helper: Extract all columns from schema for display
+const getColumnsFromSchema = (schema) => {
+  if (!schema) return {};
+
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]*?)\)(?:;|\n)/gi;
+  const columns = {};
+  let match;
+
+  while ((match = tableRegex.exec(schema)) !== null) {
+    const tableName = match[1];
+    const columnsStr = match[2];
+    const tableColumns = [];
+    let currentCol = '';
+    let parenDepth = 0;
+
+    for (let i = 0; i < columnsStr.length; i++) {
+      const char = columnsStr[i];
+      if (char === '(') parenDepth++;
+      else if (char === ')') parenDepth--;
+      else if (char === ',' && parenDepth === 0) {
+        if (currentCol.trim()) {
+          const parts = currentCol.trim().split(/\s+/);
+          if (parts.length > 0) {
+            tableColumns.push(parts[0]);
+          }
+        }
+        currentCol = '';
+        continue;
+      }
+      currentCol += char;
+    }
+
+    if (currentCol.trim()) {
+      const parts = currentCol.trim().split(/\s+/);
+      if (parts.length > 0) {
+        tableColumns.push(parts[0]);
+      }
+    }
+
+    if (tableColumns.length > 0) {
+      columns[tableName] = tableColumns;
+    }
+  }
+
+  return columns;
+};
+
+// Helper: Extract column names from SELECT statement
+const extractColumnsFromQuery = (sqlCode) => {
+  if (!sqlCode || typeof sqlCode !== 'string') return null;
+
+  // Match SELECT clause
+  const selectMatch = sqlCode.match(/SELECT\s+(.*?)\s+FROM\s+/is);
+  if (!selectMatch) return null;
+
+  const selectClause = selectMatch[1];
+
+  // Split by comma, but be careful with function calls
+  const columns = [];
+  let currentColumn = '';
+  let parenDepth = 0;
+
+  for (let i = 0; i < selectClause.length; i++) {
+    const char = selectClause[i];
+    if (char === '(') parenDepth++;
+    else if (char === ')') parenDepth--;
+    else if (char === ',' && parenDepth === 0) {
+      const col = currentColumn.trim();
+      if (col) {
+        const columnName = extractColumnName(col);
+        if (columnName) {
+          columns.push(columnName);
+        }
+      }
+      currentColumn = '';
+      continue;
+    }
+    currentColumn += char;
+  }
+
+  // Don't forget the last column
+  if (currentColumn.trim()) {
+    const col = currentColumn.trim();
+    const columnName = extractColumnName(col);
+    if (columnName) {
+      columns.push(columnName);
+    }
+  }
+
+  // Return null if SELECT * or no valid columns found
+  if (columns.length === 0 || columns[0] === '*') return null;
+
+  return columns.length > 0 ? columns : null;
+};
+
+// Helper: Extract column name, handling aliases
+const extractColumnName = (colStr) => {
+  // Check for alias (with AS keyword or without)
+  const aliasMatch = colStr.match(/\s+AS\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i);
+  if (aliasMatch) {
+    // Return the alias if it exists
+    return aliasMatch[1];
+  }
+
+  // Check for alias without AS keyword (space-separated at end)
+  const spaceParts = colStr.trim().split(/\s+/);
+
+  // If there are multiple parts and the last part looks like an identifier and is not a keyword
+  if (spaceParts.length > 1) {
+    const lastPart = spaceParts[spaceParts.length - 1];
+    const commonKeywords = ['FROM', 'WHERE', 'GROUP', 'ORDER', 'LIMIT', 'AND', 'OR', 'ON'];
+
+    // Check if last part is a valid identifier and not a keyword
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lastPart) && !commonKeywords.includes(lastPart.toUpperCase())) {
+      return lastPart;
+    }
+  }
+
+  // No alias - extract base column name
+  let columnName = colStr.trim().split(/\s+/)[0];
+
+  // Handle table.column format
+  if (columnName.includes('.')) {
+    columnName = columnName.split('.')[1];
+  }
+
+  // Filter out function calls
+  if (!columnName.includes('(')) {
+    return columnName;
+  }
+
+  return null;
+};
+
+// Helper: Render pipe-separated SQL output as a styled table with optional headers
+const SqlResultTable = ({ text, className = '', columns = null, tableName = null }) => {
+  console.log('Rendering SqlResultTable with text:', columns);
   if (!text || typeof text !== 'string') return <span className="text-gray-400 italic">No output</span>;
   const lines = text.split('\n').filter(l => l.trim() !== '');
   if (lines.length === 0) return <span className="text-gray-400 italic">Empty result</span>;
 
-  const rows = lines.map(line => line.split('|'));
-  const maxCols = Math.max(...rows.map(r => r.length));
+  // Check if output contains pipes (table format)
+  const hasPipes = lines.some(line => line.includes('|'));
+
+  let rows;
+  let dataColCount;
+
+  if (!hasPipes) {
+    // No pipes - treat each line as a single cell in one column
+    rows = lines.map(line => [line]);
+    dataColCount = 1;
+  } else {
+    // Has pipes - split by pipe
+    rows = lines.map(line => line.split('|').map(cell => cell.trim()));
+    dataColCount = Math.max(...rows.map(r => r.length));
+  }
+
+  // Decide which headers to use
+  let headers = null;
+  let dataRows = rows;
+
+  // For "products" table, use actual column names from schema
+  if (columns && columns.length > 0) {
+    // Use provided columns as headers
+    headers = columns.slice(0, dataColCount);
+
+    // Check if first row looks like headers (column names from output)
+    const firstRow = rows[0];
+    const looksLikeHeader = firstRow && firstRow.every(cell =>
+      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
+    );
+
+    // If first row looks like headers, skip it (use extracted columns instead)
+    if (looksLikeHeader && rows.length > 1) {
+      dataRows = rows.slice(1);
+    } else {
+      dataRows = rows;
+    }
+  } else if (rows.length > 0 && dataColCount > 0) {
+    // For all tables: check if first row looks like headers
+    const firstRow = rows[0];
+
+    // Check if first row looks like headers (column names)
+    const looksLikeHeader = firstRow.every(cell =>
+      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
+    );
+
+    if (looksLikeHeader && rows.length > 1) {
+      // First row looks like headers - use it
+      headers = firstRow;
+      dataRows = rows.slice(1);
+    } else if (rows.length === 1 && dataColCount === 1) {
+      // Single scalar result (like SELECT MAX(price))
+      headers = ['Result'];
+      dataRows = rows;
+    } else {
+      // No headers - generate generic ones
+      headers = Array.from({ length: dataColCount }, (_, i) => `Column ${i + 1}`);
+      dataRows = rows;
+    }
+  }
 
   return (
-    <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 ${className}`}>
-      <table className="min-w-full text-sm">
+    <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
+      <table className="min-w-full text-sm bg-white dark:bg-gray-900">
+        {headers && headers.length > 0 && (
+          <thead>
+            <tr className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 border-b-2 border-blue-300 dark:border-blue-700">
+              {headers.map((col, j) => (
+                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 uppercase tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-          {rows.map((row, i) => (
-            <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}>
+          {dataRows.map((row, i) => (
+            <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors' : 'bg-gray-50 dark:bg-gray-800/30 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors'}>
               {row.map((cell, j) => (
-                <td key={j} className="px-3 py-1.5 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap">
-                  {cell.trim()}
+                <td key={j} className="px-4 py-2.5 font-mono text-xs text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                  {cell}
                 </td>
               ))}
-              {/* pad empty cells if needed */}
-              {Array.from({ length: maxCols - row.length }).map((_, k) => (
-                <td key={`pad-${k}`} className="px-3 py-1.5"></td>
+              {/* Pad empty cells if needed */}
+              {Array.from({ length: dataColCount - row.length }).map((_, k) => (
+                <td key={`pad-${k}`} className="px-4 py-2.5"></td>
               ))}
             </tr>
           ))}
@@ -58,18 +262,54 @@ const SqlResultTable = ({ text, className = '' }) => {
 const SqlSchemaDisplay = ({ schema }) => {
   if (!schema) return null;
 
-  // Parse CREATE TABLE statements
-  const tableRegex = /CREATE\s+TABLE\s+(\w+)\s*\(([^)]+)\)/gi;
+  // Parse CREATE TABLE statements - improved regex to handle various formats
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]*?)\)(?:;|$)/gi;
   const tables = [];
   let match;
+
   while ((match = tableRegex.exec(schema)) !== null) {
     const tableName = match[1];
     const columnsStr = match[2];
-    const columns = columnsStr.split(',').map(col => {
-      const parts = col.trim().split(/\s+/);
-      return { name: parts[0], type: parts.slice(1).join(' ') };
-    });
-    tables.push({ name: tableName, columns });
+
+    // Split by comma but be careful with function calls like DECIMAL(10,2)
+    const columns = [];
+    let currentCol = '';
+    let parenDepth = 0;
+
+    for (let i = 0; i < columnsStr.length; i++) {
+      const char = columnsStr[i];
+      if (char === '(') parenDepth++;
+      else if (char === ')') parenDepth--;
+      else if (char === ',' && parenDepth === 0) {
+        if (currentCol.trim()) {
+          const parts = currentCol.trim().split(/\s+/);
+          if (parts.length > 0) {
+            columns.push({
+              name: parts[0],
+              type: parts.slice(1).join(' ').toUpperCase()
+            });
+          }
+        }
+        currentCol = '';
+        continue;
+      }
+      currentCol += char;
+    }
+
+    // Don't forget last column
+    if (currentCol.trim()) {
+      const parts = currentCol.trim().split(/\s+/);
+      if (parts.length > 0) {
+        columns.push({
+          name: parts[0],
+          type: parts.slice(1).join(' ').toUpperCase()
+        });
+      }
+    }
+
+    if (columns.length > 0) {
+      tables.push({ name: tableName, columns });
+    }
   }
 
   // Parse INSERT statements to count rows per table
@@ -104,39 +344,287 @@ const SqlSchemaDisplay = ({ schema }) => {
               <span className="text-xs text-gray-500 dark:text-gray-400">{rowCounts[table.name]} rows</span>
             )}
           </div>
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="bg-gray-100 dark:bg-gray-800">
-                <th className="px-4 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Column</th>
-                <th className="px-4 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {table.columns.map((col, ci) => (
-                <tr key={ci} className={ci % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}>
-                  <td className="px-4 py-1.5 font-mono text-xs text-gray-800 dark:text-gray-200">{col.name}</td>
-                  <td className="px-4 py-1.5 font-mono text-xs text-gray-500 dark:text-gray-400">{col.type}</td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-gray-800">
+                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Column</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Type</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {table.columns.map((col, ci) => (
+                  <tr key={ci} className={ci % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}>
+                    <td className="px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap">{col.name}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-gray-600 dark:text-gray-400">{col.type}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ))}
     </div>
   );
 };
 
-// SQL-specific test results display with table formatting
-const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
-  const [selectedTestIndex, setSelectedTestIndex] = useState(null);
-  const { theme } = useTheme();
+// Helper: Parse and display tables with actual data from INSERT statements
+const SqlTablesDisplay = ({ schema }) => {
+  if (!schema) return <p className="text-gray-600 dark:text-gray-400">No schema available</p>;
 
-  useEffect(() => {
-    if (testResults.length > 0) {
-      const firstFailedIndex = testResults.findIndex(t => !t.passed);
-      setSelectedTestIndex(firstFailedIndex !== -1 ? firstFailedIndex : 0);
+  // Parse CREATE TABLE statements - improved regex
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]*?)\)(?:;|\n)/gi;
+  const tableStructures = {};
+  let match;
+
+  while ((match = tableRegex.exec(schema)) !== null) {
+    const tableName = match[1];
+    const columnsStr = match[2];
+
+    // Parse column names accounting for parentheses in data types
+    const columns = [];
+    let currentCol = '';
+    let parenDepth = 0;
+
+    for (let i = 0; i < columnsStr.length; i++) {
+      const char = columnsStr[i];
+      if (char === '(') parenDepth++;
+      else if (char === ')') parenDepth--;
+      else if (char === ',' && parenDepth === 0) {
+        if (currentCol.trim()) {
+          const parts = currentCol.trim().split(/\s+/);
+          if (parts.length > 0) {
+            columns.push(parts[0]);
+          }
+        }
+        currentCol = '';
+        continue;
+      }
+      currentCol += char;
     }
-  }, [testResults]);
+
+    if (currentCol.trim()) {
+      const parts = currentCol.trim().split(/\s+/);
+      if (parts.length > 0) {
+        columns.push(parts[0]);
+      }
+    }
+
+    tableStructures[tableName] = columns;
+  }
+
+  // Parse INSERT statements with data - handle multiple rows per INSERT
+  const tableData = {};
+
+  // Find each complete INSERT statement
+  const insertStatements = schema.match(/INSERT\s+INTO\s+\w+[^;]*;/gi) || [];
+
+  for (const stmt of insertStatements) {
+    // Extract table name
+    const tableMatch = stmt.match(/INSERT\s+INTO\s+(\w+)/i);
+    if (!tableMatch) continue;
+
+    const tableName = tableMatch[1];
+    if (!tableData[tableName]) {
+      tableData[tableName] = [];
+    }
+
+    // Extract VALUES clause
+    const valuesMatch = stmt.match(/VALUES\s*(.+?)(?:;|$)/is);
+    if (!valuesMatch) continue;
+
+    const valuesSection = valuesMatch[1];
+
+    // Split into individual rows - need to handle nested parentheses and quotes
+    const rows = [];
+    let currentRow = '';
+    let parenDepth = 0;
+    let inString = false;
+    let stringChar = null;
+
+    for (let i = 0; i < valuesSection.length; i++) {
+      const char = valuesSection[i];
+      const prevChar = i > 0 ? valuesSection[i - 1] : '';
+
+      // Track string state
+      if ((char === '"' || char === "'") && prevChar !== '\\') {
+        if (!inString) {
+          inString = true;
+          stringChar = char;
+        } else if (char === stringChar) {
+          inString = false;
+        }
+      }
+
+      // Track parenthesis depth when not in string
+      if (!inString) {
+        if (char === '(') {
+          parenDepth++;
+        } else if (char === ')') {
+          parenDepth--;
+        }
+      }
+
+      // At top level (parenDepth === 0), split on commas
+      if (!inString && char === ',' && parenDepth === 0) {
+        const trimmed = currentRow.trim();
+        if (trimmed) {
+          rows.push(trimmed);
+        }
+        currentRow = '';
+        continue;
+      }
+
+      currentRow += char;
+    }
+
+    // Don't forget the last row
+    if (currentRow.trim()) {
+      rows.push(currentRow.trim());
+    }
+
+    // Parse each row
+    for (const rowStr of rows) {
+      const match = rowStr.match(/^\((.+)\)$/);
+      if (!match) continue;
+
+      const valuesStr = match[1];
+      const values = [];
+      let currentValue = '';
+      let inStr = false;
+      let strChar = null;
+      let pDepth = 0;
+
+      for (let i = 0; i < valuesStr.length; i++) {
+        const c = valuesStr[i];
+        const prev = i > 0 ? valuesStr[i - 1] : '';
+
+        // Handle quotes
+        if ((c === '"' || c === "'") && prev !== '\\') {
+          if (!inStr) {
+            inStr = true;
+            strChar = c;
+            currentValue += c;
+          } else if (c === strChar) {
+            inStr = false;
+            strChar = null;
+            currentValue += c;
+          } else {
+            currentValue += c;
+          }
+        }
+        // Handle parentheses
+        else if (c === '(' && !inStr) {
+          pDepth++;
+          currentValue += c;
+        } else if (c === ')' && !inStr) {
+          pDepth--;
+          currentValue += c;
+        }
+        // Handle value separator
+        else if (c === ',' && !inStr && pDepth === 0) {
+          let v = currentValue.trim();
+          if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) {
+            v = v.slice(1, -1);
+          }
+          values.push(v);
+          currentValue = '';
+        } else {
+          currentValue += c;
+        }
+      }
+
+      // Add last value
+      if (currentValue.trim()) {
+        let v = currentValue.trim();
+        if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) {
+          v = v.slice(1, -1);
+        }
+        values.push(v);
+      }
+
+      if (values.length > 0) {
+        tableData[tableName].push(values);
+      }
+    }
+  }
+
+
+  if (Object.keys(tableData).length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-600 dark:text-gray-400 mb-2">No tables with data found</p>
+        <p className="text-xs text-gray-500 dark:text-gray-500">Schema: {schema?.substring(0, 100)}...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {Object.entries(tableData).map(([tableName, rows]) => {
+        const columns = tableStructures[tableName] || [];
+        return (
+          <div key={tableName} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="bg-purple-50 dark:bg-purple-900/20 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+              <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="font-bold text-base text-purple-700 dark:text-purple-300">{tableName}</span>
+              <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 font-medium">{rows.length} {rows.length === 1 ? 'row' : 'rows'}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-gray-800">
+                    {columns.length > 0 ? (
+                      columns.map((col, idx) => (
+                        <th
+                          key={idx}
+                          className="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 last:border-r-0"
+                        >
+                          {col}
+                        </th>
+                      ))
+                    ) : (
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Data</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {rows.map((row, rowIdx) => (
+                    <tr
+                      key={rowIdx}
+                      className={rowIdx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50'}
+                    >
+                      {columns.length > 0 ? (
+                        columns.map((col, colIdx) => (
+                          <td
+                            key={colIdx}
+                            className="px-4 py-2.5 font-mono text-sm text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0 whitespace-nowrap"
+                          >
+                            {row[colIdx] || '-'}
+                          </td>
+                        ))
+                      ) : (
+                        <td className="px-4 py-2.5 font-mono text-sm text-gray-800 dark:text-gray-200">
+                          {row.join(' | ')}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// SQL-specific test results display with table formatting
+const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null, questionData = null, code = '' }) => {
+  const { theme } = useTheme();
 
   if (runsubmit === 'none' || testResults.length === 0) {
     return (
@@ -147,155 +635,154 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
   }
 
   const allPassed = testResults.every(t => t.passed);
-  const currentTest = testResults[selectedTestIndex];
-  const isHiddenCase = !(runsubmit === 'run' || selectedTestIndex === 0 || selectedTestIndex === 1);
   const testStatus = allPassed ? 'passed' : 'failed';
+  const passedCount = testResults.filter(t => t.passed).length;
+  const percentage = Math.round((passedCount / testResults.length) * 100);
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-6">
+    <div className="w-full max-w-4xl mx-auto space-y-6">
       {/* Summary Header */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${testStatus === 'passed' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-red-100 dark:bg-red-900/30 text-red-600'}`}>
-            {testStatus === 'passed' ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            )}
-          </div>
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+        <div className="flex items-center gap-4 mb-4">
+          {testStatus === 'passed' ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
           <div>
-            <h3 className={`text-xl font-bold ${testStatus === 'passed' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {testStatus === 'passed' ? 'All Tests Passed' : `${testResults.filter(t => !t.passed).length} Tests Failed`}
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {testStatus === 'passed' ? 'All Tests Passed! 🎉' : `${testResults.filter(t => !t.passed).length} Test${testResults.filter(t => !t.passed).length !== 1 ? 's' : ''} Failed`}
             </h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">
-              Successfully executed {testResults.length} test cases
+            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
+              {passedCount} of {testResults.length} test case{testResults.length !== 1 ? 's' : ''} passed
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Score:</span>
-          <span className={`text-lg font-bold ${testStatus === 'passed' ? 'text-green-600' : 'text-blue-600'}`}>
-            {Math.round((testResults.filter(t => t.passed).length / testResults.length) * 100)}%
-          </span>
+          <div className="ml-auto">
+            <div className="text-right">
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-semibold">Score</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{percentage}%</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Main Results Card */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col md:flex-row min-h-[400px]">
-        {/* Navigation Sidebar */}
-        <div className="w-full md:w-48 bg-gray-50 dark:bg-gray-800/30 border-r border-gray-200 dark:border-gray-800 flex flex-col">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Test Cases</span>
-            <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-700 dark:text-gray-300">
-              {testResults.length}
-            </span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {testResults.map((test, index) => {
-              const isActive = index === selectedTestIndex;
-              const isHidden = !(runsubmit === 'run' || index === 0 || index === 1);
-
-              return (
-                <button
-                  key={index}
-                  onClick={() => setSelectedTestIndex(index)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group ${isActive
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm'
-                    }`}
-                >
-                  <div className={`w-2 h-2 rounded-full ${test.passed ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                  <span className="flex-1 text-left">Case {index + 1}</span>
-                  {isHidden && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      {/* Test Results List */}
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <div className="divide-y divide-gray-200 dark:divide-gray-800">
+          {testResults.map((test, idx) => (
+            <div key={idx} className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  {test.passed ? (
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   )}
-                  {isActive && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-gray-900">
-          {currentTest && (
-            <>
-              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-bold text-gray-900 dark:text-white">Case {selectedTestIndex + 1}</h4>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${currentTest.passed
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30'
-                    : 'bg-red-100 text-red-700 dark:bg-red-900/30'
-                    }`}>
-                    {currentTest.passed ? 'Passed' : 'Failed'}
+                  <h4 className="font-bold text-gray-900 dark:text-white">Test Case {idx + 1}</h4>
+                  <span className={`text-xs font-bold uppercase tracking-wider ${test.passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {test.passed ? 'Passed' : 'Failed'}
                   </span>
                 </div>
-                {isHiddenCase && (
-                  <span className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    Hidden Test Case
-                  </span>
-                )}
               </div>
 
-              <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Expected Block */}
-                  <div>
-                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Expected Output</span>
-                    <div className="bg-green-50/50 dark:bg-green-900/10 rounded-xl p-4 border border-green-100 dark:border-green-900/30 min-h-[100px]">
-                      {isHiddenCase ? (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2 opacity-60 italic py-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          <span>Content Hidden</span>
-                        </div>
-                      ) : currentTest.expected?.includes('|') ? (
-                        <SqlResultTable text={currentTest.expected} className="border-green-200 dark:border-green-800" />
-                      ) : (
-                        <div className="font-mono text-sm text-gray-800 dark:text-green-200 whitespace-pre-wrap">
-                          {currentTest.expected || 'No output'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+              <div className="space-y-6">
+                {/* Expected Output */}
+                <div>
+                  <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Expected Output</p>
+                  {(() => {
+                    const schemaColumns = getColumnsFromSchema(schema);
+                    console.log('Schema columns for expected output:', schemaColumns);
+                    const firstTableColumns = Object.values(schemaColumns)[0] || null;
+                    const expectedSchema = questionData?.testcases[0]?.expectedColumns || firstTableColumns;
+                    const hasTableFormat = test.expected && test.expected.includes('|');
 
-                  {/* Actual Block */}
-                  <div>
-                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Your Output</span>
-                    <div className={`${currentTest.passed
-                      ? 'bg-green-50/50 dark:bg-green-900/10 border-green-100 dark:border-green-900/30'
-                      : 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30'
-                      } rounded-xl p-4 border min-h-[100px]`}>
-                      {currentTest.output?.includes('|') ? (
-                        <SqlResultTable text={currentTest.output} className={currentTest.passed ? 'border-green-200 dark:border-green-800' : 'border-red-200 dark:border-red-800'} />
-                      ) : (
-                        <div className={`font-mono text-sm whitespace-pre-wrap ${currentTest.passed ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                          {currentTest.output || 'No output'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    if (!hasTableFormat) {
+                      // Non-table format (plain description/text)
+                      return (
+                        <pre className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-800">
+                          {test.expected || 'No output'}
+                        </pre>
+                      );
+                    }
+
+                    // Table format
+                    return (
+                      <SqlResultTable
+                        text={test.expected}
+                        className=""
+                        columns={expectedSchema}
+                      />
+                    );
+                  })()}
+                </div>
+
+                {/* Your Output */}
+                <div>
+                  <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Your Output</p>
+                  {(() => {
+                    const hasTableFormat = test.output && test.output.includes('\n');
+
+                    if (!hasTableFormat) {
+                      // Non-table format (plain description/text)
+                      const bgClass = test.passed
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+
+                      return (
+                        <pre className={`p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border ${bgClass}`}>
+                          {test.output || 'No output'}
+                        </pre>
+                      );
+                    }
+
+                    // Table format - extract columns from actual output only
+                    let userColumns = null;
+
+                    // Extract columns from the actual output headers only
+                    const outputLines = test.output ? test.output.split('\n').filter(l => l.trim() !== '') : [];
+
+                    if (outputLines.length > 0) {
+                      const firstLine = outputLines[0];
+                      const potentialHeaders = firstLine.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
+
+                      // Check if first row looks like headers (pattern: word characters and underscores)
+                      const looksLikeHeaders = potentialHeaders.every(cell =>
+                        /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
+                      );
+
+                      if (looksLikeHeaders && outputLines.length > 1) {
+                        userColumns = potentialHeaders;
+                      }
+                    }
+
+                    console.log('Final columns used for user output:', userColumns);
+
+                    return (
+                      <SqlResultTable
+                        text={test.output}
+                        className=""
+                        columns={userColumns}
+                      />
+                    );
+                  })()}
                 </div>
               </div>
-            </>
-          )}
+            </div>
+          ))}
         </div>
       </div>
+
+      <p className="mt-4 text-xs text-gray-400 dark:text-gray-500 text-center italic">
+        Tests are run against the current code version in the editor.
+      </p>
     </div>
   );
 };
@@ -307,6 +794,7 @@ function SqlPage({ data, navigation }) {
 
   // Prevent copy, cut, and paste
   useEffect(() => {
+
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     if (isLocalhost) return;
 
@@ -422,6 +910,8 @@ function SqlPage({ data, navigation }) {
   const [isDragging, setIsDragging] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(45);
   const [selectedLanguage, setSelectedLanguage] = useState('sql');
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [showCompletionAnimation, setShowCompletionAnimation] = useState(false);
   const { theme } = useTheme();
   const [questionData, setQuestionData] = useState(null);
   const [courseData, setCourseData] = useState(null);
@@ -437,6 +927,101 @@ function SqlPage({ data, navigation }) {
       const newHeight = Math.min(200, Math.max(80, element.scrollHeight));
       element.style.height = newHeight + 'px';
     }
+  };
+
+  // Helper: Compare both columns and rows for SQL output validation
+  const compareTableOutput = (expectedOutput, actualOutput) => {
+    const expectedColumns = questionData?.testcases[0]?.expectedColumns || null;
+    const rowexpectedLines = expectedOutput ? expectedOutput.split("\n").filter(l => l.trim() !== '') : [];
+    const actualLines = actualOutput ? actualOutput.split("\n").filter(l => l.trim() !== '') : [];
+
+    const expectedLines = expectedColumns && rowexpectedLines.length > 0
+      ? [expectedColumns.join('|'), ...rowexpectedLines]
+      : rowexpectedLines;
+
+    console.log(expectedLines);
+    console.log(actualLines);
+
+    // condition to compare column names if expected output has column names defined in question data
+    if (expectedColumns && expectedLines.length > 0) {
+      const expectedHeader = expectedLines[0];
+      const actualHeader = actualLines.length > 0 ? actualLines[0] : '';
+      console.log('Comparing headers:');
+      console.log('Expected header:', expectedHeader);
+      console.log('Actual header:', actualHeader);
+      if ( expectedHeader.trim() !== actualHeader.trim()) {
+        return false;
+      }
+    }
+
+    console.log('After header check:');
+
+
+
+    // Check if both outputs have pipes (table format)
+    const expectedHasPipes = expectedLines.some(line => line.includes('|'));
+    const actualHasPipes = actualLines.some(line => line.includes('|'));
+
+
+    // If both are table format, compare columns and rows separately
+    if (expectedHasPipes && actualHasPipes) {
+      // Parse expected output
+      const expectedRows = expectedLines.map(line =>
+        line.split('|').map(cell => cell.trim()).filter(cell => cell !== '')
+      );
+
+      // Parse actual output
+      const actualRows = actualLines.map(line =>
+        line.split('|').map(cell => cell.trim()).filter(cell => cell !== '')
+      );
+
+      // Must have at least header row
+      if (expectedRows.length === 0 || actualRows.length === 0) return false;
+
+      // Extract headers (first row) and data rows from expected output
+      const expectedHeaders = expectedRows[0];
+      const expectedDataRows = expectedRows.slice(1);
+
+      // Check if first row of actual output looks like column headers
+      // If it does, skip it; otherwise treat all rows as data
+      const firstRowLooksLikeHeader = actualRows[0].every(cell =>
+        /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
+      );
+      const actualDataRows = firstRowLooksLikeHeader ? actualRows.slice(1) : actualRows;
+      const actualHeaders = firstRowLooksLikeHeader ? actualRows[0] : null;
+
+      // Validate columns: must have same number of columns
+      if (expectedDataRows.length === 0) return false;
+      if (expectedDataRows[0].length !== actualDataRows[0].length) return false;
+
+      // Validate number of data rows match
+      if (expectedDataRows.length !== actualDataRows.length) return false;
+
+      // Validate each data row matches (case-insensitive, trimmed)
+      for (let i = 0; i < expectedDataRows.length; i++) {
+        const expectedRow = expectedDataRows[i];
+        const actualRow = actualDataRows[i];
+
+        // Check if each row has the same number of columns
+        if (expectedRow.length !== actualRow.length) return false;
+
+        // Check if each cell matches (case-insensitive, trimmed)
+        for (let j = 0; j < expectedRow.length; j++) {
+          if (expectedRow[j].toLowerCase() !== actualRow[j].toLowerCase()) return false;
+        }
+      }
+
+      return true;
+    }
+
+    // If neither are table format, do simple line-by-line comparison
+    if (!expectedHasPipes && !actualHasPipes) {
+      if (expectedLines.length !== actualLines.length) return false;
+      return expectedLines.every((val, idx) => val.trimEnd() === actualLines[idx].trimEnd());
+    }
+
+    // If one is table format and other is not, they don't match
+    return false;
   };
 
   useEffect(() => {
@@ -491,6 +1076,7 @@ function SqlPage({ data, navigation }) {
     const path = `Submissions/${user.uid}/${safeCourse}/${safeSubcourse}/${safeQuestionId}/${safeTimestamp}`;
 
     try {
+
       await set(ref(database, path), {
         language: selectedLanguage,
         status,
@@ -557,8 +1143,7 @@ function SqlPage({ data, navigation }) {
           const expectedLines = expectedOutput.split("\n");
           while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
 
-          const passed = resultlist.length === expectedLines.length &&
-            resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+          const passed = compareTableOutput(expectedOutput, result.output);
 
           currentResult = {
             input,
@@ -606,6 +1191,14 @@ function SqlPage({ data, navigation }) {
 
       await set(progressRef, isCorrect);
       console.log(`userprogress saved: ${questionId} = ${isCorrect}`);
+      setIsCompleted(isCorrect);
+
+      if (isCorrect) {
+        setShowCompletionAnimation(true);
+        setTimeout(() => {
+          setShowCompletionAnimation(false);
+        }, 3000);
+      }
     } catch (error) {
       console.error("Error saving user progress:", error);
     }
@@ -669,8 +1262,7 @@ function SqlPage({ data, navigation }) {
             const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
             const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
 
-            const passed = resultLines.length === expectedLines.length &&
-              resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+            const passed = compareTableOutput(expectedOutput, resultOutput);
 
             currentResult = {
               input: testInput,
@@ -840,6 +1432,16 @@ function SqlPage({ data, navigation }) {
 
           console.log(question);
           setQuestionData(question);
+
+          // Fetch completion status
+          if (user?.uid) {
+            const progressRef = ref(
+              database,
+              `userprogress/${user.uid}/${course}/${subcourse}/${questionId}`
+            );
+            const progressSnapshot = await get(progressRef);
+            setIsCompleted(progressSnapshot.exists() && progressSnapshot.val() === true);
+          }
         }
       } catch (error) {
         console.error("Error fetching data from Firebase:", error);
@@ -849,6 +1451,18 @@ function SqlPage({ data, navigation }) {
     fetchData();
     loadCode();
 
+  }, [questionId, user]);
+
+  // Reset active tab to description when question changes
+  useEffect(() => {
+    setActiveTab('description');
+  }, [questionId]);
+
+  // Clear output and test results when question changes
+  useEffect(() => {
+    setOutput(null);
+    setTestResults([]);
+    setRunSubmit('none');
   }, [questionId]);
 
   // Fixed Monaco Editor layout handling
@@ -1042,52 +1656,96 @@ function SqlPage({ data, navigation }) {
   }, [course]);
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">      {/* Left Panel */}
-      <div
-        className="bg-white dark:bg-dark-secondary border-r border-gray-200 dark:border-dark-tertiary flex flex-col overflow-hidden h-full"
-        style={{ width: `${leftPanelWidth}%` }}
-      >
-        <div className="flex whitespace-nowrap border-b border-gray-200 dark:border-dark-tertiary overflow-x-auto">
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'description' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
-              }`}
-            onClick={() => setActiveTab('description')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.FileText />
-              Description
+    <>
+      {/* Completion Animation */}
+      {showCompletionAnimation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+          <div className="relative flex flex-col items-center">
+            {/* Checkmark Circle Animation */}
+            <div className="animate-bounce">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-2xl">
+                <svg className="w-20 h-20 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </div>
             </div>
-          </button>
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'testcases' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
-              }`}
-            onClick={() => setActiveTab('testcases')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.Code2 />
-              Test Cases
+            {/* Confetti-like circles */}
+            <div className="absolute w-32 h-32 flex items-center justify-center">
+              {[...Array(8)].map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute w-2 h-2 rounded-full bg-green-400 animate-ping"
+                  style={{
+                    animationDelay: `${i * 0.1}s`,
+                    transform: `rotate(${i * 45}deg) translateY(-60px)`,
+                  }}
+                />
+              ))}
             </div>
-          </button>
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'output' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
-              }`}
-            onClick={() => setActiveTab('output')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.Terminal />
-              Output
+            {/* Congratulations text */}
+            <div className="mt-12 text-center animate-fadeIn">
+              <h2 className="text-4xl font-bold text-green-600 drop-shadow-lg">Congratulations!</h2>
+              <p className="text-xl text-gray-700 dark:text-gray-300 mt-2 font-semibold">Problem Solved Successfully!</p>
             </div>
-          </button>
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'submissions' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
-            onClick={() => setActiveTab('submissions')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.Clock />
-              Submissions
-            </div>
-          </button>
-          {/* <button
+          </div>
+        </div>
+      )}
+      <div className="h-[calc(100vh-4rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">      {/* Left Panel */}
+        <div
+          className="bg-white dark:bg-dark-secondary border-r border-gray-200 dark:border-dark-tertiary flex flex-col overflow-hidden h-full"
+          style={{ width: `${leftPanelWidth}%` }}
+        >
+          <div className="flex whitespace-nowrap border-b border-gray-200 dark:border-dark-tertiary overflow-x-auto">
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'description' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
+                }`}
+              onClick={() => setActiveTab('description')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.FileText />
+                Description
+              </div>
+            </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'tables' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
+                }`}
+              onClick={() => setActiveTab('tables')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.Database />
+                Tables
+              </div>
+            </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'testcases' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
+                }`}
+              onClick={() => setActiveTab('testcases')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.Code2 />
+                Test Cases
+              </div>
+            </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'output' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
+                }`}
+              onClick={() => setActiveTab('output')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.Terminal />
+                Output
+              </div>
+            </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'submissions' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
+              onClick={() => setActiveTab('submissions')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.Clock />
+                Submissions
+              </div>
+            </button>
+            {/* <button
             className={`px-4 py-3 text-sm font-medium ${activeTab === 'suggestions' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
             onClick={() => setActiveTab('suggestions')}
           >
@@ -1096,353 +1754,406 @@ function SqlPage({ data, navigation }) {
               AI Suggestions
             </div>
           </button> */}
-        </div>
+          </div>
 
-        <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
-          {activeTab === 'description' && (
-            <div className="text-gray-700 dark:text-gray-400">
-              <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)}</h1>
-                <div className="flex flex-wrap items-center gap-4 mt-2">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${questionData?.difficulty === 'Hard' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                    : questionData?.difficulty === 'Medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
-                      : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                    }`}>{questionData?.difficulty || 'Easy'}</span>
-                  <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-sm font-medium flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16" /></svg>
-                    SQL
-                  </span>
+          <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
+            {activeTab === 'description' && (
+              <div className="text-gray-700 dark:text-gray-400">
+                <div className="mb-6">
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)}</h1>
+                    {isCompleted && (
+                      <svg className="w-6 h-6 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 mt-2">
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${questionData?.difficulty === 'Hard' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                      : questionData?.difficulty === 'Medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+                        : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                      }`}>{questionData?.difficulty || 'Easy'}</span>
+                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-sm font-medium flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16" /></svg>
+                      SQL
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-4">
-                <p className="break-words leading-relaxed">
-                  {questionData?.question}
-                </p>
+                <div className="space-y-4">
+                  <p className="break-words leading-relaxed">
+                    {questionData?.question}
+                  </p>
 
-                {/* Schema Section */}
-                {questionData?.schema && (
+                  {/* Schema Section */}
+                  {questionData?.schema && (
+                    <div className="mt-6">
+                      <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white flex items-center gap-2">
+                        <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16" />
+                        </svg>
+                        Database Schema
+                      </h2>
+                      <SqlSchemaDisplay schema={questionData.schema} />
+                    </div>
+                  )}
+
+                  {/* Example using table format */}
                   <div className="mt-6">
                     <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white flex items-center gap-2">
-                      <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16" />
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Database Schema
+                      Expected Output
                     </h2>
-                    <SqlSchemaDisplay schema={questionData.schema} />
-                  </div>
-                )}
-
-                {/* Example using table format */}
-                <div className="mt-6">
-                  <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example Output:</h2>
-                  {questionData?.Example?.[0]?.includes('|') ? (
-                    <div>
-                      <SqlResultTable text={questionData.Example[0].split('Output:')[1]?.trim() || questionData.Example[0]} />
-                    </div>
-                  ) : (
-                    <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                      {questionData?.Example?.[0]}
-                    </pre>
-                  )}
-                </div>
-
-                {questionData?.Example?.[1] && (
-                  <div className="mt-6">
-                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
-                    {questionData.Example[1].includes('|') ? (
-                      <SqlResultTable text={questionData.Example[1].split('Output:')[1]?.trim() || questionData.Example[1]} />
+                    {questionData?.testcases?.[0]?.expectedOutput ? (
+                      questionData.testcases[0].expectedOutput.includes('|') ? (
+                        (() => {
+                          const schemaColumns = getColumnsFromSchema(questionData.schema);
+                          const firstTableColumns = Object.values(schemaColumns)[0] || null;
+                          return (
+                            <SqlResultTable
+                              text={questionData.testcases[0].expectedOutput}
+                              className="border-green-200 dark:border-green-800"
+                              columns={questionData.testcases[0].expectedColumns || firstTableColumns}
+                            />
+                          );
+                        })()
+                      ) : (
+                        <pre className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-green-200 dark:border-green-800">
+                          {questionData.testcases[0].expectedOutput}
+                        </pre>
+                      )
+                    ) : questionData?.Example?.[0]?.includes('|') ? (
+                      <div>
+                        <SqlResultTable text={questionData.Example[0].split('Output:')[1]?.trim() || questionData.Example[0]} />
+                      </div>
                     ) : (
                       <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                        {questionData.Example[1]}
+                        {questionData?.Example?.[0]}
                       </pre>
                     )}
                   </div>
-                )}
 
-                {questionData?.constraints && questionData.constraints.length > 0 && (
-                  <div className="mt-6">
-                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
-                    <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
-                      {questionData.constraints.filter(Boolean).map((c, i) => (
-                        <li key={i}>{c}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'testcases' && (
-
-            <div className="space-y-6">
-
-              {
-                (questionData?.testcases?.length >= 3 && questionData?.testcases?.[2].input === "regex") ?
-                  (
-                    <h1>No input</h1>
-                  )
-                  :
-                  (
-
-
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white"> Manual Test Cases </h3>
-                      <div className="flex items-center gap-2 mb-4">
-                        {testCasesrun.map((_, idx) => (
-                          <button
-                            key={idx}
-                            className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
-                              }`}
-                            onClick={() => setTestCaseTab(idx)}
-                          >
-                            Case {idx + 1}
-                          </button>
-                        ))}
-                        <button
-                          className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
-                          onClick={() => {
-                            setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
-                            setTestCaseTab(testCasesrun.length);
-                          }}
-                        >
-                          +
-                        </button>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
-                            <textarea
-                              ref={inputRef}
-                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
-                              value={testCasesrun[testCaseTab]?.input || ''}
-                              onChange={e => {
-                                const updated = [...testCasesrun];
-                                updated[testCaseTab].input = e.target.value;
-                                setTestCases(updated);
-                                // Force update height after state update
-                                requestAnimationFrame(() => {
-                                  adjustTextareaHeight(e.target);
-                                });
-                              }}
-                              onInput={e => adjustTextareaHeight(e.target)}
-                              placeholder="Enter input (supports multiple lines)"
-                              rows={1}
-                              style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
-                            <textarea
-                              ref={outputRef}
-                              className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
-                              value={testCasesrun[testCaseTab]?.expectedOutput || ''}
-                              onChange={e => {
-                                const updated = [...testCasesrun];
-                                updated[testCaseTab].expectedOutput = e.target.value;
-                                setTestCases(updated);
-                                // Force update height after state update
-                                requestAnimationFrame(() => {
-                                  adjustTextareaHeight(e.target);
-                                });
-                              }}
-                              onInput={e => adjustTextareaHeight(e.target)}
-                              placeholder="Enter expected output (supports multiple lines)"
-                              rows={1}
-                              style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end mt-4">
-                          <button
-                            className="text-red-500 hover:text-red-700 font-medium"
-                            onClick={() => {
-                              const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
-                              setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
-                              setTestCaseTab(prev => Math.max(0, prev - 1));
-                            }}
-                            disabled={testCasesrun.length <= 1}
-                            title="Delete this test case"
-                          >
-                            Delete Case
-                          </button>
-                        </div>
-                      </div>
+                  {questionData?.Example?.[1] && (
+                    <div className="mt-6">
+                      <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
+                      {questionData.Example[1].includes('|') ? (
+                        <SqlResultTable text={questionData.Example[1].split('Output:')[1]?.trim() || questionData.Example[1]} />
+                      ) : (
+                        <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
+                          {questionData.Example[1]}
+                        </pre>
+                      )}
                     </div>
-                  )
-              }
-            </div>
-          )}
+                  )}
 
-          {activeTab === 'output' && (
-            <div className="py-8 px-4 flex flex-col items-center">
-              {output ? (
-                <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
-              ) : testResults.length > 0 && testResults.every(t => t.status === 'done') ? (
-                <SqlAnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
-              ) : (
-                <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
-              )}
-            </div>
-          )}
+                  {questionData?.constraints && questionData.constraints.length > 0 && (
+                    <div className="mt-6">
+                      <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
+                      <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
+                        {questionData.constraints.filter(Boolean).map((c, i) => (
+                          <li key={i}>{c}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
-          {activeTab === 'submissions' && (
-            <div className="space-y-4">
-              {submissions.length === 0 ? (
-                <p className="text-gray-600 dark:text-gray-300">No submissions yet for this question.</p>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-dark-tertiary">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Language</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-dark-tertiary">
-                    {submissions.map((s, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
-                          {(() => {
-                            const fixed = s.timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})_(\d{3})Z/, 'T$1:$2:$3.$4Z');
-                            const date = new Date(fixed);
-                            return isNaN(date.getTime())
-                              ? 'N/A'
-                              : date.toLocaleString('en-US', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                              });
-                          })()}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
-                          {s.language}
-                        </td>
-                        <td className={`px-4 py-2 text-sm font-medium ${s.status === 'correct' ? 'text-green-600' : 'text-red-500'}`}>
-                          {s.status}
-                        </td>
+
+
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'tables' && (
+              <div className="text-gray-700 dark:text-gray-400">
+                {questionData?.schema ? (
+                  <div>
+                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Database Tables
+                    </h2>
+                    <SqlTablesDisplay schema={questionData.schema} />
+                  </div>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400">No schema data available</p>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'testcases' && (
+
+              <div className="space-y-6">
+
+                {
+                  (questionData?.testcases?.length >= 3 && questionData?.testcases?.[2].input === "regex") ?
+                    (
+                      <h1>No input</h1>
+                    )
+                    :
+                    (
+
+
+                      <div>
+                        <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white"> Manual Test Cases </h3>
+                        <div className="flex items-center gap-2 mb-4">
+                          {testCasesrun.map((_, idx) => (
+                            <button
+                              key={idx}
+                              className={`px-4 py-2 rounded-t-lg font-medium border-b-2 transition-colors duration-150 focus:outline-none ${testCaseTab === idx ? 'border-[#4285F4] text-[#4285F4] bg-white dark:bg-dark-secondary' : 'border-transparent text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-dark-tertiary hover:text-[#4285F4]'
+                                }`}
+                              onClick={() => setTestCaseTab(idx)}
+                            >
+                              Case {idx + 1}
+                            </button>
+                          ))}
+                          <button
+                            className="ml-2 px-3 py-2 rounded-full bg-[#4285F4] text-white hover:bg-[#357ae8] text-lg font-bold"
+                            onClick={() => {
+                              setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
+                              setTestCaseTab(testCasesrun.length);
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-dark-secondary rounded-lg p-4 mb-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Input</label>
+                              <textarea
+                                ref={inputRef}
+                                className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
+                                value={testCasesrun[testCaseTab]?.input || ''}
+                                onChange={e => {
+                                  const updated = [...testCasesrun];
+                                  updated[testCaseTab].input = e.target.value;
+                                  setTestCases(updated);
+                                  // Force update height after state update
+                                  requestAnimationFrame(() => {
+                                    adjustTextareaHeight(e.target);
+                                  });
+                                }}
+                                onInput={e => adjustTextareaHeight(e.target)}
+                                placeholder="Enter input (supports multiple lines)"
+                                rows={1}
+                                style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-gray-700 dark:text-gray-300 mb-1 font-medium">Expected Output</label>
+                              <textarea
+                                ref={outputRef}
+                                className="w-full p-2 border border-gray-300 dark:border-dark-tertiary rounded-md bg-white dark:bg-dark-secondary text-gray-900 dark:text-white font-mono text-base min-h-[80px] resize-y"
+                                value={testCasesrun[testCaseTab]?.expectedOutput || ''}
+                                onChange={e => {
+                                  const updated = [...testCasesrun];
+                                  updated[testCaseTab].expectedOutput = e.target.value;
+                                  setTestCases(updated);
+                                  // Force update height after state update
+                                  requestAnimationFrame(() => {
+                                    adjustTextareaHeight(e.target);
+                                  });
+                                }}
+                                onInput={e => adjustTextareaHeight(e.target)}
+                                placeholder="Enter expected output (supports multiple lines)"
+                                rows={1}
+                                style={{ minHeight: '40px', maxHeight: '200px', overflowY: 'auto' }}
+                              />
+                            </div>
+                          </div>
+                          {testCasesrun[testCaseTab]?.expectedOutput && testCasesrun[testCaseTab].expectedOutput.includes('|') && (
+                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wider">Preview:</p>
+                              {(() => {
+                                const schemaColumns = getColumnsFromSchema(questionData?.schema);
+                                const firstTableColumns = Object.values(schemaColumns)[0] || null;
+                                const expectedSchema = questionData.testcases[0].expectedColumns || firstTableColumns;
+                                console.log('Rendering expected output preview with columns:', questionData);
+                                return (
+                                  <SqlResultTable
+                                    text={testCasesrun[testCaseTab].expectedOutput}
+                                    className="border-blue-200 dark:border-blue-900"
+                                    columns={expectedSchema || firstTableColumns}
+                                  />
+                                );
+                              })()}
+                            </div>
+                          )}
+                          <div className="flex justify-end mt-4">
+                            <button
+                              className="text-red-500 hover:text-red-700 font-medium"
+                              onClick={() => {
+                                const updated = testCasesrun.filter((_, idx) => idx !== testCaseTab);
+                                setTestCases(updated.length ? updated : [{ input: '', expectedOutput: '' }]);
+                                setTestCaseTab(prev => Math.max(0, prev - 1));
+                              }}
+                              disabled={testCasesrun.length <= 1}
+                              title="Delete this test case"
+                            >
+                              Delete Case
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                }
+              </div>
+            )}
+
+            {activeTab === 'output' && (
+              <div className="py-8 px-6">
+                {output ? (
+                  <div className="space-y-4">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Output
+                    </h2>
+                    {console.log('Output displayed:', output)}
+                    <div className="w-full">
+                      <SqlResultTable text={output} className="border-blue-200 dark:border-blue-800 w-full" columns={null} />
+                    </div>
+                  </div>
+                ) : testResults.length > 0 && testResults.every(t => t.status === 'done') ? (
+                  <SqlAnimatedTestResults testResults={testResults} runsubmit={runsubmit} schema={questionData?.schema} questionData={questionData} code={code} />
+                ) : (
+                  <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
+                )}
+              </div>
+            )}
+
+            {activeTab === 'submissions' && (
+              <div className="space-y-4">
+                {submissions.length === 0 ? (
+                  <p className="text-gray-600 dark:text-gray-300">No submissions yet for this question.</p>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-dark-tertiary">
+                    <thead>
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Language</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-dark-tertiary">
+                      {submissions.map((s, idx) => (
+                        <tr key={idx}>
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+                            {(() => {
+                              const fixed = s.timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})_(\d{3})Z/, 'T$1:$2:$3.$4Z');
+                              const date = new Date(fixed);
+                              return isNaN(date.getTime())
+                                ? 'N/A'
+                                : date.toLocaleString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                });
+                            })()}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+                            {s.language}
+                          </td>
+                          <td className={`px-4 py-2 text-sm font-medium ${s.status === 'correct' ? 'text-green-600' : 'text-red-500'}`}>
+                            {s.status}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
 
-        </div>
-      </div>
-
-      {/* Draggable Divider */}
-      <div
-        className={`w-1 bg-gray-200 dark:bg-dark-tertiary hover:bg-[#4285F4] cursor-col-resize flex items-center justify-center group transition-colors duration-150 ${isDragging ? 'bg-[#4285F4]' : ''}`}
-        onMouseDown={handleMouseDown}
-        style={{ zIndex: 10 }}
-      >
-        <Icons.GripVertical
-          size={16}
-          className="text-gray-400 group-hover:text-[#4285F4] opacity-0 group-hover:opacity-100"
-        />
-      </div>
-
-      {/* Right Panel (Code Editor) */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-auto">
-        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-end gap-6">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">SQLite</span>
-            <button
-              onClick={() => setCode('')}
-              title="Reset to initial code"
-              className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
-            >
-              <Icons.History className="w-3 h-3" />
-              Reset
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={runCode}
-              className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
-            >
-              <Icons.Play />
-              Run Code
-            </button>
-
-            <button
-              onClick={handleSubmit2}
-              className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
-            >
-              <Icons.ChevronRight />
-              Submit
-            </button>
-
-            {/* Navigation Buttons */}
-            {/* {navigation?.showNavigation && (
-              <>
-                <button
-                  onClick={navigation.onPrevious}
-                  // disabled={navigation.currentQuestionIndex === 0}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium text-[11px] transition-all duration-200 ${navigation.currentQuestionIndex === 0 || false
-                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
-                    }`}
-                >
-                  <navigation.NavigationIcons.ChevronLeft />
-                  Previous
-                </button>
-
-                <button
-                  onClick={navigation.onNext}
-                  // disabled={navigation.currentQuestionIndex === navigation.totalQuestions - 1}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium text-[11px] transition-all duration-200 ${navigation.currentQuestionIndex === navigation.totalQuestions - 1 || false
-                    ? 'bg-red-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
-                    }`}
-                >
-                  {navigation.currentQuestionIndex === navigation.totalQuestions - 1 ? 'Next Chapter' : 'Next'}
-                  <navigation.NavigationIcons.ChevronRight />
-                </button>
-              </> */}
-            {/* )} */}
           </div>
         </div>
-        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
-          <Editor
-            height="100%"
-            defaultLanguage="sql"
-            language="sql"
-            theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
-            value={code}
-            onChange={handleCodeChange}
-            onMount={handleEditorDidMount}
-            options={{
-              ...INTELLISENSE_OPTIONS,
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              roundedSelection: false,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              wordWrap: 'on',
-              tabSize: 2,
-              dragAndDrop: true,
-              formatOnPaste: true,
-              formatOnType: true,
-            }}
+
+        {/* Draggable Divider */}
+        <div
+          className={`w-1 bg-gray-200 dark:bg-dark-tertiary hover:bg-[#4285F4] cursor-col-resize flex items-center justify-center group transition-colors duration-150 ${isDragging ? 'bg-[#4285F4]' : ''}`}
+          onMouseDown={handleMouseDown}
+          style={{ zIndex: 10 }}
+        >
+          <Icons.GripVertical
+            size={16}
+            className="text-gray-400 group-hover:text-[#4285F4] opacity-0 group-hover:opacity-100"
           />
         </div>
+
+        {/* Right Panel (Code Editor) */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-auto">
+          <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-end gap-6">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">SQLite</span>
+              <button
+                onClick={() => setCode('')}
+                title="Reset to initial code"
+                className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
+              >
+                <Icons.History className="w-3 h-3" />
+                Reset
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={runCode}
+                className="bg-[#4285F4] hover:bg-[#4285F4]/90 text-white px-4 py-2 rounded-md flex items-center gap-2 text-sm font-medium transition-colors duration-150"
+              >
+                <Icons.Play className="w-5 h-5" />
+                Run Code
+              </button>
+
+              <button
+                onClick={handleSubmit2}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center gap-2 text-sm font-medium transition-colors duration-150"
+              >
+                <Icons.ChevronRight className="w-5 h-5" />
+                Submit
+              </button>
+
+
+            </div>
+          </div>
+          <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
+            <Editor
+              height="100%"
+              defaultLanguage="sql"
+              language="sql"
+              theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
+              value={code}
+              onChange={handleCodeChange}
+              onMount={handleEditorDidMount}
+              options={{
+                ...INTELLISENSE_OPTIONS,
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                roundedSelection: false,
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                tabSize: 2,
+                dragAndDrop: true,
+                formatOnPaste: true,
+                formatOnType: true,
+              }}
+            />
+          </div>
+        </div>
+
+
+
+        <ToastContainer />
       </div>
-
-
-
-      <ToastContainer />
-    </div>
+    </>
   );
 };
 

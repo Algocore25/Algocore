@@ -8,7 +8,7 @@ import { VideoCanvas } from '../../LiveProctoring/components/VideoCanvas';
 
 import { database } from "../../firebase";
 import { ref, get, set, child, onValue, off } from "firebase/database";
-import { Wifi, WifiOff  } from "lucide-react";
+import { Wifi, WifiOff } from "lucide-react";
 
 
 
@@ -139,8 +139,19 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
         setIsSubmitting(true);
         try {
             // First, mark the exam as completed in Firebase
-            const examRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
-            await set(examRef, "completed");
+            const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
+            await set(statusRef, "completed");
+
+            // Calculate time taken
+            if (startTime) {
+                const start = new Date(startTime);
+                const now = new Date();
+                const timeTaken = Math.floor((now - start) / 1000); // in seconds
+
+                // Save time taken to ExamSubmissions
+                const timeTakenRef = ref(database, `ExamSubmissions/${testid}/${user.uid}/timeTaken`);
+                await set(timeTakenRef, timeTaken);
+            }
 
             // Then update the local violation state
             setviolation(0);
@@ -171,19 +182,19 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
     // Measure actual network speed with a small test
     const measureActualSpeed = useCallback(async () => {
         if (!navigator.onLine) return null;
-        
+
         try {
             // Use a small image for speed test
             const imageSize = 100000; // 100KB
             const testUrl = `https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png?t=${Date.now()}`;
-            
+
             const startTime = performance.now();
-            const response = await fetch(testUrl, { 
+            const response = await fetch(testUrl, {
                 cache: 'no-store'
             });
             await response.blob(); // Actually download the content
             const endTime = performance.now();
-            
+
             const durationSeconds = (endTime - startTime) / 1000;
             if (durationSeconds > 0) {
                 const speedBps = (imageSize * 8) / durationSeconds;
@@ -207,7 +218,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
         }
 
         const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-        
+
         // Update connection type for display
         if (connection && connection.effectiveType) {
             setConnectionType(connection.effectiveType);
@@ -215,7 +226,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
 
         // Try actual measurement first
         const measuredSpeed = await measureActualSpeed();
-        
+
         if (measuredSpeed !== null) {
             console.log('Using measured speed:', measuredSpeed);
             setNetworkSpeed(measuredSpeed);
@@ -477,7 +488,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                         <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
                             {examName}
                         </h1>
-                        
+
                         {/* Camera Monitoring */}
                         {isProctoringActive && videoRef && (
                             <div className="relative w-16 h-16 bg-gray-900 rounded-lg overflow-hidden shadow-md border border-red-500">
@@ -490,7 +501,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                             </div>
                         )}
                     </div>
-                    
+
                     {/* User Info */}
                     <div className="flex items-center space-x-3 px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                         <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full text-white font-bold text-sm shadow-md">
@@ -502,7 +513,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                     </div>
 
                     <div className="flex items-center space-x-4">
-                        
+
                         {/* Timer with better styling */}
                         <div className="flex items-center space-x-2 px-3 py-1.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                             <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -527,7 +538,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                 {activeQuestion + 1} / {Questions.length}
                             </span>
                             <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                <div 
+                                <div
                                     className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300"
                                     style={{ width: `${((activeQuestion + 1) / Questions.length) * 100}%` }}
                                 />
@@ -556,50 +567,50 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                 <FiChevronRight className="w-4 h-4" />
                             </button>
                             {/* Network Status */}
-                        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-                            {isOnline ? (
-                                <>
-                                    <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                    <div className="flex flex-col">
-                                        {networkSpeed !== null ? (
-                                            <>
-                                                <span className="text-xs font-semibold">
-                                                    {networkSpeed >= 1 ? (
-                                                        <span className="text-green-600 dark:text-green-400">
-                                                            {networkSpeed.toFixed(1)} Mbps
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-yellow-600 dark:text-yellow-400">
-                                                            {(networkSpeed * 1024).toFixed(0)} Kbps
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </>
-                                        ) : (
-                                            <span className="text-xs font-medium text-green-600 dark:text-green-400">Online</span>
-                                        )}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
-                                    <span className="text-xs font-medium text-red-600 dark:text-red-400">Offline</span>
-                                </>
-                            )}
-                        </div>
-                        
-                        {/* Theme toggle */}
-                        <button
-                            onClick={toggleTheme}
-                            className="group flex items-center justify-center w-9 h-9 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200"
-                            title="Toggle theme"
-                        >
-                            {theme === 'dark' ? (
-                                <FiSun className="w-4 h-4" />
-                            ) : (
-                                <FiMoon className="w-4 h-4" />
-                            )}
-                        </button>
+                            <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                {isOnline ? (
+                                    <>
+                                        <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                        <div className="flex flex-col">
+                                            {networkSpeed !== null ? (
+                                                <>
+                                                    <span className="text-xs font-semibold">
+                                                        {networkSpeed >= 1 ? (
+                                                            <span className="text-green-600 dark:text-green-400">
+                                                                {networkSpeed.toFixed(1)} Mbps
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-yellow-600 dark:text-yellow-400">
+                                                                {(networkSpeed * 1024).toFixed(0)} Kbps
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <span className="text-xs font-medium text-green-600 dark:text-green-400">Online</span>
+                                            )}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                        <span className="text-xs font-medium text-red-600 dark:text-red-400">Offline</span>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Theme toggle */}
+                            <button
+                                onClick={toggleTheme}
+                                className="group flex items-center justify-center w-9 h-9 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200"
+                                title="Toggle theme"
+                            >
+                                {theme === 'dark' ? (
+                                    <FiSun className="w-4 h-4" />
+                                ) : (
+                                    <FiMoon className="w-4 h-4" />
+                                )}
+                            </button>
                         </div>
                     </div>
                 </nav>
@@ -637,12 +648,11 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                         let statusIcon = null;
 
                                         if (normalizedType === 'mcq') {
-                   
+
                                             if (!hasAnswer) {
                                                 statusIcon = <FiRadio className="ml-2 flex-shrink-0 text-gray-400" />
                                             }
-                                            else
-                                            {
+                                            else {
                                                 statusIcon = <FiCheckCircle className="ml-2 flex-shrink-0 text-green-500" />;
                                             }
                                         } else if (normalizedType === 'programming') {
@@ -655,7 +665,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                             else if (isIncorrect) {
                                                 statusIcon = <FiXCircle className="ml-2 flex-shrink-0 text-red-500" />;
                                             }
-                                        } 
+                                        }
 
                                         return (
                                             <button
@@ -667,13 +677,13 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                                 className={`w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${activeQuestion === index
                                                     ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
                                                     : 'text-gray-700 dark:text-gray-300'
-                                                }`}
+                                                    }`}
                                             >
                                                 <div className="flex items-center">
                                                     <span className={`w-6 h-6 flex items-center justify-center rounded-full mr-2 text-sm font-medium ${activeQuestion === index
                                                         ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-200'
                                                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                                                    }`}>
+                                                        }`}>
                                                         {index + 1}
                                                     </span>
                                                     <div className="flex flex-col flex-1 min-w-0">
@@ -690,7 +700,7 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
                                         );
                                     })}
                                 </div>
-                                
+
                                 {/* Submit button at bottom of sidebar */}
                                 <div className="absolute bottom-0 left-0 right-0 p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
                                     <button
@@ -732,14 +742,14 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
             {/* Submit Confirmation Modal */}
             <AnimatePresence>
                 {showSubmitModal && (
-                    <motion.div 
+                    <motion.div
                         className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <motion.div 
+                        <motion.div
                             className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
                             initial={{ scale: 0.9 }}
                             animate={{ scale: 1 }}

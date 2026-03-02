@@ -30,6 +30,7 @@ const DynamicComponent = () => {
   const [loading, setLoading] = useState(true);
   const [allQuestions, setAllQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState("description");
 
   const { course: encodedCourse, subcourse, questionId } = useParams();
   const navigate = useNavigate();
@@ -63,7 +64,10 @@ const DynamicComponent = () => {
           get(statusRef)
         ]);
 
+
         console.log(questionId);
+
+        console.log(decodedQuestionId);
 
         console.log(questionSnapshot.val());
         console.log(statusSnapshot.val());
@@ -140,6 +144,11 @@ const DynamicComponent = () => {
 
   }, [decodedQuestionId, decodedCourse, decodedSubcourse]); // Dependencies adjusted
 
+  // Reset active tab to description when question changes
+  useEffect(() => {
+    setActiveTab("description");
+  }, [decodedQuestionId]);
+
   const handlePreviousQuestion = () => {
     if (currentQuestionIndex > 0) {
       const prevQuestion = allQuestions[currentQuestionIndex - 1];
@@ -171,7 +180,9 @@ const DynamicComponent = () => {
     totalQuestions: allQuestions.length,
     onPrevious: handlePreviousQuestion,
     onNext: handleNextQuestion,
-    NavigationIcons
+    NavigationIcons,
+    activeTab,
+    setActiveTab
   };
 
   if (status === "blocked") {
@@ -182,9 +193,9 @@ const DynamicComponent = () => {
     <div className="relative">
       {data.type === "Programming" && <CodePage data={data} navigation={navigationProps} />}
       {data.type === "SQL" && <SqlPage data={data} navigation={navigationProps} />}
-      {data.type === "MCQ" && <MCQPage data={data} />}
-      {data.type === "MSQ" && <MSQPage data={data} />}
-      {data.type === "Numeric" && <NumericPage data={data} />}
+      {data.type === "MCQ" && <MCQPage data={data} navigation={navigationProps} />}
+      {data.type === "MSQ" && <MSQPage data={data} navigation={navigationProps} />}
+      {data.type === "Numeric" && <NumericPage data={data} navigation={navigationProps} />}
       {data.type === "CpuVisual" && <CpuApp />}
       {!["Programming", "SQL", "MCQ", "MSQ", "Numeric", "CpuVisual"].includes(data.type) && (
         <div className="flex items-center justify-center h-[60vh]">

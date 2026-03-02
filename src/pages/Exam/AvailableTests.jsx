@@ -45,9 +45,12 @@ const AvailableTests = () => {
                     const isEligible = Array.isArray(Object.values(test.Eligible || {})) &&
                         Object.values(test.Eligible || {}).includes(user?.email);
 
+                    // Check visibility
+                    const isVisible = test.isVisible !== false; // Default to visible if not set
+
                     // Time-based filtering
                     let isWithinTime = true;
-                    const schedType = test.Properties?.schedulingType || 'anytime';
+                    const schedType = test.Properties?.type || 'anytime';
 
                     if (schedType === 'scheduled') {
                         const now = new Date();
@@ -61,10 +64,14 @@ const AvailableTests = () => {
                         }
                     }
 
+                    const isUserCompleted = test.Properties?.Progress?.[user?.uid]?.status === 'completed';
+
                     return (
                         (isAllowAll || isEligible) &&
                         test.Properties?.status?.toLowerCase() !== "completed" &&
-                        isWithinTime
+                        !isUserCompleted &&
+                        isWithinTime &&
+                        isVisible
                     );
                 });
 
@@ -72,7 +79,7 @@ const AvailableTests = () => {
                 console.log(filtered);
 
                 setTests(dataArray);
-                setFilteredTests(filtered);
+                setFilteredTests(filtered.map(test => ({ ...test, userId: user.uid })));
             } else {
                 console.log("No data available");
             }

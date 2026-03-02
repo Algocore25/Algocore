@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaGithub, FaLinkedin, FaEnvelope } from 'react-icons/fa';
+import AnimatedBackground from '../components/AnimatedBackground';
 import { ref, onValue } from 'firebase/database';
 import { database } from '../firebase';
 
@@ -17,79 +18,29 @@ const DefaultAvatar = () => (
 // Component to render SVG from string
 const SvgRenderer = ({ svgString, className = '' }) => {
   return (
-    <div 
+    <div
       className={className}
       dangerouslySetInnerHTML={{ __html: svgString }}
     />
   );
 };
 
-const ContactCard = ({ member }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden transition-transform duration-300 hover:scale-105">
-    <div className="p-2">
-      <div className="flex justify-center -mt-16">
-        <div className="bg-white dark:bg-gray-700 p-1 rounded-full">
-          {member.avatar}
-        </div>
-      </div>
-      <div className="px-6 py-4 text-center">
-        <h3 className="text-2xl font-semibold text-gray-800 dark:text-white">{member.name}</h3>
-        <p className="text-indigo-600 dark:text-indigo-400 text-sm">{member.role}</p>
-        <div className="flex justify-center space-x-4 mt-4">
-          <a 
-            href={member.linkedin} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-            aria-label="LinkedIn"
-          >
-            <FaLinkedin size={24} />
-          </a>
-          <a 
-            href={member.github} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
-            aria-label="GitHub"
-          >
-            <FaGithub size={24} />
-          </a>
-          <a 
-            href={`mailto:${member.email}`}
-            className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-            aria-label="Email"
-          >
-            <FaEnvelope size={24} />
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
 const ContactPage = () => {
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Background elements
-  const backgroundElements = [
-    { top: '20%', left: '10%', size: 'w-20 h-20', color: 'bg-blue-200' },
-    { top: '40%', right: '10%', size: 'w-16 h-16', color: 'bg-purple-200' },
-    { bottom: '40%', left: '15%', size: 'w-12 h-12', color: 'bg-green-200' },
-    { bottom: '60%', right: '20%', size: 'w-24 h-24', color: 'bg-yellow-200' },
-  ];
+
 
   useEffect(() => {
     const teamRef = ref(database, 'teamMembers');
-    
+
     const processTeamMember = (member) => {
       // If avatar is an object with an svg property, use it
       if (member.avatar && typeof member.avatar === 'object' && member.avatar.svg) {
         return {
           ...member,
-          avatar: <SvgRenderer 
-            svgString={member.avatar.svg} 
+          avatar: <SvgRenderer
+            svgString={member.avatar.svg}
             className="w-32 h-32 mx-auto"
           />
         };
@@ -98,8 +49,8 @@ const ContactPage = () => {
       if (member.avatar && typeof member.avatar === 'string') {
         return {
           ...member,
-          avatar: <SvgRenderer 
-            svgString={member.avatar} 
+          avatar: <SvgRenderer
+            svgString={member.avatar}
             className="w-32 h-32 mx-auto"
           />
         };
@@ -110,7 +61,7 @@ const ContactPage = () => {
         avatar: <DefaultAvatar />
       };
     };
-    
+
     const unsubscribe = onValue(teamRef, (snapshot) => {
       try {
         const data = snapshot.val();
@@ -160,8 +111,8 @@ const ContactPage = () => {
           <div className="text-red-500 text-4xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Oops! Something went wrong</h2>
           <p className="text-gray-600 dark:text-gray-300 mb-6">{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
+          <button
+            onClick={() => window.location.reload()}
             className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
           >
             Try Again
@@ -171,51 +122,77 @@ const ContactPage = () => {
     );
   }
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Grid Pattern Background */}
-      {/* <div className="absolute top-0 left-0 w-full h-full bg-grid-pattern dark:bg-dark-grid-pattern bg-20"></div> */}
-      
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {backgroundElements.map((element, index) => (
-          <div 
-            key={index}
-            className={`absolute ${element.top} ${element.left || ''} ${element.right || ''} 
-                       ${element.size} ${element.color} rounded-full opacity-20 animate-pulse`}
-            style={{
-              animationDelay: `${index * 2}s`,
-              animationDuration: '8s'
-            }}
-          ></div>
-        ))}
-      </div>
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            Meet Our Team
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            We're a passionate team dedicated to making learning algorithms fun and accessible.
+    <div className="min-h-screen relative overflow-hidden transition-colors duration-300">
+      <AnimatedBackground />
+
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-24 sm:py-32 z-10 relative">
+        <div className="mx-auto max-w-2xl text-center mb-24">
+          <h2 className="text-lg font-semibold leading-7 text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em]">Our Team</h2>
+          <p className="mt-4 text-5xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-6xl">
+            Meet the minds behind <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">AlgoCore</span>
+          </p>
+          <p className="mt-8 text-xl leading-8 text-gray-600 dark:text-gray-300">
+            We're a passionate group of educators, engineers, and designers dedicated to making technical learning accessible and effective for everyone.
           </p>
         </div>
-        
+
         {teamMembers.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16 mb-40">
             {teamMembers.map((member) => (
-              <ContactCard key={member.id} member={{
-                ...member,
-                // Use default avatar if none provided
-                avatar: member.avatar || <DefaultAvatar />
-              }} />
+              <div key={member.id} className="group relative bg-white/70 dark:bg-dark-secondary/70 backdrop-blur-md rounded-[2.5rem] p-10 shadow-lg border border-gray-200/50 dark:border-gray-700/50 transition-all duration-300 hover:shadow-2xl hover:-translate-y-4">
+                <div className="relative -mt-24 flex justify-center">
+                  <div className="h-44 w-44 rounded-[2rem] bg-gradient-to-br from-blue-500 to-purple-600 p-1.5 shadow-2xl group-hover:scale-110 transition-transform duration-500">
+                    <div className="h-full w-full rounded-[1.8rem] overflow-hidden bg-white dark:bg-dark-primary flex items-center justify-center">
+                      {member.avatar || <DefaultAvatar />}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8 text-center">
+                  <h3 className="text-3xl font-bold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors duration-300">
+                    {member.name}
+                  </h3>
+                  <p className="text-blue-600 dark:text-blue-400 text-lg font-semibold mb-6 uppercase tracking-wider">{member.role}</p>
+                  <div className="flex justify-center space-x-6">
+                    <a href={member.linkedin} target="_blank" rel="noopener noreferrer" className="p-3 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-white hover:bg-blue-600 dark:hover:bg-blue-600 transition-all duration-300 shadow-sm border border-transparent hover:border-blue-400">
+                      <FaLinkedin size={22} />
+                    </a>
+                    <a href={member.github} target="_blank" rel="noopener noreferrer" className="p-3 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-white hover:bg-gray-900 dark:hover:bg-white dark:hover:text-black transition-all duration-300 shadow-sm border border-transparent hover:border-gray-400">
+                      <FaGithub size={22} />
+                    </a>
+                    <a href={`mailto:${member.email}`} className="p-3 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 transition-all duration-300 shadow-sm border border-transparent hover:border-rose-400">
+                      <FaEnvelope size={22} />
+                    </a>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl shadow">
-            <p className="text-gray-500 dark:text-gray-400">No team members found.</p>
+          <div className="text-center py-32 bg-white/50 dark:bg-dark-secondary/50 backdrop-blur-sm rounded-[3rem] border-2 border-dashed border-gray-300 dark:border-gray-700 mb-40">
+            <p className="text-gray-500 dark:text-gray-400 text-2xl font-medium italic">Our team members are currently hard at work. Check back soon! 🚀</p>
           </div>
         )}
 
-       
+        {/* Get in Touch Section */}
+        <div className="bg-gradient-to-r from-blue-600 to-purple-700 rounded-[4rem] p-16 lg:p-24 text-center overflow-hidden relative shadow-2xl group">
+          <div className="absolute top-0 right-0 -mr-40 -mt-40 w-96 h-96 rounded-full bg-white/10 blur-3xl group-hover:scale-125 transition-transform duration-1000"></div>
+          <div className="absolute bottom-0 left-0 -ml-40 -mb-40 w-96 h-96 rounded-full bg-black/10 blur-3xl group-hover:scale-125 transition-transform duration-1000"></div>
+
+          <div className="relative z-10 max-w-3xl mx-auto">
+            <h2 className="text-4xl font-extrabold text-white sm:text-6xl mb-8 tracking-tight">Have Questions? <br />Get in Touch</h2>
+            <p className="text-blue-50 text-xl mb-12 leading-relaxed opacity-90">
+              Whether you're an educator looking to implement AlgoCore or a student needing support, our team is ready to assist you.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-6 justify-center">
+              <a href="mailto:support@algocore.com" className="inline-flex items-center justify-center px-10 py-5 rounded-[2rem] bg-white text-blue-600 text-xl font-bold hover:bg-blue-50 transition-all duration-300 shadow-xl hover:-translate-y-1">
+                <FaEnvelope className="mr-3" /> Email Support
+              </a>
+              <a href="/" className="inline-flex items-center justify-center px-10 py-5 rounded-[2rem] bg-white/10 text-white text-xl font-bold hover:bg-white/20 transition-all duration-300 border-2 border-white/30 backdrop-blur-md hover:-translate-y-1">
+                <FaLinkedin className="mr-3" /> Back to Home
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -3,9 +3,7 @@ import { motion } from 'framer-motion';
 
 const TestsSidebar = ({ activeTab, setActiveTab }) => {
   const menuItems = [
-    { id: 'available-tests', label: 'Available Tests', icon: '📝' },
-    { id: 'results', label: 'Results', icon: '📊' },
-    { id: 'edit-tests', label: 'Edit Tests', icon: '👥' },
+    { id: 'tests', label: 'Tests', icon: '📝' },
     { id: 'add-questions', label: 'Add Questions', icon: '➕' },
     { id: 'manage-courses', label: 'Manage Courses', icon: '📚' },
     { id: 'bulk-add', label: 'Bulk Add Data', icon: '📦' },

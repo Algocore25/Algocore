@@ -8,6 +8,9 @@ import LiveStreamViewer from '../../LiveProctoring/components/LiveStreamViewerV2
 import { useNavigate } from 'react-router-dom';
 
 const ExamMonitor = () => {
+    const params = useParams();
+    // Handle both testId (camelCase) and testid (lowercase) parameter names
+    const testid = params.testid || params.testId;
     const [monitoredData, setMonitoredData] = useState([]);
     const [testTitle, setTestTitle] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -22,7 +25,6 @@ const ExamMonitor = () => {
     const [availableQuestions, setAvailableQuestions] = useState([]);
     const [testInfo, setTestInfo] = useState({});
     const [sortBy, setSortBy] = useState('status'); // status, name, blocked_first, completed_first
-    const { testid } = useParams();
     const navigate = useNavigate();
 
     const fetchViolationDetails = async (userId) => {
@@ -247,6 +249,7 @@ const ExamMonitor = () => {
 
                 // Get all eligible students
                 const eligibleEmails = Object.values(exam.Eligible || {});
+                const allowAllStudents = exam.allowAllStudents === true;
 
                 // Fetch all users
                 const usersRef = ref(database, 'users');
@@ -255,10 +258,12 @@ const ExamMonitor = () => {
 
                 // Create email to UID mapping
                 const emailToUidMap = {};
+                const uidToDataMap = {};
                 Object.entries(users).forEach(([uid, userData]) => {
                     if (userData.email) {
                         emailToUidMap[userData.email] = { uid, ...userData };
                     }
+                    uidToDataMap[uid] = userData;
                 });
 
                 const monitoredUsers = [];
@@ -266,18 +271,43 @@ const ExamMonitor = () => {
                 const violations = exam.Properties2?.Progress || {};
                 const myQuestions = exam.myquestions || {};
 
-                // Process all eligible students
-                for (const email of eligibleEmails) {
-                    const userInfo = emailToUidMap[email];
-                    if (!userInfo) continue;
+                // Determine which students to process
+                let studentIds = [];
+                if (allowAllStudents) {
+                    // If all students are allowed, show all students who have started the exam (have progress data)
+                    studentIds = Object.keys(progress);
+                } else {
+                    // Otherwise, only show eligible students
+                    for (const email of eligibleEmails) {
+                        const userInfo = emailToUidMap[email];
+                        if (userInfo) {
+                            studentIds.push(userInfo.uid);
+                        }
+                    }
+                }
 
-                    const userId = userInfo.uid;
+                // Process all relevant students
+                for (const userId of studentIds) {
+                    const userInfo = uidToDataMap[userId];
+                    if (!userInfo) continue;
+                    const email = userInfo.email;
                     const userProgress = progress[userId];
                     const userViolations = violations[userId] ?? 0;
                     const allocatedQuestions = myQuestions[userId] ? Object.keys(myQuestions[userId]).length : 0;
 
-                    if (userProgress?.status?.toLowerCase() === "started") {
-                        const givenTime = new Date(userProgress?.startTime || '');
+                    // Robust status detection
+                    let currentStatus = 'not_started';
+                    let startTime = null;
+
+                    if (typeof userProgress === 'string') {
+                        currentStatus = userProgress;
+                    } else if (userProgress && typeof userProgress === 'object') {
+                        currentStatus = userProgress.status || 'not_started';
+                        startTime = userProgress.startTime || null;
+                    }
+
+                    if (currentStatus.toLowerCase() === "started") {
+                        const givenTime = new Date(startTime || '');
                         const currentTime = new Date();
 
                         // Calculate difference in minutes
@@ -285,7 +315,7 @@ const ExamMonitor = () => {
 
                         if (diffMinutes > exam.duration) {
                             console.log(`More than ${exam.duration} minutes have passed.`);
-                            userProgress.status = 'completed';
+                            currentStatus = 'completed';
                             const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${userId}/status`);
                             await set(statusRef, "completed");
                         } else {
@@ -303,8 +333,8 @@ const ExamMonitor = () => {
                         userId: userId,
                         userName: userInfo.name || 'Unknown User',
                         email: email,
-                        status: userProgress?.status || 'not_started',
-                        startTime: userProgress?.startTime || null,
+                        status: currentStatus,
+                        startTime: startTime,
                         violations: userViolations,
                         allocatedQuestions: allocatedQuestions,
                     });

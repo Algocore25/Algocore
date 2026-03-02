@@ -1,6 +1,7 @@
+// ...existing code...
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDatabase, ref, onValue, push, set, update, remove } from 'firebase/database';
+import { getDatabase, ref, onValue, push, set, update, remove, get } from 'firebase/database';
 import { FiPlus, FiTrash2 } from 'react-icons/fi';
 import TestsSidebar from './TestsSidebar';
 import { database } from '../../firebase';
@@ -16,11 +17,18 @@ import ManageCourses from './ManageCourses';
 import BulkAddData from './BulkAddData';
 
 const TestsList = () => {
+  // ...existing code...
   const navigate = useNavigate();
+
+  // Declare all state variables first
   const [tests, setTests] = useState([]);
   const [activeTab, setActiveTab] = useState(() => {
-    // Load the saved tab from localStorage, default to 'available-tests'
-    return localStorage.getItem('adminActiveTab') || 'available-tests';
+    // Load the saved tab from localStorage, default to 'tests'
+    const savedTab = localStorage.getItem('adminActiveTab');
+    if (['available-tests', 'results', 'edit-tests'].includes(savedTab)) {
+      return 'tests';
+    }
+    return savedTab || 'tests';
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,6 +38,7 @@ const TestsList = () => {
   const [isConfirmDeleteAllOpen, setIsConfirmDeleteAllOpen] = useState(false);
   const [deletionProgress, setDeletionProgress] = useState(null);
 
+  // Fetch tests from database
   useEffect(() => {
     const db = getDatabase();
     const testsRef = ref(db, 'Exam');
@@ -48,6 +57,32 @@ const TestsList = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // Automatically publish results when conditions are met
+  useEffect(() => {
+    if (!Array.isArray(tests)) return;
+    tests.forEach(async (test) => {
+
+      // Condition 1: All eligible students have submitted
+      const eligible = Object.values(test.Eligible || {});
+      const submissionsRef = ref(database, `ExamSubmissions/${test.id}`);
+      const submissionsSnap = await get(submissionsRef);
+      const submissions = submissionsSnap.exists() ? Object.keys(submissionsSnap.val()) : [];
+      const allSubmitted = eligible.length > 0 && eligible.every(email => {
+        // Find userId by email (assuming you have a mapping)
+        // If Eligible is {uid: email}, use Object.keys(test.Eligible)
+        return submissions.includes(email) || submissions.includes(Object.keys(test.Eligible).find(uid => test.Eligible[uid] === email));
+      });
+      // Condition 2: End time has passed (for scheduled exams)
+      let endTimePassed = false;
+      if (test.Properties?.endTime) {
+        const now = new Date().getTime();
+        const endTime = new Date(test.Properties.endTime).getTime();
+        endTimePassed = now > endTime;
+      }
+    
+    });
+  }, [tests]);
 
   // Save activeTab to localStorage whenever it changes
   useEffect(() => {
@@ -68,10 +103,7 @@ const TestsList = () => {
         createdAt: new Date().toISOString(),
         questions: [],
         Eligible: {},
-        duration: 60,
-        Properties: {
-          status: 'NotStarted'
-        }
+        duration: 60
       });
 
       // Navigate to the test edit page
@@ -83,28 +115,8 @@ const TestsList = () => {
     }
   };
 
-  const startTest = async (testId) => {
-    try {
-      await update(ref(database, `Exam/${testId}/Properties`), {
-        status: 'Started',
-      });
-      toast.success('Test started successfully');
-    } catch (error) {
-      console.error('Error starting test:', error);
-      toast.error('Failed to start test');
-    }
-  };
-  const endTest = async (testId) => {
-    try {
-      await update(ref(database, `Exam/${testId}/Properties`), {
-        status: 'Completed',
-      });
-      toast.success('Test ended successfully');
-    } catch (error) {
-      console.error('Error starting test:', error);
-      toast.error('Failed to start test');
-    }
-  };
+
+
 
   const filteredTests = useMemo(() => {
     if (!Array.isArray(tests)) {
@@ -112,12 +124,9 @@ const TestsList = () => {
     }
 
     return tests.filter(test => {
-      const testStatus = test.Properties?.status || 'NotStarted';
       const matchesSearch = test?.name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      if (activeTab === 'available-tests') return matchesSearch && testStatus === 'Started';
-      if (activeTab === 'results') return matchesSearch && testStatus === 'Completed';
-      if (activeTab === 'edit-tests') return matchesSearch && testStatus === 'NotStarted';
+      if (activeTab === 'tests') return matchesSearch;
 
       return matchesSearch;
     });
@@ -209,7 +218,7 @@ const TestsList = () => {
                   <option value="asc">Ascending</option>
                 </select>
               </div>
-              {activeTab === 'edit-tests' && <button
+              {activeTab === 'tests' && <button
                 onClick={createNewTest}
                 disabled={creatingTest}
                 className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 disabled:opacity-50"
@@ -217,7 +226,7 @@ const TestsList = () => {
                 <FiPlus className="mr-2" />
                 {creatingTest ? 'Creating...' : 'Create Test'}
               </button>}
-              {activeTab === 'results' && sortedTests.length > 0 && (
+              {activeTab === 'tests' && sortedTests.length > 0 && (
                 <button
                   onClick={() => setIsConfirmDeleteAllOpen(true)}
                   className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
@@ -240,13 +249,13 @@ const TestsList = () => {
           <BulkAddData />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sortedTests.map((test) => (
-              <div key={test.id}>
-                {activeTab === 'edit-tests' && <EditTestCard test={test} startTest={startTest} />}
-                {activeTab === 'available-tests' && <AvailableTestCard test={test} endTest={endTest} />}
-                {activeTab === 'results' && <ResultTestCard test={test} />}
-              </div>
-            ))}
+            {sortedTests.map((test) => {
+              return (
+                <div key={test.id}>
+                  {activeTab === 'tests' && <EditTestCard test={test} />}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

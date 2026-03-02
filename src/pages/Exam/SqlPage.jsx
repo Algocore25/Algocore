@@ -25,23 +25,112 @@ import "react-toastify/dist/ReactToastify.css";
 
 import { setItemWithExpiry, getItemWithExpiry } from "../../utils/storageWithExpiry";
 
-// Helper: Render pipe-separated SQL output as a styled table
-const SqlResultTable = ({ text, className = '' }) => {
+// Helper: Extract all columns from schema for display
+const getColumnsFromSchema = (schema) => {
+  if (!schema) return {};
+
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]*?)\)(?:;|\n)/gi;
+  const columns = {};
+  let match;
+
+  while ((match = tableRegex.exec(schema)) !== null) {
+    const tableName = match[1];
+    const columnsStr = match[2];
+    const tableColumns = [];
+    let currentCol = '';
+    let parenDepth = 0;
+
+    for (let i = 0; i < columnsStr.length; i++) {
+      const char = columnsStr[i];
+      if (char === '(') parenDepth++;
+      else if (char === ')') parenDepth--;
+      else if (char === ',' && parenDepth === 0) {
+        if (currentCol.trim()) {
+          const parts = currentCol.trim().split(/\s+/);
+          if (parts.length > 0) {
+            tableColumns.push(parts[0]);
+          }
+        }
+        currentCol = '';
+        continue;
+      }
+      currentCol += char;
+    }
+
+    if (currentCol.trim()) {
+      const parts = currentCol.trim().split(/\s+/);
+      if (parts.length > 0) {
+        tableColumns.push(parts[0]);
+      }
+    }
+
+    if (tableColumns.length > 0) {
+      columns[tableName] = tableColumns;
+    }
+  }
+
+  return columns;
+};
+
+// Helper: Render pipe-separated SQL output as a styled table with optional headers
+const SqlResultTable = ({ text, className = '', columns = null }) => {
   if (!text || typeof text !== 'string') return <span className="text-gray-400 italic">No output</span>;
   const lines = text.split('\n').filter(l => l.trim() !== '');
   if (lines.length === 0) return <span className="text-gray-400 italic">Empty result</span>;
-  const rows = lines.map(line => line.split('|'));
-  const maxCols = Math.max(...rows.map(r => r.length));
+
+  const rows = lines.map(line => line.split('|').map(cell => cell.trim()));
+
+  // Determine actual column count from data
+  const dataColCount = Math.max(...rows.map(r => r.length));
+
+  // Decide which headers to use
+  let headers = null;
+  let dataRows = rows;
+
+  // If columns provided and match data column count, use them
+  if (columns && columns.length === dataColCount) {
+    headers = columns;
+  } else if (rows.length > 0 && dataColCount > 0) {
+    // Check if first row looks like column names (doesn't look like data)
+    const firstRow = rows[0];
+    // Heuristic: if first row has shorter strings and looks like identifiers, treat as header
+    const looksLikeHeader = firstRow.every(cell =>
+      cell.length < 50 && /^[a-zA-Z_][a-zA-Z0-9_]*$/i.test(cell)
+    );
+
+    if (looksLikeHeader && rows.length > 1) {
+      headers = firstRow;
+      dataRows = rows.slice(1);
+    } else if (columns && columns.length > 0) {
+      // Use schema columns even if count doesn't match exactly
+      headers = columns.slice(0, dataColCount);
+    }
+  }
+
   return (
     <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 ${className}`}>
       <table className="min-w-full text-sm">
+        {headers && headers.length > 0 && (
+          <thead>
+            <tr className="bg-gray-100 dark:bg-gray-800">
+              {headers.map((col, j) => (
+                <th key={j} className="px-3 py-2 font-bold text-left text-xs text-gray-700 dark:text-gray-300 uppercase tracking-wider border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-          {rows.map((row, i) => (
+          {dataRows.map((row, i) => (
             <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}>
               {row.map((cell, j) => (
-                <td key={j} className="px-3 py-1.5 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap">{cell.trim()}</td>
+                <td key={j} className="px-3 py-1.5 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                  {cell}
+                </td>
               ))}
-              {Array.from({ length: maxCols - row.length }).map((_, k) => (
+              {/* Pad empty cells if needed */}
+              {Array.from({ length: dataColCount - row.length }).map((_, k) => (
                 <td key={`pad-${k}`} className="px-3 py-1.5"></td>
               ))}
             </tr>
@@ -55,50 +144,107 @@ const SqlResultTable = ({ text, className = '' }) => {
 // Helper: Parse and display CREATE TABLE schema visually
 const SqlSchemaDisplay = ({ schema }) => {
   if (!schema) return null;
-  const tableRegex = /CREATE\s+TABLE\s+(\w+)\s*\(([^)]+)\)/gi;
+
+  // Parse CREATE TABLE statements - improved regex to handle various formats
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]*?)\)(?:;|$)/gi;
   const tables = [];
   let match;
+
   while ((match = tableRegex.exec(schema)) !== null) {
     const tableName = match[1];
-    const columns = match[2].split(',').map(col => {
-      const parts = col.trim().split(/\s+/);
-      return { name: parts[0], type: parts.slice(1).join(' ') };
-    });
-    tables.push({ name: tableName, columns });
+    const columnsStr = match[2];
+
+    // Split by comma but be careful with function calls like DECIMAL(10,2)
+    const columns = [];
+    let currentCol = '';
+    let parenDepth = 0;
+
+    for (let i = 0; i < columnsStr.length; i++) {
+      const char = columnsStr[i];
+      if (char === '(') parenDepth++;
+      else if (char === ')') parenDepth--;
+      else if (char === ',' && parenDepth === 0) {
+        if (currentCol.trim()) {
+          const parts = currentCol.trim().split(/\s+/);
+          if (parts.length > 0) {
+            columns.push({
+              name: parts[0],
+              type: parts.slice(1).join(' ').toUpperCase()
+            });
+          }
+        }
+        currentCol = '';
+        continue;
+      }
+      currentCol += char;
+    }
+
+    // Don't forget last column
+    if (currentCol.trim()) {
+      const parts = currentCol.trim().split(/\s+/);
+      if (parts.length > 0) {
+        columns.push({
+          name: parts[0],
+          type: parts.slice(1).join(' ').toUpperCase()
+        });
+      }
+    }
+
+    if (columns.length > 0) {
+      tables.push({ name: tableName, columns });
+    }
   }
+
+  // Parse INSERT statements to count rows per table
   const insertRegex = /INSERT\s+INTO\s+(\w+)/gi;
   const rowCounts = {};
   while ((match = insertRegex.exec(schema)) !== null) {
-    rowCounts[match[1]] = (rowCounts[match[1]] || 0) + 1;
+    const tbl = match[1];
+    rowCounts[tbl] = (rowCounts[tbl] || 0) + 1;
   }
+
   if (tables.length === 0) {
-    return <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap border border-gray-200 dark:border-gray-700">{schema}</pre>;
+    return (
+      <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap border border-gray-200 dark:border-gray-700">
+        {schema}
+      </pre>
+    );
   }
+
   return (
     <div className="space-y-3">
       {tables.map((table, idx) => (
         <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16" /></svg>
+              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16" />
+              </svg>
               <span className="font-semibold text-sm text-blue-700 dark:text-blue-300">{table.name}</span>
             </div>
-            {rowCounts[table.name] && <span className="text-xs text-gray-500 dark:text-gray-400">{rowCounts[table.name]} rows</span>}
+            {rowCounts[table.name] && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">{rowCounts[table.name]} rows</span>
+            )}
           </div>
-          <table className="min-w-full text-sm">
-            <thead><tr className="bg-gray-100 dark:bg-gray-800">
-              <th className="px-4 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Column</th>
-              <th className="px-4 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {table.columns.map((col, ci) => (
-                <tr key={ci} className={ci % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}>
-                  <td className="px-4 py-1.5 font-mono text-xs text-gray-800 dark:text-gray-200">{col.name}</td>
-                  <td className="px-4 py-1.5 font-mono text-xs text-gray-500 dark:text-gray-400">{col.type}</td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-gray-800">
+                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Column</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Type</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {table.columns.map((col, ci) => (
+                  <tr key={ci} className={ci % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}>
+                    <td className="px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap">{col.name}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-gray-600 dark:text-gray-400">{col.type}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ))}
     </div>
@@ -106,16 +252,8 @@ const SqlSchemaDisplay = ({ schema }) => {
 };
 
 // SQL-specific test results display with table formatting
-const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
-  const [selectedTestIndex, setSelectedTestIndex] = useState(null);
+const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null }) => {
   const { theme } = useTheme();
-
-  useEffect(() => {
-    if (testResults.length > 0) {
-      const firstFailedIndex = testResults.findIndex(t => !t.passed);
-      setSelectedTestIndex(firstFailedIndex !== -1 ? firstFailedIndex : 0);
-    }
-  }, [testResults]);
 
   if (runsubmit === 'none' || testResults.length === 0) {
     return (
@@ -126,155 +264,121 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit }) => {
   }
 
   const allPassed = testResults.every(t => t.passed);
-  const currentTest = testResults[selectedTestIndex];
-  const isHiddenCase = !(runsubmit === 'run' || selectedTestIndex === 0 || selectedTestIndex === 1);
   const testStatus = allPassed ? 'passed' : 'failed';
+  const passedCount = testResults.filter(t => t.passed).length;
+  const percentage = Math.round((passedCount / testResults.length) * 100);
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-6">
+    <div className="w-full max-w-4xl mx-auto space-y-6">
       {/* Summary Header */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${testStatus === 'passed' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-red-100 dark:bg-red-900/30 text-red-600'}`}>
-            {testStatus === 'passed' ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            )}
-          </div>
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+        <div className="flex items-center gap-4 mb-4">
+          {testStatus === 'passed' ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
           <div>
-            <h3 className={`text-xl font-bold ${testStatus === 'passed' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {testStatus === 'passed' ? 'All Tests Passed' : `${testResults.filter(t => !t.passed).length} Tests Failed`}
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {testStatus === 'passed' ? 'All Tests Passed! 🎉' : `${testResults.filter(t => !t.passed).length} Test${testResults.filter(t => !t.passed).length !== 1 ? 's' : ''} Failed`}
             </h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">
-              Successfully executed {testResults.length} test cases
+            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
+              {passedCount} of {testResults.length} test case{testResults.length !== 1 ? 's' : ''} passed
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Score:</span>
-          <span className={`text-lg font-bold ${testStatus === 'passed' ? 'text-green-600' : 'text-blue-600'}`}>
-            {Math.round((testResults.filter(t => t.passed).length / testResults.length) * 100)}%
-          </span>
+          <div className="ml-auto">
+            <div className="text-right">
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-semibold">Score</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{percentage}%</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Main Results Card */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden flex flex-col md:flex-row min-h-[400px]">
-        {/* Navigation Sidebar */}
-        <div className="w-full md:w-48 bg-gray-50 dark:bg-gray-800/30 border-r border-gray-200 dark:border-gray-800 flex flex-col">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Test Cases</span>
-            <span className="text-xs bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-700 dark:text-gray-300">
-              {testResults.length}
-            </span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {testResults.map((test, index) => {
-              const isActive = index === selectedTestIndex;
-              const isHidden = !(runsubmit === 'run' || index === 0 || index === 1);
-
-              return (
-                <button
-                  key={index}
-                  onClick={() => setSelectedTestIndex(index)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group ${isActive
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm'
-                    }`}
-                >
-                  <div className={`w-2 h-2 rounded-full ${test.passed ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                  <span className="flex-1 text-left">Case {index + 1}</span>
-                  {isHidden && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      {/* Test Results List */}
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <div className="divide-y divide-gray-200 dark:divide-gray-800">
+          {testResults.map((test, idx) => (
+            <div key={idx} className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  {test.passed ? (
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   )}
-                  {isActive && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                    </svg>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-gray-900">
-          {currentTest && (
-            <>
-              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-bold text-gray-900 dark:text-white">Case {selectedTestIndex + 1}</h4>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${currentTest.passed
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30'
-                    : 'bg-red-100 text-red-700 dark:bg-red-900/30'
-                    }`}>
-                    {currentTest.passed ? 'Passed' : 'Failed'}
+                  <h4 className="font-bold text-gray-900 dark:text-white">Test Case {idx + 1}</h4>
+                  <span className={`text-xs font-bold uppercase tracking-wider ${test.passed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {test.passed ? 'Passed' : 'Failed'}
                   </span>
                 </div>
-                {isHiddenCase && (
-                  <span className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    Hidden Test Case
-                  </span>
-                )}
               </div>
 
-              <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Expected Block */}
-                  <div>
-                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Expected Output</span>
-                    <div className="bg-green-50/50 dark:bg-green-900/10 rounded-xl p-4 border border-green-100 dark:border-green-900/30 min-h-[100px]">
-                      {isHiddenCase ? (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2 opacity-60 italic py-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 00-2 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          <span>Content Hidden</span>
-                        </div>
-                      ) : currentTest.expected?.includes('|') ? (
-                        <SqlResultTable text={currentTest.expected} className="border-green-200 dark:border-green-800" />
-                      ) : (
-                        <div className="font-mono text-sm text-gray-800 dark:text-green-200 whitespace-pre-wrap">
-                          {currentTest.expected || 'No output'}
-                        </div>
-                      )}
-                    </div>
+              <div className="space-y-6">
+                {/* Expected Output */}
+                <div>
+                  <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Expected Output</p>
+                  <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
+                    {test.expected?.includes('|') ? (
+                      (() => {
+                        const schemaColumns = getColumnsFromSchema(schema);
+                        const firstTableColumns = Object.values(schemaColumns)[0] || null;
+                        return (
+                          <SqlResultTable
+                            text={test.expected}
+                            className="border-0"
+                            columns={firstTableColumns}
+                          />
+                        );
+                      })()
+                    ) : (
+                      <pre className="font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-64 overflow-auto">
+                        {test.expected || 'No output'}
+                      </pre>
+                    )}
                   </div>
+                </div>
 
-                  {/* Actual Block */}
-                  <div>
-                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Your Output</span>
-                    <div className={`${currentTest.passed
-                      ? 'bg-green-50/50 dark:bg-green-900/10 border-green-100 dark:border-green-900/30'
-                      : 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30'
-                      } rounded-xl p-4 border min-h-[100px]`}>
-                      {currentTest.output?.includes('|') ? (
-                        <SqlResultTable text={currentTest.output} className={currentTest.passed ? 'border-green-200 dark:border-green-800' : 'border-red-200 dark:border-red-800'} />
-                      ) : (
-                        <div className={`font-mono text-sm whitespace-pre-wrap ${currentTest.passed ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                          {currentTest.output || 'No output'}
-                        </div>
-                      )}
-                    </div>
+                {/* Your Output */}
+                <div>
+                  <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Your Output</p>
+                  <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
+                    {test.output?.includes('|') ? (
+                      (() => {
+                        const schemaColumns = getColumnsFromSchema(schema);
+                        const firstTableColumns = Object.values(schemaColumns)[0] || null;
+                        return (
+                          <SqlResultTable
+                            text={test.output}
+                            className="border-0"
+                            columns={firstTableColumns}
+                          />
+                        );
+                      })()
+                    ) : (
+                      <pre className={`font-mono text-xs whitespace-pre-wrap break-words max-h-64 overflow-auto ${test.passed ? 'text-gray-700 dark:text-gray-300' : 'text-red-700 dark:text-red-400'}`}>
+                        {test.output || 'No output'}
+                      </pre>
+                    )}
                   </div>
                 </div>
               </div>
-            </>
-          )}
+            </div>
+          ))}
         </div>
       </div>
+
+      <p className="mt-4 text-xs text-gray-400 dark:text-gray-500 text-center italic">
+        Tests are run against the current code version in the editor.
+      </p>
     </div>
   );
 };
@@ -1282,7 +1386,7 @@ function SqlPage({ question }) {
               {output ? (
                 <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
               ) : testResults.length > 0 && testResults.every(t => t.status === 'done') ? (
-                <SqlAnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
+                <SqlAnimatedTestResults testResults={testResults} runsubmit={runsubmit} schema={questionData?.schema} />
               ) : (
                 <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
               )}

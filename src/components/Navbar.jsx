@@ -215,13 +215,14 @@ const Navbar = () => {
                     navigate(`/course/${encodedCourse}`);
                   }
                 }}
-                className={`p-1 sm:p-1.5 rounded-md transition-all duration-150 ${currentIndex === 0
-                  ? 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                className={`px-2 sm:px-3 py-1.5 rounded-md transition-all duration-150 flex items-center gap-1 text-xs sm:text-sm font-medium ${currentIndex === 0
+                  ? 'text-gray-400 dark:text-gray-500'
                   : 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
                   }`}
                 title={currentIndex === 0 ? 'Back to course' : 'Previous question'}
               >
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Prev</span>
               </button>
 
               {/* Progress dots */}
@@ -263,13 +264,14 @@ const Navbar = () => {
                     navigate(`/course/${encodedCourse}`);
                   }
                 }}
-                className={`p-1 sm:p-1.5 rounded-md transition-all duration-150 ${currentIndex === questionData.length - 1
-                  ? 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                className={`px-2 sm:px-3 py-1.5 rounded-md transition-all duration-150 flex items-center gap-1 text-xs sm:text-sm font-medium ${currentIndex === questionData.length - 1
+                  ? 'text-gray-400 dark:text-gray-500'
                   : 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
                   }`}
                 title={currentIndex === questionData.length - 1 ? 'Back to course' : 'Next question'}
               >
-                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           )}

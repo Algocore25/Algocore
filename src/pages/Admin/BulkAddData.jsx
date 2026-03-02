@@ -368,15 +368,20 @@ const BulkAddData = () => {
                                 continue;
                             }
 
-                            const qId = q.id || q.questionname || 'q_' + Math.random().toString(36).substr(2, 9);
+                            const qId = q.questionId || q.questionname || 'q_' + Math.random().toString(36).substr(2, 9);
                             const qToSave = { ...q, id: qId };
 
                             // Save to global questions table
                             setLogs(prev => [`[${course.title}] Writing question '${qToSave.questionname || qId}' to database...`, ...prev]);
-                            await set(ref(database, `questions/${qId}`), qToSave);
+                            try {
+                                await set(ref(database, `questions/${qId}`), qToSave);
+                            } catch (err) {
+                                console.error(`Error saving question '${qToSave.questionname || qId}':`, err);
+                                setLogs(prev => [`ERROR saving question '${qToSave.questionname || qId}': ${err.message}`, ...prev]);
+                            }
 
                             // Only store the name / ID in the course section
-                            newQuestionStrings.push(qToSave.questionname || qId);
+                            newQuestionStrings.push(qId || q.questionname || 'Unnamed Question');
                             setProgress(p => ({ ...p, current: p.current + 1 }));
                         }
                         processedSections[sectionName].questions = newQuestionStrings;

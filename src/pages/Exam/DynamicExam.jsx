@@ -11,7 +11,7 @@ import { VideoCanvas } from "../../LiveProctoring/components/VideoCanvas";
 
 import FullscreenTracker from "../FullscreenTracker";
 import LoadingPage from "../LoadingPage";
-import { User, Clock, FileText, CheckCircle2, ShieldAlert, BadgeInfo, Cpu, Maximize, AlertTriangle, Monitor } from "lucide-react";
+import { User, Clock, FileText, CheckCircle2, ShieldAlert, BadgeInfo, Cpu, Maximize, AlertTriangle, Monitor, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const DynamicExam = () => {
@@ -871,7 +871,7 @@ const DynamicExam = () => {
     const checkDuration = async () => {
       const isExpired = await checkExamDuration();
       if (isExpired) {
-        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}`);
+        const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
         await set(statusRef, "completed");
         setStage("completed");
         fetchResults();
@@ -957,7 +957,6 @@ const DynamicExam = () => {
       // Get student's assigned questions
       const studentQuestionsRef = ref(database, `Exam/${testid}/myquestions/${user.uid}`);
       const studentQuestionsSnapshot = await get(studentQuestionsRef);
-      // const studentQuestions = studentQuestionsSnapshot.val() || {};
       const questionIds = studentQuestionsSnapshot.val() || [];
 
       // Get student's answers
@@ -969,10 +968,30 @@ const DynamicExam = () => {
       const marksSnapshot = await get(marksRef);
       const marks = marksSnapshot.val() || {};
 
+      // Get global exam status
+      const globalStatusRef = ref(database, `Exam/${testid}/Properties/status`);
+      const globalStatusSnapshot = await get(globalStatusRef);
+      const globalStatus = globalStatusSnapshot.val();
 
-      console.log(questionIds);
-      console.log(answers);
-      console.log(marks);
+      // Fetch participants and their ranks
+      const participantsRef = ref(database, `Exam/${testid}/Participants`);
+      const participantsSnapshot = await get(participantsRef);
+      const participants = participantsSnapshot.val() || [];
+
+      // Check if results are available immediately or scheduled
+      const resultsAvailableRef = ref(database, `Exam/${testid}/Properties/resultsAvailable`);
+      const resultsAvailableSnapshot = await get(resultsAvailableRef);
+      const resultsAvailable = resultsAvailableSnapshot.val();
+
+      const currentTime = new Date().toISOString();
+      const showResults = resultsAvailable === "immediate" || (resultsAvailable && currentTime >= resultsAvailable);
+
+      if (!showResults) {
+        setResults({
+          message: "Results will be available after the scheduled time.",
+        });
+        return;
+      }
 
       // Calculate score
       let correctCount = 0;
@@ -988,8 +1007,6 @@ const DynamicExam = () => {
         const questionTypeSnapshot = await get(questionTypeRef);
         const questionType = questionTypeSnapshot.val() || 'mcq';
 
-        console.log(marks[questionId] || 0);
-
         questionDetails.push({
           id: questionId,
           correct: isCorrect,
@@ -999,21 +1016,19 @@ const DynamicExam = () => {
         totalMarks += marks[questionId] || 0;
       }
 
-
-
       // Calculate score percentage
       const score = questionIds.length > 0
         ? Math.round((totalMarks / questionIds.length))
         : 0;
-
-
 
       setResults({
         score,
         correctCount,
         totalQuestions: questionIds.length,
         questions: questionDetails,
-        totalMarks
+        totalMarks,
+        globalStatus,
+        participants, // Include participants and their ranks
       });
     } catch (error) {
       console.error("Error fetching results:", error);
@@ -1022,10 +1037,9 @@ const DynamicExam = () => {
     }
   };
 
-  // Function to mark exam as completed (call this from Exam2 component when exam is finished)
   const markExamCompleted = async () => {
     try {
-      const statusRef = ref(database, `ExamSubmissions/${testid}/status`);
+      const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
       await set(statusRef, "completed");
       setExamStatus("completed");
       setStage("completed");
@@ -1247,7 +1261,10 @@ const DynamicExam = () => {
             setviolation={setviolation}
             setIsViolationReady={setIsViolationReady}
             Questions={Questions}
-            onExamComplete={markExamCompleted}
+            onExamComplete={() => {
+              markExamCompleted();
+              setStage("completed"); // Ensure stage is updated to completed
+            }}
             startTime={startTime}
             duration={duration}
             examName={examName}
@@ -1473,7 +1490,7 @@ const DynamicExam = () => {
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             className="w-full h-full flex flex-col z-10 overflow-hidden text-slate-800 dark:text-slate-100"
           >
-          
+
 
             {/* Content Area */}
             <div className="p-5 sm:p-8 lg:p-10 gap-8 sm:gap-12 flex flex-col lg:flex-row flex-1 overflow-y-auto min-h-0 hide-scrollbar">
@@ -1506,60 +1523,78 @@ const DynamicExam = () => {
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
                     className="space-y-6"
                   >
-                    {/* Results Summary Metrics */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-900/50">
-                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Score</p>
-                        <p className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-teal-600">
-                          {results.score}%
-                        </p>
-                      </div>
-                      <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900/50">
-                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Correct</p>
-                        <p className="text-4xl font-black text-blue-600 dark:text-blue-400">
-                          {results.correctCount}
-                        </p>
-                      </div>
-                      <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900/50">
-                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Total Questions</p>
-                        <p className="text-4xl font-black text-slate-800 dark:text-slate-200">
-                          {results.totalQuestions}
-                        </p>
-                      </div>
-                    </div>
+                    {results.globalStatus === "ResultsPublished" ? (
+                      <>
+                        {/* Results Summary Metrics */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-900/50">
+                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Score</p>
+                            <p className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-teal-600">
+                              {results.score}%
+                            </p>
+                          </div>
+                          <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900/50">
+                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Correct</p>
+                            <p className="text-4xl font-black text-blue-600 dark:text-blue-400">
+                              {results.correctCount}
+                            </p>
+                          </div>
+                          <div className="group flex flex-col items-center justify-center p-6 bg-white/80 dark:bg-slate-900/50 rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900/50">
+                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-2">Total Questions</p>
+                            <p className="text-4xl font-black text-slate-800 dark:text-slate-200">
+                              {results.totalQuestions}
+                            </p>
+                          </div>
+                        </div>
 
-                    {results.questions && results.questions.length > 0 && (
-                      <div className="mt-8 bg-white/50 dark:bg-slate-800/40 rounded-3xl p-6 border border-white/60 dark:border-slate-700/50 shadow-sm backdrop-blur-md">
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4">
-                          <FileText className="w-5 h-5 text-emerald-500" />
-                          Question Breakdown
-                        </h3>
-                        <div className="max-h-72 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                          {results.questions.map((q, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between p-4 bg-white/80 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-emerald-200 transition-colors"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <p className="text-base font-bold text-slate-800 dark:text-slate-100">
-                                  Question {index + 1}
-                                </p>
-                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                                  {q.type} • {q.mark || 0} pts
-                                </p>
-                              </div>
-                              <div
-                                className={`flex items-center justify-center w-10 h-10 rounded-full shadow-sm border ${q.correct
-                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400'
-                                    : q.mark > 0
-                                      ? 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400'
-                                      : 'bg-red-50 border-red-200 text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
-                                  }`}
-                              >
-                                {q.correct ? <CheckCircle2 className="w-6 h-6" /> : q.mark > 0 ? '~' : '✗'}
-                              </div>
+                        {results.questions && results.questions.length > 0 && (
+                          <div className="mt-8 bg-white/50 dark:bg-slate-800/40 rounded-3xl p-6 border border-white/60 dark:border-slate-700/50 shadow-sm backdrop-blur-md">
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4">
+                              <FileText className="w-5 h-5 text-emerald-500" />
+                              Question Breakdown
+                            </h3>
+                            <div className="max-h-72 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                              {results.questions.map((q, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center justify-between p-4 bg-white/80 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-200 transition-colors"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-base font-bold text-slate-800 dark:text-slate-100">
+                                      Question {index + 1}
+                                    </p>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                                      {q.type} • {q.mark || 0} pts
+                                    </p>
+                                  </div>
+                                  <div
+                                    className={`flex items-center justify-center w-10 h-10 rounded-full shadow-sm border ${q.correct
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400'
+                                      : q.mark > 0
+                                        ? 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400'
+                                        : 'bg-red-50 border-red-200 text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+                                      }`}
+                                  >
+                                    {q.correct ? <CheckCircle2 className="w-6 h-6" /> : q.mark > 0 ? '~' : '✗'}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="bg-white/80 dark:bg-slate-900/50 rounded-3xl p-10 shadow-xl border border-blue-100 dark:border-blue-900/30 text-center max-w-2xl mx-auto backdrop-blur-sm">
+                        <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                          <CheckCircle2 className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">Exam Completed Successfully</h2>
+                        <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
+                          Your responses have been securely recorded. Detailed marks and rankings will be available once the results are officially published by your administrator.
+                        </p>
+                        <div className="inline-flex items-center space-x-3 bg-blue-50 dark:bg-blue-900/20 px-6 py-3 rounded-2xl border border-blue-100/50 dark:border-blue-800/30">
+                          <div className="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(37,99,235,0.5)]"></div>
+                          <span className="text-sm font-bold text-blue-700 dark:text-blue-300">Results Available Soon</span>
                         </div>
                       </div>
                     )}
@@ -1748,7 +1783,7 @@ const DynamicExam = () => {
                           {aiError && (
                             <>
                               <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                               </svg>
                               <span className="text-xs sm:text-sm text-red-600">Error: {aiError}</span>
                             </>

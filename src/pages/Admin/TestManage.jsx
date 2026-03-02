@@ -8,6 +8,7 @@ import Questions from './Questions';
 import Students from './Students';
 import LoadingPage from '../LoadingPage';
 import ExamPreview from './ExamPreview';
+import UnifiedMonitorResults from './UnifiedMonitorResults';
 
 const TestManage = () => {
   const { testId } = useParams();
@@ -19,17 +20,22 @@ const TestManage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
     // Load the saved tab from localStorage, default to 'questions'
-    return localStorage.getItem('testManageActiveTab') || 'questions';
-  }); // 'students', 'questions' or 'settings'
+    const saved = localStorage.getItem('testManageActiveTab') || 'questions';
+    // If legacy 'monitor' tab is saved, default to 'results' (combined tab)
+    return saved === 'monitor' ? 'results' : saved;
+  }); // 'students', 'questions', 'results' (includes monitor & edit)
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [testTitle, setTestTitle] = useState('');
   const [duration, setDuration] = useState(60);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [forceStartTime, setForceStartTime] = useState('');
+  const [forceEndTime, setForceEndTime] = useState('');
   const [schedulingType, setSchedulingType] = useState('anytime'); // 'anytime' or 'scheduled'
   const [isSaving, setIsSaving] = useState(false);
   const [enableVideoProctoring, setEnableVideoProctoring] = useState(true);
   const [blockOnViolations, setBlockOnViolations] = useState(false);
+  const [isVisible, setIsVisible] = useState(true); // Test visibility to students
   const [allowedLanguages, setAllowedLanguages] = useState(['python', 'javascript', 'java', 'cpp', 'c']);
 
   const availableLanguages = [
@@ -183,11 +189,18 @@ const TestManage = () => {
             );
           }
 
+          // Set visibility if available
+          if (testData.isVisible !== undefined) {
+            setIsVisible(testData.isVisible);
+          }
+
           // Set scheduling if available
           if (testData.Properties) {
             setStartTime(testData.Properties.startTime || '');
             setEndTime(testData.Properties.endTime || '');
-            setSchedulingType(testData.Properties.schedulingType || 'anytime');
+            setForceStartTime(testData.Properties.forceStartTime || '');
+            setForceEndTime(testData.Properties.forceEndTime || '');
+            setSchedulingType(testData.Properties.type || 'anytime');
           }
 
           // Load saved configuration if exists
@@ -301,6 +314,8 @@ const TestManage = () => {
         const props = snapshot.val();
         setStartTime(props.startTime || '');
         setEndTime(props.endTime || '');
+        setForceStartTime(props.forceStartTime || '');
+        setForceEndTime(props.forceEndTime || '');
         setSchedulingType(props.schedulingType || 'anytime');
 
         setTest(prev => ({
@@ -357,6 +372,31 @@ const TestManage = () => {
           ...prev,
           name: nameValue
         }));
+      }
+    });
+
+    return () => unsubscribe();
+  }, [testId]);
+
+  // Real-time listener for visibility changes
+  useEffect(() => {
+    if (!testId) return;
+
+    const visibilityRef = ref(database, `Exam/${testId}/isVisible`);
+    const unsubscribe = onValue(visibilityRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const visibleValue = snapshot.val();
+        console.log('[TestManage] Test visibility from Firebase:', visibleValue);
+        setIsVisible(visibleValue);
+
+        // Update test state
+        setTest(prev => ({
+          ...prev,
+          isVisible: visibleValue
+        }));
+      } else {
+        // Default to visible if not set
+        setIsVisible(true);
       }
     });
 
@@ -633,6 +673,16 @@ const TestManage = () => {
                 <FiSettings className="inline mr-1.5 h-4 w-4" />
                 Settings
               </button>
+
+              <button
+                onClick={() => setActiveTab('results')}
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'results'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-500'
+                  }`}
+              >
+                Monitor & Results
+              </button>
             </nav>
           </div>
         </div>
@@ -648,6 +698,9 @@ const TestManage = () => {
         )}
         {activeTab === 'preview' && (
           <ExamPreview test={test} testId={testId} duration={duration} />
+        )}
+        {activeTab === 'results' && (
+          <UnifiedMonitorResults />
         )}
         {activeTab === 'settings' && (
           <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
@@ -832,11 +885,11 @@ const TestManage = () => {
                       <button
                         onClick={() => {
                           setSchedulingType('anytime');
-                          update(ref(database, `Exam/${testId}/Properties`), { schedulingType: 'anytime' });
+                          update(ref(database, `Exam/${testId}/Properties`), { type: 'anytime' });
                         }}
                         className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${schedulingType === 'anytime'
-                            ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-400'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                          ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-400'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                           }`}
                       >
                         Anytime
@@ -844,11 +897,11 @@ const TestManage = () => {
                       <button
                         onClick={() => {
                           setSchedulingType('scheduled');
-                          update(ref(database, `Exam/${testId}/Properties`), { schedulingType: 'scheduled' });
+                          update(ref(database, `Exam/${testId}/Properties`), { type: 'timeRange' });
                         }}
                         className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${schedulingType === 'scheduled'
-                            ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-400'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                          ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-400'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                           }`}
                       >
                         Time Range
@@ -857,32 +910,83 @@ const TestManage = () => {
                   </div>
 
                   {schedulingType === 'scheduled' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="space-y-4 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200">
                       <div>
-                        <label htmlFor="startTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Start Time
-                        </label>
-                        <input
-                          type="datetime-local"
-                          id="startTime"
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { startTime })}
-                          className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
-                        />
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Availability Window</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="startTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Window Start Time
+                            </label>
+                            <input
+                              type="datetime-local"
+                              id="startTime"
+                              value={startTime}
+                              onChange={(e) => setStartTime(e.target.value)}
+                              onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { startTime })}
+                              className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">When students can start the exam</p>
+                          </div>
+                          <div>
+                            <label htmlFor="endTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Window End Time
+                            </label>
+                            <input
+                              type="datetime-local"
+                              id="endTime"
+                              value={endTime}
+                              onChange={(e) => setEndTime(e.target.value)}
+                              onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { endTime })}
+                              className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Last time to start the exam</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 rounded">
+                          <p className="text-xs text-blue-700 dark:text-blue-300">
+                            ℹ️ Students can start the exam anytime between these times. Once they start, they'll have <strong>{duration} minutes</strong> to complete it.
+                          </p>
+                        </div>
                       </div>
+
+                      <hr className="border-gray-300 dark:border-gray-600" />
+
                       <div>
-                        <label htmlFor="endTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          End Time
-                        </label>
-                        <input
-                          type="datetime-local"
-                          id="endTime"
-                          value={endTime}
-                          onChange={(e) => setEndTime(e.target.value)}
-                          onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { endTime })}
-                          className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
-                        />
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Force Start/End (Optional)</h4>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                          Set specific times to automatically start or end the exam for all students. Leave blank if not needed.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="forceStartTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Force Start Time (Optional)
+                            </label>
+                            <input
+                              type="datetime-local"
+                              id="forceStartTime"
+                              value={forceStartTime}
+                              onChange={(e) => setForceStartTime(e.target.value)}
+                              onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { forceStartTime })}
+                              className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Automatically start exam for all students at this time</p>
+                          </div>
+                          <div>
+                            <label htmlFor="forceEndTime" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Force End Time (Optional)
+                            </label>
+                            <input
+                              type="datetime-local"
+                              id="forceEndTime"
+                              value={forceEndTime}
+                              onChange={(e) => setForceEndTime(e.target.value)}
+                              onBlur={() => update(ref(database, `Exam/${testId}/Properties`), { forceEndTime })}
+                              className="block w-full sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-white rounded-md p-2"
+                            />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Automatically end exam for all students at this time</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -896,8 +1000,12 @@ const TestManage = () => {
 
                   {schedulingType === 'scheduled' && (
                     <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                      The test will only be visible to students within this timeframe.
-                      Once started, the {duration}-minute timer begins.
+                      <strong>How it works:</strong>
+                      <ul className="mt-1 space-y-1">
+                        <li>• Students can start the exam anytime between the availability window times</li>
+                        <li>• Each student gets {duration} minutes from when they click "Start"</li>
+                        <li>• Force Start/End times override student preferences and automatically start/end for all students</li>
+                      </ul>
                     </p>
                   )}
                 </div>
@@ -969,6 +1077,41 @@ const TestManage = () => {
                       >
                         <span
                           className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${blockOnViolations ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Test Visibility */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    Test Visibility
+                  </label>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                          Visible to Students
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Toggle whether students can see and access this test
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const newValue = !isVisible;
+                          setIsVisible(newValue);
+                          await update(ref(database, `Exam/${testId}`), { isVisible: newValue });
+                          toast.success(newValue ? 'Test is now visible to students' : 'Test is now hidden from students');
+                        }}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${isVisible ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'
+                          }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isVisible ? 'translate-x-5' : 'translate-x-0'
                             }`}
                         />
                       </button>

@@ -12,6 +12,8 @@ import { auth } from '../firebase';
 import { ref, set, onValue, onDisconnect, remove, update, get } from 'firebase/database';
 import { database } from '../firebase';
 
+import { signInWithEmailAndPassword } from 'firebase/auth';
+
 const AuthContext = createContext(null);
 
 
@@ -115,7 +117,7 @@ export const AuthProvider = ({ children }) => {
           const sessionRef = ref(database, `sessions/${uid}`);
           const snap = await get(sessionRef);
           const currentSession = snap.val();
-          
+
           if (!currentSession || currentSession.sessionId === sessionIdRef.current || isManualLogoutRef.current) {
             await remove(sessionRef);
             console.log('Session record removed from database');
@@ -233,7 +235,7 @@ export const AuthProvider = ({ children }) => {
       // Check for existing session
       const snapshot = await get(sessionRef);
       const existingSession = snapshot.val();
-      
+
       if (existingSession && existingSession.sessionId === newSessionId) {
         console.log('Existing session found with same ID, joining session:', existingSession.sessionId);
         await update(sessionRef, {
@@ -448,9 +450,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Email/password login placeholder
+  // Email/password login
   const login = async ({ email, password }) => {
-    throw new Error("Email/password login not implemented yet");
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      console.log('User signed in:', user);
+      toast.success('Successfully signed in!');
+    } catch (error) {
+      console.error('Error during login:', error);
+      if (error.code === 'auth/wrong-password') {
+        toast.error('Incorrect password. Please try again.');
+      } else if (error.code === 'auth/user-not-found') {
+        toast.error('No user found with this email.');
+      } else {
+        toast.error('Failed to sign in. Please try again.');
+      }
+      throw error;
+    }
   };
 
   // Cleanup on unmount
