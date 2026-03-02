@@ -8,6 +8,7 @@ import { usePersonDetection } from "../../LiveProctoring/hooks/usePersonDetectio
 import { useWebRTCStream } from "../../LiveProctoring/hooks/useWebRTCStreamV2";
 import { useAdminAudioReceiver } from "../../LiveProctoring/hooks/useAdminAudioReceiver";
 import { VideoCanvas } from "../../LiveProctoring/components/VideoCanvas";
+import { toast } from "react-hot-toast";
 
 import FullscreenTracker from "../FullscreenTracker";
 import LoadingPage from "../LoadingPage";
@@ -56,7 +57,8 @@ const DynamicExam = () => {
   const [proctorSettings, setProctorSettings] = useState({
     enableVideoProctoring: true,
     enableFullscreen: true,
-    blockOnViolations: false
+    blockOnViolations: false,
+    maxViolationCount: 3
   });
 
   const { detectPersons, isLoading: aiLoading, error: aiError, modelReady } = usePersonDetection();
@@ -133,7 +135,7 @@ const DynamicExam = () => {
       const durationValue = examProperties?.duration ?? durationFallbackSnapshot.val() ?? duration;
       const durationMinutes = Number(durationValue) || 60;
 
-      if (examstatus.val().toLowerCase() === "completed") {
+      if (examstatus.val()?.toLowerCase() === "completed") {
         setStage("completed");
         return true;
       }
@@ -219,11 +221,8 @@ const DynamicExam = () => {
     }
   }, [testid, user]);
 
-  const runDetection = useCallback(async () => {
-    if (!videoRef.current || stage !== "exam" || !proctorStreamRef.current) return;
-    const results = await detectPersons(videoRef.current);
-    setDetections(results);
-    const personCount = results.length;
+  // --- Handle person detection and violations ---
+  const handlePersonDetection = useCallback(async (personCount) => {
     const now = Date.now();
 
     if (personCount === 0) {
@@ -233,12 +232,26 @@ const DynamicExam = () => {
       } else {
         const duration = (now - noPersonStartTime.current) / 1000;
         if (duration >= 5 && !violationTriggered.current.noPerson) {
+          const newViolationCount = (violation || 0) + 1;
           showToastNotification("⚠️ No person detected for 5 seconds - Violation recorded");
+          
+          // Show detailed toast with violation count
+          toast(`🚨 Violation ${newViolationCount}/${proctorSettings.maxViolationCount}: No person detected for 5 seconds`, {
+            duration: 3000,
+            icon: '⚠️',
+            style: {
+              background: '#ef4444',
+              color: 'white',
+            },
+          });
+          
           setviolation(prev => (prev || 0) + 1);
           logViolation("No Person Detected", {
             duration: `${duration.toFixed(1)} seconds`,
             personCount: 0,
-            detectionTime: new Date().toISOString()
+            detectionTime: new Date().toISOString(),
+            violationCount: newViolationCount,
+            maxViolationCount: proctorSettings.maxViolationCount
           });
           violationTriggered.current.noPerson = true;
         }
@@ -252,12 +265,26 @@ const DynamicExam = () => {
       } else {
         const duration = (now - multiPersonStartTime.current) / 1000;
         if (duration >= 5 && !violationTriggered.current.multiPerson) {
+          const newViolationCount = (violation || 0) + 1;
           showToastNotification(`⚠️ Multiple persons detected for 5 seconds - Violation recorded`);
+          
+          // Show detailed toast with violation count
+          toast(`🚨 Violation ${newViolationCount}/${proctorSettings.maxViolationCount}: Multiple persons detected for 5 seconds`, {
+            duration: 3000,
+            icon: '👥',
+            style: {
+              background: '#ef4444',
+              color: 'white',
+            },
+          });
+          
           setviolation(prev => (prev || 0) + 1);
           logViolation("Multiple Persons Detected", {
             duration: `${duration.toFixed(1)} seconds`,
             personCount: personCount,
-            detectionTime: new Date().toISOString()
+            detectionTime: new Date().toISOString(),
+            violationCount: newViolationCount,
+            maxViolationCount: proctorSettings.maxViolationCount
           });
           violationTriggered.current.multiPerson = true;
         }
@@ -270,7 +297,16 @@ const DynamicExam = () => {
       violationTriggered.current.noPerson = false;
       violationTriggered.current.multiPerson = false;
     }
-  }, [detectPersons, stage, showToastNotification, setviolation]);
+  }, [detectPersons, stage, showToastNotification, setviolation, violation, proctorSettings.maxViolationCount]);
+
+  const runDetection = useCallback(async () => {
+    if (!videoRef.current || stage !== "exam" || !proctorStreamRef.current) return;
+    const results = await detectPersons(videoRef.current);
+    setDetections(results);
+    const personCount = results.length;
+
+    await handlePersonDetection(personCount);
+  }, [detectPersons, stage, handlePersonDetection]);
 
   useEffect(() => {
     // Only run video proctoring if enabled
@@ -661,14 +697,100 @@ const DynamicExam = () => {
       const currstageSnapshot = await get(currstage);
 
       // Check if the exam should be blocked (only if blockOnViolations is enabled)
-      if (proctorSettings.blockOnViolations && violation >= 2 && currstageSnapshot.val() != "completed") {
-        console.log(currstageSnapshot.val());
+      if (proctorSettings.blockOnViolations && violation >= proctorSettings.maxViolationCount && currstageSnapshot.val() != "completed") {
+        console.log('🚫 Blocking exam - Conditions met:', {
+          blockOnViolations: proctorSettings.blockOnViolations,
+          violation: violation,
+          maxViolationCount: proctorSettings.maxViolationCount,
+          currentStage: currstageSnapshot.val(),
+          condition: violation >= proctorSettings.maxViolationCount
+        });
+        
+        // Show blocking toast
+        toast(`🚫 Exam Blocked! You have reached ${violation} violations (limit: ${proctorSettings.maxViolationCount})`, {
+          duration: 3000,
+          icon: '🚫',
+          style: {
+            background: '#ef4444',
+            color: 'white',
+          },
+        });
+        
+        // Immediately block the exam without waiting
+        console.log('🔒 Immediately blocking exam...');
+        setStage("blocked");
+        
+        // Also update Firebase in the background
         markExamBlocked();
+        
+        // Prevent further execution
+        return;
+      } else if (proctorSettings.blockOnViolations && violation >= proctorSettings.maxViolationCount - 1 && currstageSnapshot.val() != "completed") {
+        // Show warning when close to limit
+        const remaining = proctorSettings.maxViolationCount - violation;
+        console.log('⚠️ Warning - Close to limit:', {
+          violation: violation,
+          maxViolationCount: proctorSettings.maxViolationCount,
+          remaining: remaining
+        });
+        
+        toast(`⚠️ Warning: Only ${remaining} violation(s) remaining before exam is blocked!`, {
+          duration: 3000,
+          icon: '⚠️',
+          style: {
+            background: '#f59e0b',
+            color: 'white',
+          },
+        });
+      } else {
+        console.log('✅ No blocking needed:', {
+          blockOnViolations: proctorSettings.blockOnViolations,
+          violation: violation,
+          maxViolationCount: proctorSettings.maxViolationCount,
+          currentStage: currstageSnapshot.val()
+        });
       }
     };
 
     saveAndCheckViolations();
-  }, [violation, isViolationReady, testid, user, proctorSettings.blockOnViolations]);
+  }, [violation, isViolationReady, testid, user, proctorSettings.blockOnViolations, proctorSettings.maxViolationCount]);
+
+  // Immediate blocking check - runs whenever violation count changes
+  useEffect(() => {
+    const checkImmediateBlocking = async () => {
+      if (!isViolationReady || !proctorSettings.blockOnViolations || !testid || !user) return;
+
+      // Get current stage from Firebase
+      try {
+        const currstage = ref(database, `Exam/${testid}/Properties2/Progress/${user.uid}/stage`);
+        const currstageSnapshot = await get(currstage);
+        const currentStage = currstageSnapshot.val();
+
+        // If violation count exceeds threshold and exam is not completed, block immediately
+        if (violation >= proctorSettings.maxViolationCount && currentStage !== "completed" && stage !== "blocked") {
+          console.log('🚨 IMMEDIATE BLOCKING TRIGGERED:', {
+            violation: violation,
+            maxViolationCount: proctorSettings.maxViolationCount,
+            currentStage: currentStage,
+            stage: stage
+          });
+          
+          // Block immediately
+          setStage("blocked");
+          
+          // Update Firebase
+          const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
+          await set(statusRef, "blocked");
+          
+          console.log('✅ Exam immediately blocked due to excessive violations');
+        }
+      } catch (error) {
+        console.error('❌ Error in immediate blocking check:', error);
+      }
+    };
+
+    checkImmediateBlocking();
+  }, [violation, isViolationReady, proctorSettings.blockOnViolations, proctorSettings.maxViolationCount, testid, user, stage]);
 
   // Function to check exam duration
   const checkExamDuration = async () => {
@@ -717,7 +839,8 @@ const DynamicExam = () => {
           setProctorSettings({
             enableVideoProctoring: settings.enableVideoProctoring === undefined ? true : settings.enableVideoProctoring,
             enableFullscreen: settings.enableFullscreen === undefined ? true : settings.enableFullscreen,
-            blockOnViolations: settings.blockOnViolations === true
+            blockOnViolations: settings.blockOnViolations === true,
+            maxViolationCount: settings.maxViolationCount || 3
           });
         }
 
@@ -1049,16 +1172,36 @@ const DynamicExam = () => {
     }
   };
 
+  // Function to reset violation count (for testing/debugging)
+  const resetViolations = async () => {
+    try {
+      console.log('🔄 Resetting violation count...');
+      setviolation(0);
+      
+      if (testid && user) {
+        const violationRef = ref(database, `Exam/${testid}/Properties2/Progress/${user.uid}`);
+        await set(violationRef, 0);
+        console.log('✅ Violation count reset in Firebase');
+      }
+    } catch (error) {
+      console.error('❌ Error resetting violations:', error);
+    }
+  };
+
   // Function to mark exam as blocked due to violations
   const markExamBlocked = async () => {
+    console.log('🔒 markExamBlocked function called');
     try {
       const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
       const statusRefSnapshot = await get(statusRef);
-      console.log(statusRefSnapshot.val());
+      console.log('Current status from Firebase:', statusRefSnapshot.val());
+      
       const examstatus = ref(database, `Exam/${testid}/Properties/status`);
       const examstatusSnapshot = await get(examstatus);
+      console.log('Exam status from Firebase:', examstatusSnapshot.val());
+      
       if (examstatusSnapshot.val().toLowerCase() === "completed" || (statusRefSnapshot.exists() && statusRefSnapshot.val() === "completed")) {
-
+        console.log('📝 Exam is already completed, not blocking');
         const statusRef = ref(database, `Exam/${testid}/Properties/Progress/${user.uid}/status`);
         await set(statusRef, "completed");
 
@@ -1066,13 +1209,15 @@ const DynamicExam = () => {
         fetchResults();
         return;
       }
+      
+      console.log('🚫 Setting exam to blocked status');
       console.log("2 my block")
       setStage("blocked");
       await set(statusRef, "blocked");
-
+      console.log('✅ Successfully updated Firebase with blocked status');
 
     } catch (error) {
-      console.error("Error marking exam as blocked:", error);
+      console.error("❌ Error marking exam as blocked:", error);
     }
   };
 
@@ -1257,6 +1402,37 @@ const DynamicExam = () => {
       {stage === "exam" && (
         <>
           <FullscreenTracker violation={violation} setviolation={setviolation} setIsViolationReady={setIsViolationReady} isViolationReady={isViolationReady} testid={testid} enableViolationTracking={proctorSettings.enableFullscreen} />
+          
+          {/* Debug Controls - Only visible in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="fixed top-4 left-4 z-50 bg-red-500 text-white p-2 rounded-lg shadow-lg">
+              <div className="text-xs font-bold mb-2">DEBUG CONTROLS</div>
+              <div className="text-xs mb-1">Violations: {violation}/{proctorSettings.maxViolationCount}</div>
+              <div className="text-xs mb-1">Stage: {stage}</div>
+              <div className="text-xs mb-2">Block Enabled: {proctorSettings.blockOnViolations ? 'Yes' : 'No'}</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={resetViolations}
+                  className="text-xs bg-white text-red-500 px-2 py-1 rounded hover:bg-gray-100"
+                >
+                  Reset Violations
+                </button>
+                <button
+                  onClick={() => setviolation(prev => prev + 1)}
+                  className="text-xs bg-white text-red-500 px-2 py-1 rounded hover:bg-gray-100"
+                >
+                  Add Violation
+                </button>
+                <button
+                  onClick={() => setStage("blocked")}
+                  className="text-xs bg-white text-red-500 px-2 py-1 rounded hover:bg-gray-100"
+                >
+                  Force Block
+                </button>
+              </div>
+            </div>
+          )}
+          
           <Exam2
             setviolation={setviolation}
             setIsViolationReady={setIsViolationReady}

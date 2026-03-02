@@ -35,6 +35,9 @@ const TestManage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [enableVideoProctoring, setEnableVideoProctoring] = useState(true);
   const [blockOnViolations, setBlockOnViolations] = useState(false);
+  const [maxViolationCount, setMaxViolationCount] = useState(3);
+  const [violationCounts, setViolationCounts] = useState({}); // Store violation counts for students
+  const [loadingViolations, setLoadingViolations] = useState(false);
   const [isVisible, setIsVisible] = useState(true); // Test visibility to students
   const [allowedLanguages, setAllowedLanguages] = useState(['python', 'javascript', 'java', 'cpp', 'c']);
 
@@ -187,6 +190,9 @@ const TestManage = () => {
             setBlockOnViolations(
               testData.proctorSettings.blockOnViolations === true
             );
+            setMaxViolationCount(
+              testData.proctorSettings.maxViolationCount || 3
+            );
           }
 
           // Set visibility if available
@@ -262,6 +268,9 @@ const TestManage = () => {
         setBlockOnViolations(
           settings.blockOnViolations === true
         );
+        setMaxViolationCount(
+          settings.maxViolationCount || 3
+        );
 
         // Update test state
         setTest(prev => ({
@@ -273,6 +282,7 @@ const TestManage = () => {
         // Set defaults if no settings exist
         setEnableVideoProctoring(true);
         setBlockOnViolations(false);
+        setMaxViolationCount(3);
       }
     });
 
@@ -356,6 +366,29 @@ const TestManage = () => {
     return () => unsubscribe();
   }, [testId]);
 
+  // Fetch violation counts when violation blocking is enabled
+  useEffect(() => {
+    const loadViolationCounts = async () => {
+      if (!blockOnViolations || !testId) {
+        setViolationCounts({});
+        return;
+      }
+
+      setLoadingViolations(true);
+      try {
+        const counts = await fetchViolationCounts(testId);
+        setViolationCounts(counts);
+      } catch (error) {
+        console.error('Error loading violation counts:', error);
+        toast.error('Failed to load violation counts');
+      } finally {
+        setLoadingViolations(false);
+      }
+    };
+
+    loadViolationCounts();
+  }, [blockOnViolations, testId]);
+
   // Real-time listener for test name changes
   useEffect(() => {
     if (!testId) return;
@@ -435,6 +468,39 @@ const TestManage = () => {
     } catch (error) {
       console.error('Error fetching students:', error);
       return { eligibleStudents: {}, enrolledStudents: [] };
+    }
+  };
+
+  // Fetch violation counts for all students when violation blocking is enabled
+  const fetchViolationCounts = async (testId) => {
+    if (!blockOnViolations) return {};
+
+    try {
+      const violationsRef = ref(database, `Exam/${testId}/Properties2/Progress`);
+      const snapshot = await get(violationsRef);
+
+      if (!snapshot.exists()) {
+        console.log('No violation data found in Firebase');
+        return {};
+      }
+
+      const violationData = snapshot.val();
+      console.log('Violation data from Firebase:', violationData);
+
+      // Process violation counts for each student
+      const violationCounts = {};
+      Object.keys(violationData).forEach(userId => {
+        const count = violationData[userId] ?? 0;
+        if (count > 0) {
+          violationCounts[userId] = count;
+        }
+      });
+
+      console.log('Processed violation counts:', violationCounts);
+      return violationCounts;
+    } catch (error) {
+      console.error('Error fetching violation counts:', error);
+      return {};
     }
   };
 
@@ -1068,7 +1134,8 @@ const TestManage = () => {
                             proctorSettings: {
                               enableVideoProctoring: enableVideoProctoring,
                               enableFullscreen: true,
-                              blockOnViolations: newValue
+                              blockOnViolations: newValue,
+                              maxViolationCount: maxViolationCount
                             }
                           });
                         }}
@@ -1081,6 +1148,121 @@ const TestManage = () => {
                         />
                       </button>
                     </div>
+
+                    {/* Maximum Violation Count - Only show when blockOnViolations is enabled */}
+                    {blockOnViolations && (
+                      <div className="ml-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <label htmlFor="maxViolationCount" className="block text-sm font-medium text-gray-900 dark:text-white mb-1">
+                              Maximum Violation Count
+                            </label>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              Number of violations allowed before blocking the student. Must be at least 1.
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="number"
+                              id="maxViolationCount"
+                              min="1"
+                              value={maxViolationCount}
+                              onChange={(e) => {
+                                const value = Math.max(1, parseInt(e.target.value) || 1);
+                                setMaxViolationCount(value);
+                              }}
+                              onBlur={() => {
+                                handleSaveTest({
+                                  proctorSettings: {
+                                    enableVideoProctoring: enableVideoProctoring,
+                                    enableFullscreen: true,
+                                    blockOnViolations: blockOnViolations,
+                                    maxViolationCount: maxViolationCount
+                                  }
+                                });
+                              }}
+                              className="w-20 sm:text-sm border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white rounded-md p-2 text-center"
+                            />
+                            <span className="text-sm text-gray-500 dark:text-gray-400">violations</span>
+                          </div>
+                        </div>
+                        <div className="mt-2 p-2 bg-blue-100 dark:bg-blue-800/30 rounded">
+                          <p className="text-xs text-blue-700 dark:text-blue-300">
+                            ⚠️ Students will be blocked after <strong>{maxViolationCount}</strong> violation(s).
+                            Current violations are tracked in the monitoring dashboard.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Current Violation Status - Only show when blockOnViolations is enabled */}
+                    {blockOnViolations && (
+                      <div className="ml-4 mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                            Current Violation Status
+                          </h4>
+                          <button
+                            onClick={async () => {
+                              setLoadingViolations(true);
+                              try {
+                                const counts = await fetchViolationCounts(testId);
+                                setViolationCounts(counts);
+                                toast.success('Violation counts refreshed');
+                              } catch (error) {
+                                console.error('Error refreshing violation counts:', error);
+                                toast.error('Failed to refresh violation counts');
+                              } finally {
+                                setLoadingViolations(false);
+                              }
+                            }}
+                            className="text-xs px-2 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+                            disabled={loadingViolations}
+                          >
+                            {loadingViolations ? 'Loading...' : 'Refresh'}
+                          </button>
+                        </div>
+                        
+                        {loadingViolations ? (
+                          <div className="text-center py-4 text-orange-600 dark:text-orange-400">
+                            <div className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full mr-2"></div>
+                            Loading violation counts...
+                          </div>
+                        ) : Object.keys(violationCounts).length > 0 ? (
+                          <div className="space-y-2">
+                            <p className="text-xs text-orange-700 dark:text-orange-300 mb-2">
+                              Found {Object.keys(violationCounts).length} student(s) with violations:
+                            </p>
+                            <div className="max-h-32 overflow-y-auto space-y-1">
+                              {Object.entries(violationCounts).map(([userId, count]) => (
+                                <div key={userId} className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded border border-orange-200 dark:border-orange-700">
+                                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                    Student ID: {userId.slice(-8)}
+                                  </span>
+                                  <span className={`text-xs font-bold px-2 py-1 rounded ${
+                                    count >= maxViolationCount 
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                      : count >= maxViolationCount - 1
+                                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                      : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                  }`}>
+                                    {count} / {maxViolationCount}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                              💡 Students at or above the threshold will be blocked from continuing the exam.
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-green-600 dark:text-green-400">
+                            <div className="text-sm mb-1">✅ No violations recorded</div>
+                            <div className="text-xs">All students are within the allowed violation limit</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

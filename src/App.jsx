@@ -17,7 +17,6 @@ import ProtectedRoute from './ProtectedRoute';
 import CompilerPage from './pages/CompilerPage';
 import LoadingPage from './pages/LoadingPage';
 import AdminMonitor from './pages/Admin/AdminMonitor';
-import CpuApp from './pages/Visual/Cpu/CpuApp';
 import WhatsNewModal from './components/WhatsNewModal';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -29,6 +28,8 @@ const ContactPage = lazy(() => import('./pages/ContactPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
 const SearchUsersPage = lazy(() => import('./pages/SearchUsersPage'));
+const LearnPage = lazy(() => import('./pages/LearnPage'));
+const CourseDetailsPage = lazy(() => import('./pages/CourseDetailsPage'));
 
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
@@ -91,6 +92,8 @@ function App() {
               <Route path="/compiler" element={<CompilerPage />} />
               <Route path="/courses" element={<CoursesPage />} />
               <Route path="/course/:course" element={<CoursePage />} />
+              <Route path="/learn" element={<LearnPage />} />
+              <Route path="/learn/:courseId" element={<CourseDetailsPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/login" element={<LoginPage />} />

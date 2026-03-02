@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { database } from '../firebase';
 import { ref, get } from 'firebase/database';
-import { Wifi, WifiOff, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Wifi, WifiOff, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { FaSun as SunIcon, FaMoon as MoonIcon, FaUserCircle as UserCircleIcon } from 'react-icons/fa';
 import logoLight from '../assets/LOGO.png';
 import logoDark from '../assets/LOGO-1.png';
@@ -75,6 +75,9 @@ const Navbar = () => {
     isAdmin && { label: 'Students', href: '/adminmonitor' },
     { label: 'Compiler', href: '/compiler' },
   ].filter(Boolean);
+
+  // Learn item - separate to be positioned on the right
+  const learnItem = { label: 'Learn', href: '/learn', icon: BookOpen };
 
   // 🟠 Fetch admin status
   useEffect(() => {
@@ -195,6 +198,8 @@ const Navbar = () => {
                 {item.label}
               </Link>
             ))}
+            
+           
           </div>
         </div>
 
@@ -224,6 +229,7 @@ const Navbar = () => {
                 <ChevronLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Prev</span>
               </button>
+
 
               {/* Progress dots */}
               <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
@@ -275,6 +281,18 @@ const Navbar = () => {
               </button>
             </div>
           )}
+
+           {/* Learn item with icon - positioned on the right */}
+            <Link
+              to={learnItem.href}
+              className={`text-sm font-medium transition-colors flex items-center gap-1 ${location.pathname === learnItem.href
+                ? 'text-[#4285F4]'
+                : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
+                }`}
+            >
+              <learnItem.icon size={16} />
+              {learnItem.label}
+            </Link>
 
           {/* Online indicator */}
           <div className="flex items-center">
@@ -383,6 +401,19 @@ const Navbar = () => {
                   <span>{item.label}</span>
                 </Link>
               ))}
+              
+              {/* Learn item with icon in mobile menu */}
+              <Link
+                to={learnItem.href}
+                className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${location.pathname === learnItem.href
+                  ? 'bg-[#4285F4]/10 text-[#4285F4]'
+                  : 'text-gray-700 dark:text-gray-200'
+                  }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <learnItem.icon size={16} />
+                <span>{learnItem.label}</span>
+              </Link>
             </div>
           )}
         </div>

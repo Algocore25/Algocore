@@ -897,8 +897,8 @@ function CodePage({ question }) {
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
                   <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
                     {
-                      questionData?.constraints.map((element) => (
-                        <li>{element}</li>
+                      questionData?.constraints.map((element, index) => (
+                        <li key={index}>{element}</li>
                       ))
                     }
 

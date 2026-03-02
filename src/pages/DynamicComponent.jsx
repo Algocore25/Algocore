@@ -8,7 +8,6 @@ import MCQPage from "./MCQPage";
 import MSQPage from "./MSQPage";
 import NumericPage from "./NumericPage";
 import LoadingPage from "./LoadingPage";
-import CpuApp from "./Visual/Cpu/CpuApp";
 import { encodeShort, decodeShort } from "../utils/urlEncoder";
 
 // Navigation Icons
@@ -132,11 +131,6 @@ const DynamicComponent = () => {
     fetchData();
     fetchDataQuestions();
 
-    if (decodedQuestionId === "CpuVisual") {
-      setData({
-        type: "CpuVisual"
-      })
-    }
 
 
     setLoading(false);
@@ -196,8 +190,7 @@ const DynamicComponent = () => {
       {data.type === "MCQ" && <MCQPage data={data} navigation={navigationProps} />}
       {data.type === "MSQ" && <MSQPage data={data} navigation={navigationProps} />}
       {data.type === "Numeric" && <NumericPage data={data} navigation={navigationProps} />}
-      {data.type === "CpuVisual" && <CpuApp />}
-      {!["Programming", "SQL", "MCQ", "MSQ", "Numeric", "CpuVisual"].includes(data.type) && (
+      {!["Programming", "SQL", "MCQ", "MSQ", "Numeric"].includes(data.type) && (
         <div className="flex items-center justify-center h-[60vh]">
           <div className="text-center p-8 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800 max-w-md">
             <svg className="w-16 h-16 mx-auto text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
