@@ -112,7 +112,7 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
   const isHiddenCase = !(runsubmit === 'run' || selectedTestIndex === 0 || selectedTestIndex === 1);
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-5">
+    <div className="w-full max-w-3xl mx-auto space-y-5 max-h-[80vh] overflow-y-auto">
       {/* Neutral Summary Header */}
       <div className="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
@@ -200,22 +200,22 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
               {/* Input Section */}
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Input</span>
-                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 overflow-x-auto whitespace-pre">
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 max-h-40 overflow-y-auto whitespace-pre break-words">
                   {formatText(currentTest.input)}
                 </div>
               </div>
 
-              {/* Outputs Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Outputs Row - Now Vertical */}
+              <div className="space-y-6">
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Expected</span>
-                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 min-h-[80px] whitespace-pre">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 min-h-[80px] max-h-60 overflow-y-auto whitespace-pre break-words">
                     {isHiddenCase ? <span className="italic opacity-30">Restricted</span> : formatText(currentTest.expected)}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Output</span>
-                  <div className={`p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border min-h-[80px] whitespace-pre ${currentTest.passed
+                  <div className={`p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border min-h-[80px] max-h-60 overflow-y-auto whitespace-pre break-words ${currentTest.passed
                     ? 'border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300'
                     : 'border-red-100/50 dark:border-red-900/10 text-red-600 dark:text-red-400'
                     }`}>

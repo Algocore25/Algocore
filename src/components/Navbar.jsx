@@ -74,6 +74,9 @@ const Navbar = () => {
     isAdmin && { label: 'Admin', href: '/admin' },
     isAdmin && { label: 'Students', href: '/adminmonitor' },
     { label: 'Compiler', href: '/compiler' },
+    process.env.NODE_ENV === 'development' && { label: 'Firebase Upload', href: '/firebase-upload' },
+    process.env.NODE_ENV === 'development' && { label: 'Delete Progress', href: '/delete-progress' },
+    process.env.NODE_ENV === 'development' && { label: 'Question Search', href: '/question-search' },
   ].filter(Boolean);
 
   // Learn item - separate to be positioned on the right
@@ -198,8 +201,8 @@ const Navbar = () => {
                 {item.label}
               </Link>
             ))}
-            
-           
+
+
           </div>
         </div>
 
@@ -282,17 +285,17 @@ const Navbar = () => {
             </div>
           )}
 
-           {/* Learn item with icon - positioned on the right */}
-            <Link
-              to={learnItem.href}
-              className={`text-sm font-medium transition-colors flex items-center gap-1 ${location.pathname === learnItem.href
-                ? 'text-[#4285F4]'
-                : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
-                }`}
-            >
-              <learnItem.icon size={16} />
-              {learnItem.label}
-            </Link>
+          {/* Learn item with icon - positioned on the right */}
+          <Link
+            to={learnItem.href}
+            className={`text-sm font-medium transition-colors flex items-center gap-1 ${location.pathname === learnItem.href
+              ? 'text-[#4285F4]'
+              : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
+              }`}
+          >
+            <learnItem.icon size={16} />
+            {learnItem.label}
+          </Link>
 
           {/* Online indicator */}
           <div className="flex items-center">
@@ -401,7 +404,7 @@ const Navbar = () => {
                   <span>{item.label}</span>
                 </Link>
               ))}
-              
+
               {/* Learn item with icon in mobile menu */}
               <Link
                 to={learnItem.href}

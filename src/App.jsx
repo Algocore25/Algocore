@@ -30,6 +30,9 @@ const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
 const SearchUsersPage = lazy(() => import('./pages/SearchUsersPage'));
 const LearnPage = lazy(() => import('./pages/LearnPage'));
 const CourseDetailsPage = lazy(() => import('./pages/CourseDetailsPage'));
+const FirebaseUploadPage = lazy(() => import('./pages/FirebaseUploadPage'));
+const DeleteProgressPage = lazy(() => import('./pages/DeleteProgressPage'));
+const QuestionSearchAndEdit = lazy(() => import('./pages/QuestionSearchAndEdit'));
 
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
@@ -109,7 +112,13 @@ function App() {
               <Route path="/adminresults/:testid" element={<ProtectedRoute requireAdmin={true}><AdminResult /></ProtectedRoute>} />
               <Route path="/studentresults/:testid" element={<ProtectedRoute requireUser={true}><StudentResult /></ProtectedRoute>} />
 
-
+              {process.env.NODE_ENV === 'development' && (
+                <>
+                  <Route path="/firebase-upload" element={<FirebaseUploadPage />} />
+                  <Route path="/delete-progress" element={<DeleteProgressPage />} />
+                  <Route path="/question-search" element={<QuestionSearchAndEdit />} />
+                </>
+              )}
 
             </Routes>
           </Suspense>

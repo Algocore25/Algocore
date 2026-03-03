@@ -7,10 +7,23 @@ const ExamSideNotification = () => {
     const { user } = useAuth();
     const { exams } = useScheduledExams(user);
     const [notifications, setNotifications] = useState([]);
-    const [notifiedExams, setNotifiedExams] = useState(new Set());
+    const [notifiedExams, setNotifiedExams] = useState(new Map()); // Use Map to store timestamps
 
     // Don't show on admin pages
     const isAdminPage = /^\/(admin|testedit|exammonitor|adminresults|monitor)/i.test(window.location.pathname);
+
+    // Helper function to check if enough time has passed (10 minutes = 600000 ms)
+    const shouldShowNotification = (notificationId) => {
+        const lastNotified = notifiedExams.get(notificationId);
+        if (!lastNotified) return true; // Never notified before
+        const now = Date.now();
+        return (now - lastNotified) > 600000; // 10 minutes in milliseconds
+    };
+
+    // Helper function to mark exam as notified
+    const markAsNotified = (notificationId) => {
+        setNotifiedExams(prev => new Map(prev.set(notificationId, Date.now())));
+    };
 
     useEffect(() => {
         if (!user || isAdminPage) return;
@@ -18,7 +31,7 @@ const ExamSideNotification = () => {
         // Show notification for active exams
         exams.active.forEach((exam) => {
             const notificationId = `active-${exam.id}`;
-            if (!notifiedExams.has(notificationId)) {
+            if (shouldShowNotification(notificationId)) {
                 setNotifications((prev) => [
                     ...prev,
                     {
@@ -28,12 +41,12 @@ const ExamSideNotification = () => {
                         message: `${exam.name} is happening now!`,
                     },
                 ]);
-                setNotifiedExams((prev) => new Set([...prev, notificationId]));
+                markAsNotified(notificationId);
             }
         });
 
         // Show notification for upcoming exams (only first upcoming)
-        if (exams.upcoming.length > 0 && !notifiedExams.has(`upcoming-${exams.upcoming[0].id}`)) {
+        if (exams.upcoming.length > 0 && shouldShowNotification(`upcoming-${exams.upcoming[0].id}`)) {
             const upcomingExam = exams.upcoming[0];
             const startTime = upcomingExam.Properties?.startTime
                 ? new Date(upcomingExam.Properties.startTime)
@@ -53,13 +66,13 @@ const ExamSideNotification = () => {
                         : `${upcomingExam.name} is coming up!`,
                 },
             ]);
-            setNotifiedExams((prev) => new Set([...prev, `upcoming-${upcomingExam.id}`]));
+            markAsNotified(`upcoming-${upcomingExam.id}`);
         }
 
         // Show notification for unattempted anytime exams
         exams.anytime.forEach((exam) => {
             const notificationId = `anytime-${exam.id}`;
-            if (!notifiedExams.has(notificationId)) {
+            if (shouldShowNotification(notificationId)) {
                 setNotifications((prev) => [
                     ...prev,
                     {
@@ -69,7 +82,7 @@ const ExamSideNotification = () => {
                         message: `${exam.name} is available to take anytime!`,
                     },
                 ]);
-                setNotifiedExams((prev) => new Set([...prev, notificationId]));
+                markAsNotified(notificationId);
             }
         });
     }, [exams.active, exams.upcoming, exams.anytime, user, isAdminPage]);

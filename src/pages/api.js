@@ -1,12 +1,4 @@
 
-import { database } from "../firebase";
-import { ref, get, set, child } from "firebase/database";
-
-
-
-
-
-
 import axios from "axios";
 // firebase.js
 
@@ -53,12 +45,9 @@ export const executeCode = async (language, sourceCode, input) => {
           name: language === 'sql' ? "main.sql" : "main.c",
           content: finalSourceCode,
         },
-        ...(language === 'c' || language === 'cpp' ? [{ name: "helper.c", content: helperC }] : [])
       ],
-      // Include the input here
       stdin: input,  // This is where we add the user input to the request payload
     });
-    // console.log( typeof(response.data.run.output) );
     console.log(response.data);
     return response.data;
   } catch (error) {

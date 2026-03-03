@@ -118,6 +118,9 @@ export const AuthProvider = ({ children }) => {
           const snap = await get(sessionRef);
           const currentSession = snap.val();
 
+        
+
+
           if (!currentSession || currentSession.sessionId === sessionIdRef.current || isManualLogoutRef.current) {
             await remove(sessionRef);
             console.log('Session record removed from database');
@@ -452,6 +455,7 @@ export const AuthProvider = ({ children }) => {
 
   // Email/password login
   const login = async ({ email, password }) => {
+
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
