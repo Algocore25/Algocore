@@ -40,6 +40,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const [allowlanguages, setallowlanguages] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0);
+  const [editorKey, setEditorKey] = useState(0);
 
   const inputRef = useRef(null);
   const outputRef = useRef(null);
@@ -353,6 +354,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const handleLanguageChange = useCallback((e) => {
     const newLanguage = e.target.value;
     setSelectedLanguage(newLanguage);
+    setEditorKey(prev => prev + 1);
   }, []);
 
   const resetCode = () => {
@@ -386,7 +388,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
 
       const mappedLangs = normalizedArray.map(lang => {
         const l = String(lang).toLowerCase();
-        if (l === 'c/c++' || l === 'c++' || l === 'c') return 'cpp';
+        if (l === 'c/c++' || l === 'c++') return 'cpp';
         return l;
       });
 
@@ -1088,7 +1090,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
           {console.log('🔧 Editor rendering with:', { selectedLanguage, monacoLanguage })}
           <Editor
-            key={monacoLanguage}
+            key={`${monacoLanguage}-${editorKey}`}
             height="100%"
             path="single-file"
             defaultLanguage='text'

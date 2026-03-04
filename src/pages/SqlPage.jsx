@@ -949,7 +949,7 @@ function SqlPage({ data, navigation }) {
       console.log('Comparing headers:');
       console.log('Expected header:', expectedHeader);
       console.log('Actual header:', actualHeader);
-      if ( expectedHeader.trim() !== actualHeader.trim()) {
+      if (expectedHeader.trim() !== actualHeader.trim()) {
         return false;
       }
     }
@@ -2089,8 +2089,8 @@ function SqlPage({ data, navigation }) {
         </div>
 
         {/* Right Panel (Code Editor) */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-auto">
-          <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-end gap-6">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-end gap-6 flex-shrink-0">
             <div className="flex items-center gap-4">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">SQLite</span>
               <button
@@ -2122,7 +2122,7 @@ function SqlPage({ data, navigation }) {
 
             </div>
           </div>
-          <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
+          <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
             <Editor
               height="100%"
               defaultLanguage="sql"

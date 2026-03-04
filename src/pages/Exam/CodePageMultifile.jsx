@@ -41,6 +41,7 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
   const [allowlanguages, setallowlanguages] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0);
+  const [editorKey, setEditorKey] = useState(0);
 
   const inputRef = useRef(null);
   const outputRef = useRef(null);
@@ -573,6 +574,7 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
   const handleLanguageChange = useCallback((e) => {
     const newLanguage = e.target.value;
     setSelectedLanguage(newLanguage);
+    setEditorKey(prev => prev + 1);
   }, []);
 
   const resetCode = () => {
@@ -779,7 +781,7 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
           let normalizedArray = Array.isArray(data) ? data : Object.values(data);
           const mappedLangs = normalizedArray.map(lang => {
             const l = String(lang).toLowerCase();
-            if (l === 'c/c++' || l === 'c++' || l === 'c') return 'cpp';
+            if (l === 'c/c++' || l === 'c++') return 'cpp';
             return l;
           });
           setallowlanguages(mappedLangs);
@@ -1129,8 +1131,8 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
         <Icons.GripVertical size={16} className="text-gray-400 group-hover:text-[#4285F4] opacity-0 group-hover:opacity-100" />
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-auto">
-        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6 flex-shrink-0">
           <div className="flex items-center gap-4">
             {availableFiles.length > 0 && (
               <div className="flex items-center gap-2 bg-gray-100 dark:bg-dark-tertiary rounded-lg p-1">
@@ -1169,9 +1171,9 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
             </button>
           </div>
         </div>
-        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
+        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
           <Editor
-            key={`${monacoLanguage}-${activeFile}`}
+            key={`${monacoLanguage}-${activeFile}-${editorKey}`}
             height="100%"
             path={activeFile || 'multi-file'}
             defaultLanguage='text'

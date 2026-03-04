@@ -29,12 +29,12 @@ function CodePage({ data, navigation }) {
           setQuestionData(question);
 
           console.log(question);
-          
+
           // Check if question has isMultifile property
           console.log(question.isMultifile);
           const hasIsMultifile = question.isMultifile === true;
           setIsMultifile(hasIsMultifile);
-          
+
           console.log('🔍 Question structure analysis:', {
             questionId,
             isMultifile: hasIsMultifile,
@@ -61,17 +61,17 @@ function CodePage({ data, navigation }) {
     const getAllowedLanguages = async () => {
       try {
         const snapshot = await get(ref(database, `/AlgoCore/${course}/course/allowedLanguages`));
-        
+
         if (snapshot.exists()) {
           const data = snapshot.val();
           let normalizedArray = Array.isArray(data) ? data : Object.values(data);
-          
+
           const mappedLangs = normalizedArray.map(lang => {
             const l = String(lang).toLowerCase();
-            if (l === 'c/c++' || l === 'c++' || l === 'c') return 'cpp';
+            if (l === 'c/c++' || l === 'c++') return 'cpp';
             return l;
           });
-          
+
           if (mappedLangs.length > 0) {
             setSelectedLanguage(mappedLangs[0]);
           }
@@ -86,11 +86,10 @@ function CodePage({ data, navigation }) {
     }
   }, [course]);
 
-  useEffect( () =>
-  {
+  useEffect(() => {
     console.log("reload");
 
-  },[questionData]
+  }, [questionData]
   )
 
   if (isLoading) {
@@ -126,8 +125,8 @@ function CodePage({ data, navigation }) {
   if (isMultifile) {
     console.log('📁 Loading Multi-file CodePage');
     return (
-      <CodePageMultifile 
-        data={data} 
+      <CodePageMultifile
+        data={data}
         navigation={navigation}
         questionData={questionData}
         selectedLanguage={selectedLanguage}
@@ -136,8 +135,8 @@ function CodePage({ data, navigation }) {
   } else {
     console.log('📄 Loading Single-file CodePage');
     return (
-      <CodePageSingle 
-        data={data} 
+      <CodePageSingle
+        data={data}
         navigation={navigation}
         questionData={questionData}
         selectedLanguage={selectedLanguage}

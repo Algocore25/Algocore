@@ -31,11 +31,12 @@ const CourseEdit = () => {
 
     const [accessType, setAccessType] = useState('open'); // 'open' or 'restricted'
     const [allowedUsers, setAllowedUsers] = useState([]); // array of users
-    const [allowedLanguages, setAllowedLanguages] = useState(['python', 'javascript', 'java', 'cpp']); // allowed languages
+    const [allowedLanguages, setAllowedLanguages] = useState(['c', 'python', 'javascript', 'java', 'cpp']); // allowed languages
     const [allStudents, setAllStudents] = useState([]);
     const [userSearchText, setUserSearchText] = useState('');
 
     const availableLanguages = [
+        { id: 'c', label: 'C' },
         { id: 'python', label: 'Python' },
         { id: 'javascript', label: 'JavaScript' },
         { id: 'java', label: 'Java' },

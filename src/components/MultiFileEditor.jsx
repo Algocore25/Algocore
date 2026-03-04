@@ -141,7 +141,7 @@ const MultiFileEditor = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-auto">
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* File Tabs */}
       <div className="bg-gray-50 dark:bg-dark-secondary border-b border-gray-200 dark:border-dark-tertiary">
         <div className="flex overflow-x-auto">
@@ -149,8 +149,8 @@ const MultiFileEditor = ({
             <button
               key={tab.fileName}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeFileTab === tab.fileName
-                  ? 'text-[#4285F4] border-[#4285F4] bg-white dark:bg-gray-900'
-                  : 'text-gray-600 dark:text-gray-400 border-transparent hover:text-[#4285F4] dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-tertiary'
+                ? 'text-[#4285F4] border-[#4285F4] bg-white dark:bg-gray-900'
+                : 'text-gray-600 dark:text-gray-400 border-transparent hover:text-[#4285F4] dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-tertiary'
                 } ${!tab.isEditable ? 'opacity-75' : ''}`}
               onClick={() => setActiveFileTab(tab.fileName)}
             >
@@ -169,7 +169,7 @@ const MultiFileEditor = ({
       </div>
 
       {/* Editor */}
-      <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
+      <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
         <Editor
           height="100%"
           path={activeFileTab}
@@ -206,8 +206,8 @@ const MultiFileEditor = ({
               {activeFileTab}
             </span>
             <span className={`px-2 py-1 rounded ${isEditable
-                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+              ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               }`}>
               {isEditable ? 'Editable' : 'Read-only'}
             </span>

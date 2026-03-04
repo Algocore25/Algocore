@@ -47,6 +47,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
 
   const inputRef = useRef(null);
   const outputRef = useRef(null);
@@ -340,6 +341,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
 
   const handleLanguageChange = useCallback((e) => {
     setSelectedLanguage(e.target.value);
+    setEditorKey(prev => prev + 1);
   }, []);
 
   const handleResetCode = useCallback(async () => {
@@ -423,7 +425,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
           let normalizedArray = Array.isArray(data) ? data : Object.values(data);
           const mappedLangs = normalizedArray.map(lang => {
             const l = String(lang).toLowerCase();
-            if (l === 'c/c++' || l === 'c++' || l === 'c') return 'cpp';
+            if (l === 'c/c++' || l === 'c++') return 'cpp';
             return l;
           });
           setallowlanguages(mappedLangs);
@@ -626,7 +628,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
 
       <div className="w-1 bg-gray-200 dark:bg-dark-tertiary cursor-col-resize hover:bg-blue-500 transition-colors" onMouseDown={handleMouseDown} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div className="p-3 border-b dark:border-dark-tertiary flex justify-between items-center bg-white dark:bg-dark-secondary">
           <div className="flex gap-4 items-center">
             <select className="bg-white dark:bg-dark-tertiary border border-gray-200 dark:border-dark-tertiary p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={selectedLanguage} onChange={handleLanguageChange}>
@@ -641,8 +643,9 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
             <button onClick={handleSubmit2} className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg transition-all active:scale-95">Submit</button>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-w-0 overflow-hidden">
           <Editor
+            key={`${monacoLanguage}-${editorKey}`}
             height="100%"
             language={monacoLanguage}
             value={code}
