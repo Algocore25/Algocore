@@ -856,6 +856,29 @@ function ProfilePage() {
                     <Ic.Check /> Progress for <strong>{resetSuccess}</strong> was reset successfully.
                   </div>
                 )}
+                
+                <div className="bg-white/40 dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">🏆 Achievements & Badges</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">🔥</div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">7-Day Streak</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">⭐</div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">First Problem</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">🚀</div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Speed Coder</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl mb-2">💎</div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Problem Master</p>
+                    </div>
+                  </div>
+                </div>
+                
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity Calendar</h3>
                   <ActivityCalendar submissions={allSubmissions} />

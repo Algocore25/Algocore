@@ -104,7 +104,8 @@ function HomePage() {
             {languages.map((language, index) => (
               <div
                 key={index}
-                className="flex flex-col items-center justify-center bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl p-6 w-32 h-32 border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-shadow duration-300"
+                onClick={() => navigate('/courses')}
+                className="flex flex-col items-center justify-center bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl p-6 w-32 h-32 border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-105"
               >
                 <span className="text-4xl mb-2">{language.icon}</span>
                 <span className="text-lg font-medium text-gray-900 dark:text-white">{language.name}</span>

@@ -33,6 +33,7 @@ const CourseDetailsPage = lazy(() => import('./pages/CourseDetailsPage'));
 const FirebaseUploadPage = lazy(() => import('./pages/FirebaseUploadPage'));
 const DeleteProgressPage = lazy(() => import('./pages/DeleteProgressPage'));
 const QuestionSearchAndEdit = lazy(() => import('./pages/QuestionSearchAndEdit'));
+const AllQuestionsPage = lazy(() => import('./pages/AllQuestionsPage'));
 
 
 import { VideoProctor } from './LiveProctoring/components/VideoProctor';
@@ -87,6 +88,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><TestsList /></ProtectedRoute>} />
               <Route path="/adminmonitor" element={<ProtectedRoute requireAdmin={true}><AdminMonitor /></ProtectedRoute>} />
+              <Route path="/all-questions" element={<ProtectedRoute requireAdmin={true}><AllQuestionsPage /></ProtectedRoute>} />
               <Route path="/testedit/:testId" element={<ProtectedRoute requireAdmin={true}><TestManage /></ProtectedRoute>} />
               <Route path="/courseedit/:courseId" element={<ProtectedRoute requireAdmin={true}><CourseEdit /></ProtectedRoute>} />
 

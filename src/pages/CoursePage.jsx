@@ -4,7 +4,7 @@ import { ref, get, child } from 'firebase/database';
 import { database } from '../firebase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ChevronDown, ChevronRight, Lock, PlayCircle, StopCircle, RefreshCw, XCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Lock, PlayCircle, StopCircle, RefreshCw, XCircle, Code, Database, CheckCircle, FileText } from 'lucide-react';
 import LoadingPage from './LoadingPage';
 import { encodeShort, decodeShort } from '../utils/urlEncoder';
 
@@ -15,6 +15,18 @@ const diffColor = (d = '') => {
   if (l === 'medium') return 'text-amber-500 dark:text-amber-400';
   if (l === 'hard') return 'text-red-500 dark:text-red-400';
   return 'text-gray-500 dark:text-gray-400';
+};
+
+// Get type icon
+const getTypeIcon = (type) => {
+  switch (type?.toLowerCase()) {
+    case 'programming': return <Code size={16} />;
+    case 'sql': return <Database size={16} />;
+    case 'mcq': return <CheckCircle size={16} />;
+    case 'msq': return <CheckCircle size={16} />;
+    case 'numeric': return <FileText size={16} />;
+    default: return <FileText size={16} />;
+  }
 };
 
 // ─── Skeleton loader for topics ───────────────────────────────────────────────
@@ -173,15 +185,23 @@ const CoursePage = () => {
           }
         });
 
-        // Fetch ALL question difficulties in one parallel burst
-        const diffMap = {};
+        // Fetch ALL question details in one parallel burst
+        const detailsMap = {};
         await Promise.all(
           [...allQuestionNames].map(async qName => {
             try {
               const snap = await get(child(dbRef, `questions/${qName}`));
-              diffMap[qName] = (snap.exists() && snap.val().difficulty) ? snap.val().difficulty : 'Easy';
+              if (snap.exists()) {
+                const data = snap.val();
+                detailsMap[qName] = {
+                  difficulty: data.difficulty || 'Easy',
+                  type: data.type || 'Programming'
+                };
+              } else {
+                detailsMap[qName] = { difficulty: 'Easy', type: 'Programming' };
+              }
             } catch (_) {
-              diffMap[qName] = 'Easy';
+              detailsMap[qName] = { difficulty: 'Easy', type: 'Programming' };
             }
           })
         );
@@ -201,7 +221,8 @@ const CoursePage = () => {
             if (qName in topicProgress) {
               status = topicProgress[qName] === true ? 'Completed' : 'Not Completed';
             }
-            return { name: qName, difficulty: diffMap[qName] || 'Easy', status };
+            const details = detailsMap[qName] || { difficulty: 'Easy', type: 'Programming' };
+            return { name: qName, difficulty: details.difficulty, type: details.type, status };
           });
 
           topics.push({
@@ -326,16 +347,17 @@ const CoursePage = () => {
             <h2 className="text-2xl font-bold mb-4">Problems</h2>
 
             {/* ── Topics ── */}
-            {topicsLoading ? (
-              <TopicSkeleton />
-            ) : practiceTopics.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No topics found for this course.</p>
-            ) : (
-              <div className="space-y-4">
-                {practiceTopics.map((topic, index) => {
-                  const { total, completed, percent } = calcTopicProgress(topic);
-                  const isOpen = openTopic === index;
-                  return (
+            <div>
+              {topicsLoading ? (
+                <TopicSkeleton />
+              ) : practiceTopics.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400">No topics found for this course.</p>
+              ) : (
+                <div className="space-y-4">
+                  {practiceTopics.map((topic, index) => {
+                    const { total, completed, percent } = calcTopicProgress(topic);
+                    const isOpen = openTopic === index;
+                    return (
                     <div key={index} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
                       {/* Topic header */}
                       <div
@@ -350,14 +372,11 @@ const CoursePage = () => {
                             <h3 className="font-semibold text-lg">
                               {topic.title.replace(/^[^a-zA-Z]*([a-zA-Z].*)$/, '$1')}
                             </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{topic.description}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-300">{topic.description}</p>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-4">
-                          <div className="hidden sm:block">
-                            <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                              <div className="bg-blue-600 h-2 rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
-                            </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
                             <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-right">{completed}/{total}</div>
                           </div>
                           <span className="text-sm text-gray-600 dark:text-gray-300 sm:hidden">{percent}%</span>
@@ -372,6 +391,7 @@ const CoursePage = () => {
                             <thead className="text-gray-500 dark:text-gray-400">
                               <tr>
                                 <th className="p-4 font-medium">Problem Name</th>
+                                <th className="p-4 font-medium">Type</th>
                                 <th className="p-4 font-medium">Status</th>
                                 <th className="p-4 font-medium">Difficulty</th>
                               </tr>
@@ -381,23 +401,21 @@ const CoursePage = () => {
                                 <tr
                                   key={pIndex}
                                   className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked'
-                                    ? 'opacity-60'
-                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                    ? 'opacity-60 cursor-not-allowed'
+                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer'
                                     }`}
+                                  onClick={() => {
+                                    if (topic.status !== 'blocked') {
+                                      const encSub = encodeShort(topic.title);
+                                      const encQ = encodeShort(problem.name);
+                                      navigate(`/problem/${encodedCourse}/${encSub}/${encQ}`);
+                                    }
+                                  }}
                                 >
-                                  <td
-                                    className={`p-4 flex items-center ${topic.status === 'blocked'
-                                      ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                                      : 'text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'
-                                      }`}
-                                    onClick={() => {
-                                      if (topic.status !== 'blocked') {
-                                        const encSub = encodeShort(topic.title);
-                                        const encQ = encodeShort(problem.name);
-                                        navigate(`/problem/${encodedCourse}/${encSub}/${encQ}`);
-                                      }
-                                    }}
-                                  >
+                                  <td className={`p-4 flex items-center ${topic.status === 'blocked'
+                                    ? 'text-gray-400 dark:text-gray-500'
+                                    : 'text-blue-600 dark:text-blue-400'
+                                    }`}>
                                     {problem.status === 'Completed' && <FaCheck className="text-green-500 mr-2 shrink-0" />}
                                     {problem.name}
                                     {topic.status === 'blocked' && (
@@ -405,6 +423,13 @@ const CoursePage = () => {
                                         Locked
                                       </span>
                                     )}
+                                  </td>
+                                  <td className="p-4">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                                        {problem.type || 'Programming'}
+                                      </span>
+                                    </div>
                                   </td>
                                   <td className="p-4">
                                     <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'
@@ -430,6 +455,7 @@ const CoursePage = () => {
                 })}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

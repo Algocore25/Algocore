@@ -32,6 +32,9 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
     Example: [],
     testcases: [],
     solution: '',
+    isMultifile: false,
+    allowedLanguages: ['cpp', 'java', 'python', 'javascript'],
+    defaultCode: {},
     // SQL specific fields
     schema: ''
   });
@@ -58,6 +61,9 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         Example: question.Example || [],
         testcases: question.testcases || [],
         solution: question.solution || '',
+        isMultifile: question.isMultifile || false,
+        allowedLanguages: question.allowedLanguages || ['cpp', 'java', 'python', 'javascript'],
+        defaultCode: question.defaultCode || {},
         // SQL specific fields
         schema: question.schema || ''
       });
@@ -80,6 +86,9 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         Example: [],
         testcases: [],
         solution: '',
+        isMultifile: false,
+        allowedLanguages: ['cpp', 'java', 'python', 'javascript'],
+        defaultCode: {},
         // SQL specific fields
         schema: ''
       });
@@ -190,13 +199,15 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         return;
       }
     } else if (formData.type === 'Programming') {
-      if (formData.constraints.length === 0) {
-        toast.error('At least one constraint is required for Programming questions.');
-        return;
-      }
-      if (formData.testcases.length === 0) {
-        toast.error('At least one test case is required for Programming questions.');
-        return;
+      if (!formData.isMultifile) {
+        if (formData.constraints.length === 0) {
+          toast.error('At least one constraint is required for single-file Programming questions.');
+          return;
+        }
+        if (formData.testcases.length === 0) {
+          toast.error('At least one test case is required for single-file Programming questions.');
+          return;
+        }
       }
     } else if (formData.type === 'SQL') {
       if (!formData.schema || !formData.schema.trim()) {
@@ -243,7 +254,10 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
         constraints: formData.constraints,
         Example: formData.Example,
         testcases: formData.testcases,
-        solution: formData.solution
+        solution: formData.solution,
+        isMultifile: formData.isMultifile,
+        allowedLanguages: formData.allowedLanguages,
+        defaultCode: formData.defaultCode
       };
     } else if (formData.type === 'SQL') {
       questionData = {
@@ -477,142 +491,221 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
               {/* Programming Specific Fields */}
               {formData.type === 'Programming' && (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium">Constraints</label>
-                    {formData.constraints.map((constraint, index) => (
-                      <div key={index} className="flex gap-2 mt-1">
-                        <input
-                          type="text"
-                          value={constraint}
-                          onChange={(e) => {
-                            const newConstraints = [...formData.constraints];
-                            newConstraints[index] = e.target.value;
-                            setFormData(prev => ({ ...prev, constraints: newConstraints }));
-                          }}
-                          className="flex-1 p-2 border rounded-md"
-                          placeholder={`Constraint ${index + 1}`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newConstraints = formData.constraints.filter((_, i) => i !== index);
-                            setFormData(prev => ({ ...prev, constraints: newConstraints }));
-                          }}
-                          className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, constraints: [...prev.constraints, ''] }))}
-                      className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                    >
-                      Add Constraint
-                    </button>
+                  <div className="pt-2 pb-4 mb-2 border-b border-gray-200 dark:border-gray-700">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.isMultifile}
+                        onChange={(e) => setFormData(prev => ({ ...prev, isMultifile: e.target.checked }))}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium">Is Multi-file Question?</span>
+                    </label>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium">Examples</label>
-                    {formData.Example.map((example, index) => (
-                      <div key={index} className="flex gap-2 mt-1">
-                        <textarea
-                          value={example}
-                          onChange={(e) => {
-                            const newExamples = [...formData.Example];
-                            newExamples[index] = e.target.value;
-                            setFormData(prev => ({ ...prev, Example: newExamples }));
-                          }}
-                          className="flex-1 p-2 border rounded-md font-mono"
-                          rows="3"
-                          placeholder={`Example ${index + 1}`}
-                        />
+                  {!formData.isMultifile && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium">Constraints</label>
+                        {formData.constraints.map((constraint, index) => (
+                          <div key={index} className="flex gap-2 mt-1">
+                            <input
+                              type="text"
+                              value={constraint}
+                              onChange={(e) => {
+                                const newConstraints = [...formData.constraints];
+                                newConstraints[index] = e.target.value;
+                                setFormData(prev => ({ ...prev, constraints: newConstraints }));
+                              }}
+                              className="flex-1 p-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
+                              placeholder={`Constraint ${index + 1}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newConstraints = formData.constraints.filter((_, i) => i !== index);
+                                setFormData(prev => ({ ...prev, constraints: newConstraints }));
+                              }}
+                              className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
                         <button
                           type="button"
-                          onClick={() => {
-                            const newExamples = formData.Example.filter((_, i) => i !== index);
-                            setFormData(prev => ({ ...prev, Example: newExamples }));
-                          }}
-                          className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                          onClick={() => setFormData(prev => ({ ...prev, constraints: [...prev.constraints, ''] }))}
+                          className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
                         >
-                          Remove
+                          Add Constraint
                         </button>
                       </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, Example: [...prev.Example, ''] }))}
-                      className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                    >
-                      Add Example
-                    </button>
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium">Test Cases</label>
-                    {formData.testcases.map((testcase, index) => (
-                      <div key={index} className="border rounded-md p-3 mt-2">
-                        <div className="grid grid-cols-1 gap-2">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600">Input</label>
+                      <div>
+                        <label className="block text-sm font-medium">Examples</label>
+                        {formData.Example.map((example, index) => (
+                          <div key={index} className="flex gap-2 mt-1">
                             <textarea
-                              value={testcase.input || ''}
+                              value={example}
                               onChange={(e) => {
-                                const newTestcases = [...formData.testcases];
-                                newTestcases[index] = { ...newTestcases[index], input: e.target.value };
-                                setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                                const newExamples = [...formData.Example];
+                                newExamples[index] = e.target.value;
+                                setFormData(prev => ({ ...prev, Example: newExamples }));
                               }}
-                              className="w-full p-2 border rounded-md font-mono text-sm"
-                              rows="2"
-                              placeholder="Test case input"
+                              className="flex-1 p-2 border rounded-md font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
+                              rows="3"
+                              placeholder={`Example ${index + 1}`}
                             />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600">Expected Output</label>
-                            <textarea
-                              value={testcase.expectedOutput || ''}
-                              onChange={(e) => {
-                                const newTestcases = [...formData.testcases];
-                                newTestcases[index] = { ...newTestcases[index], expectedOutput: e.target.value };
-                                setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newExamples = formData.Example.filter((_, i) => i !== index);
+                                setFormData(prev => ({ ...prev, Example: newExamples }));
                               }}
-                              className="w-full p-2 border rounded-md font-mono text-sm"
-                              rows="2"
-                              placeholder="Expected output"
-                            />
+                              className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                            >
+                              Remove
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newTestcases = formData.testcases.filter((_, i) => i !== index);
-                              setFormData(prev => ({ ...prev, testcases: newTestcases }));
-                            }}
-                            className="self-start px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm"
-                          >
-                            Remove Test Case
-                          </button>
-                        </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, Example: [...prev.Example, ''] }))}
+                          className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                        >
+                          Add Example
+                        </button>
                       </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, testcases: [...prev.testcases, { input: '', expectedOutput: '' }] }))}
-                      className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                    >
-                      Add Test Case
-                    </button>
-                  </div>
+
+                      <div>
+                        <label className="block text-sm font-medium">Test Cases</label>
+                        {formData.testcases.map((testcase, index) => (
+                          <div key={index} className="border border-gray-300 dark:border-gray-600 rounded-md p-3 mt-2">
+                            <div className="grid grid-cols-1 gap-2">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Input</label>
+                                <textarea
+                                  value={testcase.input || ''}
+                                  onChange={(e) => {
+                                    const newTestcases = [...formData.testcases];
+                                    newTestcases[index] = { ...newTestcases[index], input: e.target.value };
+                                    setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                                  }}
+                                  className="w-full p-2 border rounded-md font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
+                                  rows="2"
+                                  placeholder="Test case input"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Expected Output</label>
+                                <textarea
+                                  value={testcase.expectedOutput || ''}
+                                  onChange={(e) => {
+                                    const newTestcases = [...formData.testcases];
+                                    newTestcases[index] = { ...newTestcases[index], expectedOutput: e.target.value };
+                                    setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                                  }}
+                                  className="w-full p-2 border rounded-md font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
+                                  rows="2"
+                                  placeholder="Expected output"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newTestcases = formData.testcases.filter((_, i) => i !== index);
+                                  setFormData(prev => ({ ...prev, testcases: newTestcases }));
+                                }}
+                                className="self-start px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm"
+                              >
+                                Remove Test Case
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, testcases: [...prev.testcases, { input: '', expectedOutput: '' }] }))}
+                          className="mt-2 px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                        >
+                          Add Test Case
+                        </button>
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium">Solution (Optional)</label>
                     <textarea
                       value={formData.solution}
                       onChange={(e) => setFormData(prev => ({ ...prev, solution: e.target.value }))}
-                      className="w-full p-2 border rounded-md mt-1 font-mono"
+                      className="w-full p-2 border rounded-md mt-1 font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
                       rows="6"
                       placeholder="Enter the solution code (optional)"
                     />
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700 mt-4">
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-1">Allowed Languages (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={(formData.allowedLanguages || []).join(', ')}
+                        onChange={(e) => {
+                          const languages = e.target.value.split(',').map(lang => lang.trim()).filter(lang => lang);
+                          setFormData(prev => ({ ...prev, allowedLanguages: languages }));
+                        }}
+                        className="w-full p-2 border rounded-md font-mono"
+                        placeholder="cpp, java, python, javascript"
+                      />
+                    </div>
+
+                    {formData.isMultifile ? (
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium">Multi-file Default Code Structure (JSON)</label>
+                        <p className="text-xs text-gray-500 mb-2">Define order, main file, and other subfiles in JSON format.</p>
+                        <textarea
+                          value={JSON.stringify(formData.defaultCode || {}, null, 2)}
+                          onChange={(e) => {
+                            try {
+                              const defaultCode = JSON.parse(e.target.value);
+                              setFormData(prev => ({ ...prev, defaultCode }));
+                            } catch (error) {
+                              // Ignore temporary JSON parsing errors while user is typing
+                            }
+                          }}
+                          className="w-full p-2 border rounded-md font-mono text-sm"
+                          rows="10"
+                          placeholder={`{
+  "cpp": {
+    "order": ["main", "Drivecode"],
+    "main": { "code": "#include <iostream>", "editable": false, "visible": true }
+  }
+}`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium mb-2">Normal Default Code Structure</label>
+                        {(formData.allowedLanguages || []).map((lang, index) => (
+                          <div key={index} className="mb-3">
+                            <label className="block text-xs font-semibold uppercase text-gray-600 dark:text-gray-300">{lang}</label>
+                            <textarea
+                              value={(formData.defaultCode || {})[lang] || ''}
+                              onChange={(e) => {
+                                const newCode = { ...(formData.defaultCode || {}) };
+                                newCode[lang] = e.target.value;
+                                setFormData(prev => ({ ...prev, defaultCode: newCode }));
+                              }}
+                              className="w-full p-2 border rounded-md mt-1 font-mono text-sm"
+                              rows="4"
+                              placeholder={`Enter default code for ${lang}...`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

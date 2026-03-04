@@ -178,7 +178,7 @@ function MCQPage({ data }) {
                     <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
                       <h2 className="text-lg font-semibold mb-2 text-blue-800 dark:text-blue-200">Explanation</h2>
                       <p className="text-blue-700 dark:text-blue-300">
-                        {data.explanation}
+                        {data.explanation || data.Explanation}
                       </p>
                     </div>
                   )}

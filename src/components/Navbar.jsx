@@ -73,6 +73,7 @@ const Navbar = () => {
     !isAdmin && user && { label: 'Tests', href: '/test' },
     isAdmin && { label: 'Admin', href: '/admin' },
     isAdmin && { label: 'Students', href: '/adminmonitor' },
+    isAdmin && { label: 'All Questions', href: '/all-questions' },
     { label: 'Compiler', href: '/compiler' },
     process.env.NODE_ENV === 'development' && { label: 'Firebase Upload', href: '/firebase-upload' },
     process.env.NODE_ENV === 'development' && { label: 'Delete Progress', href: '/delete-progress' },
