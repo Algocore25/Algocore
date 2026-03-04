@@ -19,6 +19,7 @@ import LoadingPage from './pages/LoadingPage';
 import AdminMonitor from './pages/Admin/AdminMonitor';
 import WhatsNewModal from './components/WhatsNewModal';
 import ReportsPage from './pages/Admin/ReportsPage';
+import EmailPage from './pages/Admin/EmailPage';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
@@ -91,6 +92,7 @@ function App() {
               <Route path="/adminmonitor" element={<ProtectedRoute requireAdmin={true}><AdminMonitor /></ProtectedRoute>} />
               <Route path="/all-questions" element={<ProtectedRoute requireAdmin={true}><AllQuestionsPage /></ProtectedRoute>} />
               <Route path="/admin-reports" element={<ProtectedRoute requireAdmin={true}><ReportsPage /></ProtectedRoute>} />
+              <Route path="/admin-email" element={<ProtectedRoute requireAdmin={true}><EmailPage /></ProtectedRoute>} />
               <Route path="/testedit/:testId" element={<ProtectedRoute requireAdmin={true}><TestManage /></ProtectedRoute>} />
               <Route path="/courseedit/:courseId" element={<ProtectedRoute requireAdmin={true}><CourseEdit /></ProtectedRoute>} />
 

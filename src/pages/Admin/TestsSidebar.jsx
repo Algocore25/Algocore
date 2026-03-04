@@ -7,6 +7,7 @@ const TestsSidebar = ({ activeTab, setActiveTab }) => {
     { id: 'add-questions', label: 'Add Questions', icon: '➕' },
     { id: 'manage-courses', label: 'Manage Courses', icon: '📚' },
     { id: 'bulk-add', label: 'Bulk Add Data', icon: '📦' },
+    { id: 'email-center', label: 'Email Center', icon: '✉️' },
   ];
 
   return (
