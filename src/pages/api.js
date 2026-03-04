@@ -59,12 +59,12 @@ export const executeCode = async (language, sourceCode, input) => {
     }
 
     let finalSourceCode = sourceCode;
- 
+
     // For SQL, prepend headers configuration
     if (language === 'sql') {
       finalSourceCode = `.headers on\n.mode list\n.separator "|\"\n${sourceCode}`;
     }
-    
+
 
     const payload = {
       source_code: finalSourceCode,
@@ -75,7 +75,32 @@ export const executeCode = async (language, sourceCode, input) => {
     console.log("Judge0 Fallback Payload:", payload);
 
     try {
-      const judge0Response = await axios.post("https://ce.judge0.com/submissions?base64_encoded=false&wait=true", payload, {
+      // Validate inputs before sending
+      if (!finalSourceCode || finalSourceCode.trim() === '') {
+        throw new Error('Source code cannot be empty');
+      }
+      if (!judge0LangId) {
+        throw new Error(`Invalid language ID for ${language}`);
+      }
+
+      const requestData = {
+        source_code: btoa(finalSourceCode), // Base64 encode the source code
+        language_id: String(judge0LangId), // Convert to string
+        stdin: String(input || "") // Convert to string
+      };
+
+      console.log("Judge0 Fallback Request Data:", {
+        sourceCodeLength: finalSourceCode.length,
+        languageId: judge0LangId,
+        language: language,
+        stdinLength: (input || "").length,
+        requestData: {
+          ...requestData,
+          source_code: `[Base64 encoded, length: ${requestData.source_code.length}]`
+        }
+      });
+
+      const judge0Response = await axios.post("https://ce.judge0.com/submissions?base64_encoded=true&wait=true", requestData, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -85,14 +110,27 @@ export const executeCode = async (language, sourceCode, input) => {
 
       console.log("Judge0 Fallback Response:", data);
 
+      // Decode base64 outputs from Judge0
+      const decodeBase64 = (str) => {
+        try {
+          return str ? atob(str) : "";
+        } catch (e) {
+          console.error("Error decoding base64 from Judge0:", e);
+          return str || "";
+        }
+      };
+
+      const decodedStdout = decodeBase64(data.stdout);
+      const decodedStderr = decodeBase64(data.stderr || data.compile_output);
+
       // Map Judge0 response Format to match Piston's expected format
       return {
         language: language,
         version: LANGUAGE_VERSIONS[language],
         run: {
-          stdout: data.stdout || "",
-          stderr: data.stderr || data.compile_output || "",
-          output: data.stdout ? data.stdout : (data.stderr || data.compile_output || ""),
+          stdout: decodedStdout,
+          stderr: decodedStderr,
+          output: decodedStdout ? decodedStdout : decodedStderr,
           code: data.status?.id === 3 ? 0 : 1, // 3 means "Accepted"
           cpuTime: parseFloat(data.time) * 1000 || 0,
           memory: data.memory || 0,

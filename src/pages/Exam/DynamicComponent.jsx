@@ -19,6 +19,7 @@ const DynamicComponent = ({ question }) => {
 
 
 
+
   // Fetch question data from Firebase
   useEffect(() => {
 
@@ -36,12 +37,8 @@ const DynamicComponent = ({ question }) => {
           get(questionRef),
         ]);
 
-        console.log(questionSnapshot.val());
-
         if (questionSnapshot.exists()) {
           const question = questionSnapshot.val();
-
-          console.log(question);
           setData(question);
         }
       } catch (error) {
@@ -67,7 +64,9 @@ const DynamicComponent = ({ question }) => {
 
   return (
     <div>
-      {data?.type === "Programming" && <CodePage question={question} />}
+      {data?.type === "Programming" && (
+        <CodePage question={question} data={data} questionData={data} />
+      )}
       {data?.type === "SQL" && <SqlPage question={question} />}
       {data?.type === "MCQ" && <MCQPage data={data} />}
       {data?.type === "MSQ" && <MSQPage data={data} />}

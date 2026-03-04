@@ -1404,7 +1404,7 @@ const DynamicExam = () => {
           <FullscreenTracker violation={violation} setviolation={setviolation} setIsViolationReady={setIsViolationReady} isViolationReady={isViolationReady} testid={testid} enableViolationTracking={proctorSettings.enableFullscreen} />
           
           {/* Debug Controls - Only visible in development */}
-          {process.env.NODE_ENV === 'development' && (
+          {/* {process.env.NODE_ENV === 'development' && (
             <div className="fixed top-4 left-4 z-50 bg-red-500 text-white p-2 rounded-lg shadow-lg">
               <div className="text-xs font-bold mb-2">DEBUG CONTROLS</div>
               <div className="text-xs mb-1">Violations: {violation}/{proctorSettings.maxViolationCount}</div>
@@ -1431,7 +1431,7 @@ const DynamicExam = () => {
                 </button>
               </div>
             </div>
-          )}
+          )} */}
           
           <Exam2
             setviolation={setviolation}

@@ -28,11 +28,6 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
 
   const formatText = (text) => {
     if (!text && text !== 0) return 'No output';
-    if (typeof text === 'string') {
-      return text.split('\n').map((line, i) => (
-        <div key={i} className={line ? '' : 'h-5'}>{line || ' '}</div>
-      ));
-    }
     return String(text);
   };
 
@@ -109,10 +104,12 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
   }
 
   const currentTest = testResults[selectedTestIndex];
-  const isHiddenCase = !(runsubmit === 'run' || selectedTestIndex === 0 || selectedTestIndex === 1);
+  // Only restrict if we are in an exam specific context where runsubmit is 'submit'
+  // Or if the question specifically has hidden test cases (indices >= 2)
+  const isHiddenCase = runsubmit === 'submit' && selectedTestIndex >= 2;
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-5 max-h-[80vh] overflow-y-auto">
+    <div className="w-full max-w-3xl mx-auto space-y-5 max-h-full overflow-y-visible">
       {/* Neutral Summary Header */}
       <div className="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
@@ -148,7 +145,7 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
       <div className="flex flex-wrap gap-2">
         {testResults.map((test, index) => {
           const isActive = index === selectedTestIndex;
-          const isHidden = !(runsubmit === 'run' || index === 0 || index === 1);
+          const isHidden = runsubmit === 'submit' && index >= 2;
           return (
             <button
               key={index}
@@ -200,7 +197,7 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
               {/* Input Section */}
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Input</span>
-                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 max-h-40 overflow-y-auto whitespace-pre break-words">
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 max-h-40 overflow-y-auto whitespace-pre-wrap break-words">
                   {formatText(currentTest.input)}
                 </div>
               </div>
@@ -209,13 +206,13 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
               <div className="space-y-6">
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Expected</span>
-                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 min-h-[80px] max-h-60 overflow-y-auto whitespace-pre break-words">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 min-h-[80px] max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
                     {isHiddenCase ? <span className="italic opacity-30">Restricted</span> : formatText(currentTest.expected)}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Output</span>
-                  <div className={`p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border min-h-[80px] max-h-60 overflow-y-auto whitespace-pre break-words ${currentTest.passed
+                  <div className={`p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border min-h-[80px] max-h-60 overflow-y-auto whitespace-pre-wrap break-words ${currentTest.passed
                     ? 'border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300'
                     : 'border-red-100/50 dark:border-red-900/10 text-red-600 dark:text-red-400'
                     }`}>

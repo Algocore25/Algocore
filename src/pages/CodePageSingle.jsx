@@ -468,9 +468,9 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   useEffect(() => {
     if (questionData) {
       const testCases = [
-        { input: questionData?.testcases[0]?.input, expectedOutput: questionData?.testcases[0]?.expectedOutput },
-        ...(questionData?.testcases[1]?.expectedOutput
-          ? [{ input: questionData?.testcases[1]?.input, expectedOutput: questionData?.testcases[1]?.expectedOutput }]
+        { input: questionData?.testcases?.[0]?.input || '', expectedOutput: questionData?.testcases?.[0]?.expectedOutput || '' },
+        ...(questionData?.testcases?.[1]?.expectedOutput
+          ? [{ input: questionData?.testcases?.[1]?.input || '', expectedOutput: questionData?.testcases?.[1]?.expectedOutput || '' }]
           : [])
       ];
       setTestCases(testCases);
@@ -847,15 +847,15 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                 <div className="mt-6">
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 1:</h2>
                   <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                    {questionData?.Example[0]}
+                    {questionData?.Example?.[0] || 'No example provided'}
                   </pre>
                 </div>
 
-                {questionData?.Example[1] && (
+                {questionData?.Example?.[1] && (
                   <div className="mt-6">
                     <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
                     <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                      {questionData?.Example[1]}
+                      {questionData?.Example?.[1]}
                     </pre>
                   </div>
                 )}
@@ -863,8 +863,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                 <div className="mt-6">
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
                   <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
-                    <li>{questionData?.constraints[0]}</li>
-                    <li>{questionData?.constraints[1]}</li>
+                    <li>{questionData?.constraints?.[0] || 'No constraints provided'}</li>
+                    <li>{questionData?.constraints?.[1]}</li>
                   </ul>
                 </div>
               </div>
