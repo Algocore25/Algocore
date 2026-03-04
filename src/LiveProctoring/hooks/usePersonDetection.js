@@ -42,5 +42,33 @@ export const usePersonDetection = () => {
     }
   }, [model]);
 
-  return { detectPersons, isLoading, error, modelReady: !!model };
+  const detectObjects = useCallback(async (videoElement) => {
+    if (!model || !videoElement) return { persons: [], phones: [] };
+
+    try {
+      const predictions = await model.detect(videoElement);
+      const persons = predictions
+        .filter((prediction) => prediction.class === 'person')
+        .map((prediction) => ({
+          class: prediction.class,
+          score: prediction.score,
+          bbox: prediction.bbox,
+        }));
+
+      const phones = predictions
+        .filter((prediction) => prediction.class === 'cell phone')
+        .map((prediction) => ({
+          class: prediction.class,
+          score: prediction.score,
+          bbox: prediction.bbox,
+        }));
+
+      return { persons, phones };
+    } catch (err) {
+      console.error('Detection error:', err);
+      return { persons: [], phones: [] };
+    }
+  }, [model]);
+
+  return { detectPersons, detectObjects, isLoading, error, modelReady: !!model };
 };
