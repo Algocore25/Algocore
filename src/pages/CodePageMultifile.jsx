@@ -106,9 +106,9 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
     const allFileData = {};
 
     for (const fileName of Object.keys(languageFiles)) {
-      
+
       const fileData = languageFiles[fileName];
-      
+
       if (fileData?.editable) {
         const fileCodeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}/${fileName}`;
         try {
@@ -116,7 +116,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
           if (fileSnapshot.exists()) {
             let savedCode = fileSnapshot.val();
             savedCode = savedCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            
+
             allFileData[fileName] = {
               code: savedCode,
               editable: true,
@@ -126,7 +126,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
           } else {
             let defaultCode = fileData.code || '';
             defaultCode = defaultCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            
+
             allFileData[fileName] = {
               code: defaultCode,
               editable: true,
@@ -138,7 +138,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
           console.error(`Error loading ${fileName}:`, error);
           let fallbackCode = fileData.code || '';
           fallbackCode = fallbackCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-          
+
           allFileData[fileName] = {
             code: fallbackCode,
             editable: true,
@@ -149,7 +149,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       } else {
         let defaultCode = fileData.code || '';
         defaultCode = defaultCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        
+
         allFileData[fileName] = {
           code: defaultCode,
           editable: false,
@@ -171,29 +171,28 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
   const combineMultiFileCode = useCallback(() => {
     console.log('🔗 Combining multi-files for execution...');
     const combinedParts = [];
-    
+
     const languageFiles = questionData?.defaultCode?.[selectedLanguage] || {};
 
     const order = questionData?.defaultCode?.[selectedLanguage]?.order;
     let fileNames = Object.keys(languageFiles).sort();
 
 
-    if( order != null || order != undefined)
-    {
+    if (order != null || order != undefined) {
       fileNames = order;
     }
 
 
 
-    
+
     console.log('📋 Available files:', fileNames);
-    
+
     for (const fileName of fileNames) {
-      
+
       const fileData = multiFileData[fileName];
       if (fileData && fileData.code) {
         const isVisible = languageFiles[fileName]?.visible !== false;
-        
+
         if (isVisible) {
           const normalizedCode = fileData.code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
           combinedParts.push(normalizedCode);
@@ -205,7 +204,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
         console.log(`❌ File data not found: ${fileName}`);
       }
     }
-    
+
     const combinedCode = combinedParts.join('\n');
     console.log('✅ Combined code created:', {
       totalFiles: fileNames.length,
@@ -214,7 +213,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       files: fileNames,
       hasCarriageReturns: combinedCode.includes('\r')
     });
-    
+
     return combinedCode;
   }, [multiFileData, questionData, selectedLanguage]);
 
@@ -254,9 +253,9 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       sourceLength: sourceCode.length,
       language: selectedLanguage
     });
-    
+
     setCombinedCodeDisplay(sourceCode);
-    
+
     const initialResults = testCases.map(tc => ({
       input: tc.input,
       expected: tc.expectedOutput,
@@ -502,7 +501,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
 
       } else {
         let rawCode = questionData?.defaultCode[selectedLanguage][activeFile]?.code || "";
-        
+
         console.log('📄 Loading default code for editable file:', {
           activeFile,
           defaultCodeLength: rawCode?.length,
@@ -548,20 +547,20 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
         const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}/${activeFile}`;
         const dbRef = ref(database, codeKey);
         console.log('💾 Saving multi-file code to:', codeKey);
-        
+
         console.log(
           `%c🟡 UPLOADING TO FIREBASE\nFile: ${activeFile}\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nCode Length: ${codeToSave?.length}\nTimestamp: ${new Date().toISOString()}`,
           'background: #fff3cd; color: #856404; padding: 8px; border-radius: 4px; font-weight: bold; font-family: monospace; border-left: 4px solid #856404;'
         );
-        
+
         await set(dbRef, codeToSave);
-        
+
         console.log(
           `%c🟢 UPLOAD COMPLETED\nFile: ${activeFile}\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nTimestamp: ${new Date().toISOString()}`,
           'background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; font-weight: bold; font-family: monospace; border-left: 4px solid #155724;'
         );
         console.log(`✅ Code auto-saved for ${activeFile} successfully!`);
-        
+
         console.log(
           `%c🟢 CODE SAVED TO FIREBASE\nFile: ${activeFile}\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nTimestamp: ${new Date().toISOString()}`,
           'background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; font-weight: bold; font-family: monospace; border-left: 4px solid #155724;'
@@ -597,7 +596,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
 
     const currentFileData = questionData?.defaultCode?.[selectedLanguage]?.[activeFile];
     const currentEditable = currentFileData?.editable;
-    
+
     if (!currentFileData) {
       console.log('🚫 Stale code change detected - ignoring:', {
         activeFile,
@@ -606,7 +605,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       });
       return;
     }
-    
+
     if (!currentEditable === true) {
       console.log('Waiting for editable file...', { activeFile, currentFileData, currentEditable });
       return;
@@ -635,7 +634,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
     }
 
     console.log('⏰ Autosave scheduled in 500ms...');
-    
+
     if (!currentEditable) {
       console.log('🚫 Autosave blocked - file is not editable:', {
         activeFile,
@@ -644,7 +643,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       });
       return;
     }
-    
+
     saveTimeoutRef.current = setTimeout(() => {
       saveCode(newValue);
     }, 500);
@@ -661,7 +660,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       const defaultCode = typeof rawCode === 'string' ? rawCode : String(rawCode || '');
       setCode(defaultCode);
       console.log(`Reset ${activeFile} to default:`, defaultCode);
-      
+
       saveCode(defaultCode);
     }
   };
@@ -822,8 +821,8 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       fileNames.forEach(fileName => {
         const fileData = langFiles[fileName];
         const fileCode = fileData?.code || fileData || "";
-        const isEditable = fileData?.editable !== undefined ? fileData.editable : 
-                        (fileName.toLowerCase() === 'drivecode' || fileName.toLowerCase().includes('drive'));
+        const isEditable = fileData?.editable !== undefined ? fileData.editable :
+          (fileName.toLowerCase() === 'drivecode' || fileName.toLowerCase().includes('drive'));
 
         const stringCode = typeof fileCode === 'string' ? fileCode : String(fileCode || '');
 
@@ -873,7 +872,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
   useEffect(() => {
     if (activeFile && code !== undefined) {
       const normalizedCode = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      
+
       setMultiFileData(prev => ({
         ...prev,
         [activeFile]: {
@@ -893,7 +892,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
     if (propQuestionData !== questionData) {
       console.log('🔄 Question data changed, updating state');
       setQuestionData(propQuestionData);
-      
+
       // Reset active file when question changes
       if (propQuestionData?.defaultCode?.[selectedLanguage]) {
         const files = Object.keys(propQuestionData.defaultCode[selectedLanguage]);
@@ -944,11 +943,11 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
     // Enhanced initialization with retry mechanism
     if (selectedLanguage && !editorRef.current && monacoRef.current) {
       console.log('🔄 Enhanced initialization attempt for language:', selectedLanguage);
-      
+
       let retryCount = 0;
       const maxRetries = 5;
       const retryDelay = 200;
-      
+
       const initializeLanguage = () => {
         try {
           const model = editorRef.current.getModel();
@@ -956,13 +955,13 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
             const mappedLang = getMonacoLanguage(selectedLanguage);
             console.log('🔄 Setting model language to:', mappedLang, 'attempt:', retryCount + 1);
             monacoRef.current.editor.setModelLanguage(model, mappedLang);
-            
+
             // Verify it worked
             setTimeout(() => {
               if (editorRef.current) {
                 const currentLanguage = editorRef.current.getModel()?.getLanguageId();
                 console.log('� Language verification:', 'expected:', mappedLang, 'actual:', currentLanguage);
-                
+
                 if (currentLanguage === mappedLang) {
                   console.log('✅ Language initialization successful');
                   // Force UI refresh
@@ -990,7 +989,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
           }
         }
       };
-      
+
       // Start initialization
       setTimeout(initializeLanguage, 100);
     }
@@ -1009,7 +1008,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
           const mappedLang = getMonacoLanguage(selectedLanguage);
           console.log('🔧 Force setting language on mount:', mappedLang);
           monaco.editor.setModelLanguage(model, mappedLang);
-          
+
           // Additional force refresh
           setTimeout(() => {
             editor.updateOptions({
@@ -1524,8 +1523,8 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
         />
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-auto">
-        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6 flex-shrink-0">
           <div className="flex items-center gap-4">
             {availableFiles.length > 0 && (
               <div className="flex items-center gap-2 bg-gray-100 dark:bg-dark-tertiary rounded-lg p-1">
@@ -1602,7 +1601,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
             </button>
           </div>
         </div>
-        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
+        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
           {console.log('🔧 Editor rendering with:', { selectedLanguage, monacoLanguage })}
           <Editor
             key={`${monacoLanguage}-${activeFile}`}
@@ -1622,7 +1621,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
                 });
                 return;
               }
-              
+
               const isEditable = questionData?.defaultCode?.[selectedLanguage]?.[activeFile]?.editable;
               if (!isEditable) {
                 console.log('🚫 Editor change ignored - file not editable:', {
@@ -1631,7 +1630,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
                 });
                 return;
               }
-              
+
               handleCodeChange(newValue);
             }}
             onMount={handleEditorDidMount}

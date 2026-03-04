@@ -37,6 +37,9 @@ export const executeCode = async (language, sourceCode, input) => {
       finalSourceCode = `.headers on\n.mode list\n.separator "|\"\n${sourceCode}`;
     }
 
+    // Unescape literal \n sequences to real newlines
+    const normalizedStdin = String(input || "").replace(/\\n/g, "\n");
+
     const response = await API.post("/execute", {
       language: language,
       version: LANGUAGE_VERSIONS[language],
@@ -46,7 +49,7 @@ export const executeCode = async (language, sourceCode, input) => {
           content: finalSourceCode,
         },
       ],
-      stdin: input,  // This is where we add the user input to the request payload
+      stdin: normalizedStdin,
     });
     console.log(response.data);
     return response.data;
@@ -83,10 +86,13 @@ export const executeCode = async (language, sourceCode, input) => {
         throw new Error(`Invalid language ID for ${language}`);
       }
 
+      // Unescape literal \n sequences to real newlines (common when stored from JSON/DB)
+      const normalizedInput = String(input || "").replace(/\\n/g, "\n");
+
       const requestData = {
-        source_code: btoa(finalSourceCode), // Base64 encode the source code
+        source_code: btoa(unescape(encodeURIComponent(finalSourceCode))), // Base64 encode (Unicode-safe)
         language_id: String(judge0LangId), // Convert to string
-        stdin: String(input || "") // Convert to string
+        stdin: btoa(unescape(encodeURIComponent(normalizedInput))) // Base64 encode stdin too (required when base64_encoded=true)
       };
 
       console.log("Judge0 Fallback Request Data:", {

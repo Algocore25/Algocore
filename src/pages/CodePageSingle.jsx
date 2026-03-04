@@ -93,7 +93,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const handleSubmit2 = async () => {
     const testCases = questionData.testcases;
     const sourceCode = code;
-    
+
     const initialResults = testCases.map(tc => ({
       input: tc.input,
       expected: tc.expectedOutput,
@@ -290,7 +290,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         setCode(rawCode);
       } else {
         let rawCode = languageTemplates[selectedLanguage] || "";
-        
+
         console.log('📄 Loading language template:', {
           selectedLanguage,
           hasTemplate: !!languageTemplates[selectedLanguage],
@@ -325,7 +325,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}`;
       const dbRef = ref(database, codeKey);
       console.log('💾 Saving single-file code to:', codeKey);
-      
+
       await set(dbRef, codeToSave);
       console.log("✅ Code auto-saved successfully!");
     } catch (error) {
@@ -360,7 +360,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     const template = typeof rawCode === 'string' ? rawCode : String(rawCode || '');
     setCode(template);
     console.log(`Reset to template for ${selectedLanguage}:`, template);
-    
+
     saveCode(template);
   };
 
@@ -491,11 +491,11 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     // Enhanced initialization with retry mechanism
     if (selectedLanguage && !editorRef.current && monacoRef.current) {
       console.log('🔄 Enhanced initialization attempt for language:', selectedLanguage);
-      
+
       let retryCount = 0;
       const maxRetries = 5;
       const retryDelay = 200;
-      
+
       const initializeLanguage = () => {
         try {
           const model = editorRef.current.getModel();
@@ -503,13 +503,13 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
             const mappedLang = getMonacoLanguage(selectedLanguage);
             console.log('🔄 Setting model language to:', mappedLang, 'attempt:', retryCount + 1);
             monacoRef.current.editor.setModelLanguage(model, mappedLang);
-            
+
             // Verify it worked
             setTimeout(() => {
               if (editorRef.current) {
                 const currentLanguage = editorRef.current.getModel()?.getLanguageId();
                 console.log('� Language verification:', 'expected:', mappedLang, 'actual:', currentLanguage);
-                
+
                 if (currentLanguage === mappedLang) {
                   console.log('✅ Language initialization successful');
                   // Force UI refresh
@@ -537,7 +537,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
           }
         }
       };
-      
+
       // Start initialization
       setTimeout(initializeLanguage, 100);
     }
@@ -556,7 +556,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
           const mappedLang = getMonacoLanguage(selectedLanguage);
           console.log('🔧 Force setting language on mount:', mappedLang);
           monaco.editor.setModelLanguage(model, mappedLang);
-          
+
           // Additional force refresh
           setTimeout(() => {
             editor.updateOptions({
@@ -1044,8 +1044,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         />
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-auto">
-        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6 flex-shrink-0">
           <div className="flex items-center gap-4">
             <button
               onClick={resetCode}
@@ -1085,7 +1085,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
             </button>
           </div>
         </div>
-        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-auto">
+        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
           {console.log('🔧 Editor rendering with:', { selectedLanguage, monacoLanguage })}
           <Editor
             key={monacoLanguage}
