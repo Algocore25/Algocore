@@ -13,6 +13,7 @@ import { ref, get, set, child } from "firebase/database";
 
 import AnimatedTestResults from './AnimatedTestResults';
 import { executeCode } from './api';
+import GoogleAd from '../components/GoogleAd';
 import { useAuth } from '../context/AuthContext';
 
 import { ToastContainer, toast } from "react-toastify";
@@ -984,6 +985,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                   <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
                 </>
               )}
+              <GoogleAd className="mt-8" />
             </div>
           )}
 

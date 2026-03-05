@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { FcGoogle } from 'react-icons/fc';
 import { FiCode, FiTrendingUp, FiCheckCircle } from 'react-icons/fi';
 import Footer from '../components/Footer';
+import GoogleAd from '../components/GoogleAd';
 import LoadingPage from './LoadingPage';
 import { ref, get, child } from 'firebase/database';
 import { database } from '../firebase';
@@ -161,6 +162,10 @@ function HomePage() {
           </div>
         </section>
       </main>
+
+      <div className="w-full max-w-6xl mx-auto py-10 px-4">
+        <GoogleAd />
+      </div>
 
       <div className="w-full">
         <Footer />

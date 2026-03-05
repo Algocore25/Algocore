@@ -236,6 +236,7 @@ const EmailPage = () => {
     // Sending state
     const [sending, setSending] = useState(false);
     const [progress, setProgress] = useState(null); // { sent, total, failed }
+    const [delay, setDelay] = useState(1); // Delay in seconds between emails
 
     // ── Fetch EmailJS config from Firebase ──────────────────────────────────
     useEffect(() => {
@@ -337,8 +338,17 @@ const EmailPage = () => {
         setSending(true);
         setProgress({ sent: 0, total: recipients.length, failed: 0 });
 
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
         let sent = 0, failed = 0;
-        for (const student of recipients) {
+        for (let i = 0; i < recipients.length; i++) {
+            const student = recipients[i];
+
+            // Apply delay between emails (except for the first one)
+            if (i > 0 && delay > 0) {
+                await wait(delay * 1000);
+            }
+
             try {
                 await emailjs.send(
                     serviceId.trim(),
@@ -526,6 +536,25 @@ const EmailPage = () => {
                                         className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white text-sm font-mono focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors resize-y"
                                     />
                                 )}
+                            </div>
+
+                            {/* Delay Setting */}
+                            <div className="flex items-center gap-4 py-3 px-4 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/50">
+                                <div className="flex-1">
+                                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Sending Interval</h4>
+                                    <p className="text-xs text-blue-600 dark:text-blue-400">Time delay between consecutive emails to prevent rate limiting.</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="60"
+                                        value={delay}
+                                        onChange={(e) => setDelay(Number(e.target.value))}
+                                        className="w-20 px-3 py-1.5 rounded-lg border-2 border-blue-200 dark:border-blue-700 bg-white dark:bg-gray-800 text-blue-900 dark:text-blue-100 text-sm font-bold focus:outline-none focus:border-blue-500 transition-all text-center"
+                                    />
+                                    <span className="text-xs font-medium text-blue-500 uppercase">sec</span>
+                                </div>
                             </div>
 
                             {/* Progress bar */}

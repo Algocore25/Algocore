@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import GoogleAd from '../components/GoogleAd';
 
 export default function AnimatedTestResults({ testResults = [], runsubmit }) {
   const [showResults, setShowResults] = useState(false);
@@ -46,51 +47,54 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
     const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
     return (
-      <div className="w-full max-w-sm mx-auto py-20 flex flex-col items-center">
-        <div className="w-full space-y-4">
-          <div className="flex justify-between items-end">
-            <div className="space-y-1">
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 dark:text-white flex items-center gap-2">
-                {completedCount === totalCount ? 'Finalizing' : 'Running Analysis'}
-                {completedCount !== totalCount && (
-                  <span className="flex gap-1">
-                    <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" />
-                    <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse [animation-delay:200ms]" />
-                    <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse [animation-delay:400ms]" />
-                  </span>
-                )}
-              </h3>
-              <p className="text-[10px] text-gray-400 font-bold uppercase">
-                {completedCount} of {totalCount} test cases processed
-              </p>
+      <div className="w-full flex flex-col items-center">
+        <div className="w-full max-w-sm mx-auto py-20 flex flex-col items-center">
+          <div className="w-full space-y-4">
+            <div className="flex justify-between items-end">
+              <div className="space-y-1">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 dark:text-white flex items-center gap-2">
+                  {completedCount === totalCount ? 'Finalizing' : 'Running Analysis'}
+                  {completedCount !== totalCount && (
+                    <span className="flex gap-1">
+                      <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" />
+                      <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse [animation-delay:200ms]" />
+                      <span className="w-1 h-1 bg-gray-400 rounded-full animate-pulse [animation-delay:400ms]" />
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">
+                  {completedCount} of {totalCount} test cases processed
+                </p>
+              </div>
+              <span className="text-xs font-mono font-black text-gray-900 dark:text-white">
+                {Math.round(progress)}%
+              </span>
             </div>
-            <span className="text-xs font-mono font-black text-gray-900 dark:text-white">
-              {Math.round(progress)}%
-            </span>
-          </div>
 
-          <div className="h-1 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gray-900 dark:bg-white transition-all duration-700 ease-in-out rounded-full"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+            <div className="h-1 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gray-900 dark:bg-white transition-all duration-700 ease-in-out rounded-full"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
 
-          <div className="flex justify-around pt-2 opacity-50">
-            <div className="flex flex-col items-center">
-              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Completed</span>
-              <span className="text-xs font-bold text-gray-900 dark:text-white">{completedCount}</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Remaining</span>
-              <span className="text-xs font-bold text-gray-900 dark:text-white">{totalCount - completedCount}</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Total Cases</span>
-              <span className="text-xs font-bold text-gray-900 dark:text-white">{totalCount}</span>
+            <div className="flex justify-around pt-2 opacity-50">
+              <div className="flex flex-col items-center">
+                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Completed</span>
+                <span className="text-xs font-bold text-gray-900 dark:text-white">{completedCount}</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Remaining</span>
+                <span className="text-xs font-bold text-gray-900 dark:text-white">{totalCount - completedCount}</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Total Cases</span>
+                <span className="text-xs font-bold text-gray-900 dark:text-white">{totalCount}</span>
+              </div>
             </div>
           </div>
         </div>
+        <GoogleAd className="mt-8" />
       </div>
     );
   }

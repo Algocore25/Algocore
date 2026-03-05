@@ -15,6 +15,8 @@ import LoadingPage from "./LoadingPage";
 import useUserActivityTime from '../hooks/useUserActivityTime';
 import ActivityCalendar from './ActivityCalendar';
 import AnimatedBackground from '../components/AnimatedBackground';
+import GoogleAd from '../components/GoogleAd';
+import Footer from '../components/Footer';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
   LineElement, BarElement, Title, Tooltip, Legend
@@ -856,7 +858,7 @@ function ProfilePage() {
                     <Ic.Check /> Progress for <strong>{resetSuccess}</strong> was reset successfully.
                   </div>
                 )}
-                
+
                 <div className="bg-white/40 dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50 rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">🏆 Achievements & Badges</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -878,7 +880,7 @@ function ProfilePage() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity Calendar</h3>
                   <ActivityCalendar submissions={allSubmissions} />
@@ -1180,10 +1182,12 @@ function ProfilePage() {
                 </p>
               </div>
             )}
-
           </div>
         </div>
+        <GoogleAd className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-800" />
       </div>
+
+      <Footer />
 
       <style>{`
         @keyframes fadeIn { from { opacity:0; transform:scale(.95); } to { opacity:1; transform:scale(1); } }
