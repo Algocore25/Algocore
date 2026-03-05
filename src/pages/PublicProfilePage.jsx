@@ -162,7 +162,7 @@ export default function PublicProfilePage() {
                 if (coursesSnap.exists()) {
                     const coursesData = coursesSnap.val();
                     const coursesArr = Array.isArray(coursesData) ? coursesData : Object.values(coursesData);
-                    
+
                     coursesList = await Promise.all(
                         coursesArr.filter(Boolean).map(async (course) => {
                             try {
