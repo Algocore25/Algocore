@@ -1085,7 +1085,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
   // Update language when monacoLanguage changes
   useEffect(() => {
     if (!editorRef.current || !monacoRef.current) return;
-    
+
     const model = editorRef.current.getModel();
     if (!model) return;
 

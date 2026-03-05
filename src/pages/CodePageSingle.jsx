@@ -633,7 +633,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   // Update language when monacoLanguage changes
   useEffect(() => {
     if (!editorRef.current || !monacoRef.current) return;
-    
+
     const model = editorRef.current.getModel();
     if (!model) return;
 

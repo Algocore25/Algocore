@@ -1,7 +1,9 @@
 # Critical Fixes Applied: Intermittent Suggestions & Code Colors
 
 ## Problem Summary
+
 The application experienced intermittent issues where:
+
 - **Code suggestions** (intellisense) would not appear sometimes
 - **Syntax highlighting colors** would disappear randomly
 - Issues recurred after language changes or page navigation
@@ -10,20 +12,24 @@ The application experienced intermittent issues where:
 ## Root Causes Identified
 
 ### 1. **Global Provider Registry Blocking** (CRITICAL)
+
 **File:** `src/hooks/useMonacoIntelliSense.js`
 
 **Issue:**
+
 ```javascript
 let _providersRegistered = false;  // ❌ WRONG: Global flag persists across all instances
 if (_providersRegistered) return;  // Skips registration on language change/remount
 ```
 
-**Problem:** 
+**Problem:**
+
 - Once `_providersRegistered` was set to `true`, it never reset
 - When switching languages, providers weren't registered for the new language
 - Caused suggestions and syntax highlighting to fail for secondary languages
 
 **Fix Applied:**
+
 ```javascript
 const _registeredMonacoInstances = new WeakSet();  // ✅ Per-instance tracking
 if (_registeredMonacoInstances.has(monaco)) return;
@@ -35,13 +41,16 @@ _registeredMonacoInstances.add(monaco);
 ---
 
 ### 2. **Stale Dependency in useCallback Hook** (CRITICAL)
-**Files:** 
+
+**Files:**
+
 - `src/pages/CodePageSingle.jsx`
 - `src/pages/CodePageMultifile.jsx`
 - `src/pages/Exam/CodePageSingle.jsx`
 - `src/pages/Exam/CodePageMultifile.jsx`
 
 **Issue:**
+
 ```javascript
 const handleEditorDidMount = useCallback((editor, monaco) => {
   setTimeout(() => {
@@ -52,12 +61,14 @@ const handleEditorDidMount = useCallback((editor, monaco) => {
 ```
 
 **Problem:**
+
 - `selectedLanguage` state closes over stale values from component mount
 - When user changes language, `handleEditorDidMount` still uses old language
 - Caused syntax highlighting to not update after language change
 - Delayed setTimeout made timing unpredictable
 
 **Fix Applied:**
+
 ```javascript
 const handleEditorDidMount = useCallback((editor, monaco) => {
   registerIntelliSense(editor, monaco);  // ✅ Call immediately, not in timeout
@@ -78,13 +89,16 @@ const handleEditorDidMount = useCallback((editor, monaco) => {
 ---
 
 ### 3. **Editor Remounting on Language Change** (PERFORMANCE)
+
 **Files:**
+
 - `src/pages/CodePageSingle.jsx`
 - `src/pages/CodePageMultifile.jsx`
 - `src/pages/Exam/CodePageSingle.jsx`
 - `src/pages/Exam/CodePageMultifile.jsx`
 
 **Issue:**
+
 ```javascript
 <Editor
   key={`${monacoLanguage}-${activeFile}-${editorKey}`}  // ❌ Forces full remount
@@ -95,12 +109,14 @@ const handleEditorDidMount = useCallback((editor, monaco) => {
 ```
 
 **Problem:**
+
 - Changing language remounts entire editor (destroys & recreates)
 - Lost editor state and context each time
 - Combined with global provider issue, prevented providers from registering
 - Caused "flashing" and loss of suggestions during language change
 
 **Fix Applied:**
+
 ```javascript
 <Editor
   height="100%"
@@ -127,41 +143,44 @@ useEffect(() => {
 
 ## Files Modified
 
-### Core Hook:
-1. **`src/hooks/useMonacoIntelliSense.js`** 
+### Core Hook
+
+1. **`src/hooks/useMonacoIntelliSense.js`**
    - Changed global `_providersRegistered` flag to per-instance `_registeredMonacoInstances` WeakSet
 
-### Page Components:
+### Page Components
+
 2. **`src/pages/CodePageSingle.jsx`**
    - Fixed `handleEditorDidMount` dependency array (added `selectedLanguage`)
    - Removed Editor `key` prop
    - Added `useEffect` for language updates after mount
    - Removed setTimeout delays (now immediate)
 
-3. **`src/pages/CodePageMultifile.jsx`**
+2. **`src/pages/CodePageMultifile.jsx`**
    - Fixed `handleEditorDidMount` dependency array
    - Removed Editor `key` prop
    - Added `useEffect` for language updates after mount
 
-4. **`src/pages/Exam/CodePageSingle.jsx`**
+3. **`src/pages/Exam/CodePageSingle.jsx`**
    - Fixed `handleEditorDidMount` dependency array
    - Removed Editor `key` prop
    - Added `useEffect` for language updates after mount
    - Removed setTimeout delays (now immediate)
 
-5. **`src/pages/Exam/CodePageMultifile.jsx`**
+4. **`src/pages/Exam/CodePageMultifile.jsx`**
    - Fixed `handleEditorDidMount` dependency array
    - Removed Editor `key` prop
    - Added `useEffect` for language updates after mount
 
-6. **`src/pages/SqlPage.jsx`**
+5. **`src/pages/SqlPage.jsx`**
    - Added `useEffect` for language updates after mount
 
 ---
 
 ## Testing Recommendations
 
-### Manual Testing:
+### Manual Testing
+
 1. **Test language switching:**
    - Load a coding problem
    - Switch between languages (C++, Python, Java, etc.)
@@ -184,7 +203,8 @@ useEffect(() => {
    - Code execution still functions
    - All existing features work as before
 
-### Expected Results After Fix:
+### Expected Results After Fix
+
 ✅ Suggestions appear immediately when typing  
 ✅ Syntax highlighting applies correctly for selected language  
 ✅ No flickering or "loading" state  
@@ -196,14 +216,16 @@ useEffect(() => {
 
 ## Why This Core Issue Won't Repeat
 
-### Architecture Improvements:
+### Architecture Improvements
+
 1. **Per-Instance Provider Registration** - Each Monaco instance gets its own providers, preventing cross-contamination
 2. **Proper useCallback Dependencies** - All state used in callbacks is declared in dependency array
 3. **No Forced Remounting** - Editor persists, only internal state changes
 4. **Separation of Concerns** - Mount setup is separate from reactive language updates
 5. **No Timers** - Removed debouncing/delays that masked synchronization issues
 
-### Code Quality:
+### Code Quality
+
 - Follows React best practices (proper dependency arrays)
 - Eliminates subtle timing bugs
 - Makes cause-and-effect explicit
@@ -211,6 +233,7 @@ useEffect(() => {
 ---
 
 ## Performance Impact
+
 ✅ **Improved:** Editor no longer remounts on language change  
 ✅ **Improved:** Providers registered once per instance, not repeatedly  
 ✅ **Improved:** No debounce delays making features feel slow  
@@ -221,6 +244,7 @@ useEffect(() => {
 ---
 
 ## Deploy Checklist
+
 - [x] All changes applied
 - [x] No syntax errors
 - [x] Dependency arrays corrected

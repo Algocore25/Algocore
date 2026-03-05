@@ -124,27 +124,27 @@ export function registerIntelliSense(editor, monaco) {
         const variables = new Set();
         const lines = model.getLinesContent();
         const currentLine = position.lineNumber - 1;
-        
+
         // Scan lines up to current position
         for (let i = 0; i <= currentLine && i < lines.length; i++) {
             const line = lines[i];
             const isCurrentLine = i === currentLine;
             const stopAtColumn = isCurrentLine ? position.column - 1 : line.length;
             const lineToCheck = line.substring(0, stopAtColumn);
-            
+
             // Skip comments and strings
-            if (lineToCheck.trim().startsWith('//') || lineToCheck.trim().startsWith('#') || 
+            if (lineToCheck.trim().startsWith('//') || lineToCheck.trim().startsWith('#') ||
                 lineToCheck.includes('/*') || lineToCheck.includes('*')) {
                 continue;
             }
-            
+
             // C/C++ variable declarations (int x, double y, char* ptr, etc.)
             const cppVarRegex = /\b(?:auto|char|double|float|int|long|short|signed|unsigned|bool|string|vector|map|set|queue|stack|pair|iterator|const|static|extern)\s+(?:\*?\s*)([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
             let match;
             while ((match = cppVarRegex.exec(lineToCheck)) !== null) {
                 variables.add(match[1]);
             }
-            
+
             // Function parameters
             const funcParamRegex = /\b(?:[a-zA-Z_][a-zA-Z0-9_<>:*&\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:[,)]|$)/g;
             while ((match = funcParamRegex.exec(lineToCheck)) !== null) {
@@ -152,26 +152,26 @@ export function registerIntelliSense(editor, monaco) {
                     variables.add(match[1]);
                 }
             }
-            
+
             // Python variable assignments (x =, y :=, etc.)
             const pythonVarRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|:=)\s/g;
             while ((match = pythonVarRegex.exec(lineToCheck)) !== null) {
                 variables.add(match[1]);
             }
-            
+
             // Java variable declarations
             const javaVarRegex = /\b(?:int|double|float|char|boolean|long|short|byte|String|ArrayList|HashMap|List|Map|Set|Queue|Stack)\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
             while ((match = javaVarRegex.exec(lineToCheck)) !== null) {
                 variables.add(match[1]);
             }
-            
+
             // For loop variables (for i in, for(int i =, etc.)
             const forLoopRegex = /(?:for\s*\(\s*(?:int|char|double|float|long|short)?\s*)?([a-zA-Z_][a-zA-Z0-9_]*)/g;
             while ((match = forLoopRegex.exec(lineToCheck)) !== null) {
                 variables.add(match[1]);
             }
         }
-        
+
         return Array.from(variables);
     };
 
