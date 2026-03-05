@@ -446,13 +446,15 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    setTimeout(() => {
-      const model = editor.getModel();
-      if (model && selectedLanguage) {
-        const mappedLang = getMonacoLanguage(selectedLanguage);
-        monaco.editor.setModelLanguage(model, mappedLang);
-      }
-    }, 200);
+    // Register intellisense immediately
+    registerIntelliSense(editor, monaco);
+
+    // Set language immediately
+    const model = editor.getModel();
+    if (model && selectedLanguage) {
+      const mappedLang = getMonacoLanguage(selectedLanguage);
+      monaco.editor.setModelLanguage(model, mappedLang);
+    }
 
     resizeObserverRef.current = new ResizeObserver(() => {
       if (layoutTimeoutRef.current) clearTimeout(layoutTimeoutRef.current);
@@ -463,8 +465,6 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
 
     const container = editor.getContainerDomNode()?.parentElement?.parentElement;
     if (container) resizeObserverRef.current.observe(container);
-
-    registerIntelliSense(editor, monaco);
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
       if (getItemWithExpiry("copyDisabled") === null) {
@@ -482,6 +482,17 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
 
     editor.updateOptions({ contextmenu: false });
   }, [selectedLanguage]);
+
+  // Update language when monacoLanguage changes
+  useEffect(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    
+    const model = editorRef.current.getModel();
+    if (!model) return;
+
+    const mappedLang = getMonacoLanguage(selectedLanguage);
+    monacoRef.current.editor.setModelLanguage(model, mappedLang);
+  }, [monacoLanguage, selectedLanguage]);
 
   const handleMouseDown = useCallback((e) => {
     setIsDragging(true);
@@ -645,7 +656,6 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
         </div>
         <div className="flex-1 min-w-0 overflow-hidden">
           <Editor
-            key={`${monacoLanguage}-${editorKey}`}
             height="100%"
             language={monacoLanguage}
             value={code}

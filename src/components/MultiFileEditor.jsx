@@ -173,8 +173,8 @@ const MultiFileEditor = ({
         <Editor
           height="100%"
           path={activeFileTab}
-          defaultLanguage={language === 'cpp' ? 'cpp' : language}
-          language={language === 'cpp' ? 'cpp' : language}
+          defaultLanguage={language === 'cpp' ? 'cpp' : language === 'c' ? 'c' : language}
+          language={language === 'cpp' ? 'cpp' : language === 'c' ? 'c' : language}
           theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
           value={fileCodes[activeFileTab] || ''}
           onChange={isEditable ? handleCodeChange : undefined}

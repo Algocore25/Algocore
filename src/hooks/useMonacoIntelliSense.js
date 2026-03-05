@@ -60,15 +60,14 @@ export const INTELLISENSE_OPTIONS = {
     snippetSuggestions: 'inline',
 };
 
-// ─── Track whether providers have been registered globally ───────────────────
-let _providersRegistered = false;
+// ─── Track whether providers have been registered per Monaco instance ───────
+const _registeredMonacoInstances = new WeakSet();
 
 // ─── Main registration function ──────────────────────────────────────────────
 /**
  * Call this as the Monaco Editor's `onMount` handler.
- * It registers C++, Python, Java, and SQL completion providers exactly once
- * (Monaco globals persist across re-mounts) and configures the JS/TS
- * language service for richer completions.
+ * It registers C++, Python, Java, and SQL completion providers for each Monaco instance
+ * and configures the JS/TS language service for richer completions.
  */
 export function registerIntelliSense(editor, monaco) {
     // ── JS / TS language service ──────────────────────────────────────────────
@@ -93,9 +92,9 @@ export function registerIntelliSense(editor, monaco) {
         monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: false, noSyntaxValidation: false });
     } catch (_) { /* not all Monaco builds ship TS defaults */ }
 
-    // Only register completion providers ONCE per page lifetime
-    if (_providersRegistered) return;
-    _providersRegistered = true;
+    // Only register completion providers ONCE per Monaco instance (not globally)
+    if (_registeredMonacoInstances.has(monaco)) return;
+    _registeredMonacoInstances.add(monaco);
 
     const CK = monaco.languages.CompletionItemKind;
 
@@ -116,12 +115,196 @@ export function registerIntelliSense(editor, monaco) {
         documentation: doc, range,
     });
 
+    // ── Local Variable Extraction Helper ─────────────────────────────────────
+    /**
+     * Extracts local variables from the current document up to the cursor position
+     * Supports C, C++, Python, Java, and basic variable declarations
+     */
+    const getLocalVariables = (model, position) => {
+        const variables = new Set();
+        const lines = model.getLinesContent();
+        const currentLine = position.lineNumber - 1;
+        
+        // Scan lines up to current position
+        for (let i = 0; i <= currentLine && i < lines.length; i++) {
+            const line = lines[i];
+            const isCurrentLine = i === currentLine;
+            const stopAtColumn = isCurrentLine ? position.column - 1 : line.length;
+            const lineToCheck = line.substring(0, stopAtColumn);
+            
+            // Skip comments and strings
+            if (lineToCheck.trim().startsWith('//') || lineToCheck.trim().startsWith('#') || 
+                lineToCheck.includes('/*') || lineToCheck.includes('*')) {
+                continue;
+            }
+            
+            // C/C++ variable declarations (int x, double y, char* ptr, etc.)
+            const cppVarRegex = /\b(?:auto|char|double|float|int|long|short|signed|unsigned|bool|string|vector|map|set|queue|stack|pair|iterator|const|static|extern)\s+(?:\*?\s*)([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+            let match;
+            while ((match = cppVarRegex.exec(lineToCheck)) !== null) {
+                variables.add(match[1]);
+            }
+            
+            // Function parameters
+            const funcParamRegex = /\b(?:[a-zA-Z_][a-zA-Z0-9_<>:*&\s]+)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:[,)]|$)/g;
+            while ((match = funcParamRegex.exec(lineToCheck)) !== null) {
+                if (match[1] && !match[1].includes(' ') && !['int', 'char', 'void', 'double', 'float'].includes(match[1])) {
+                    variables.add(match[1]);
+                }
+            }
+            
+            // Python variable assignments (x =, y :=, etc.)
+            const pythonVarRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|:=)\s/g;
+            while ((match = pythonVarRegex.exec(lineToCheck)) !== null) {
+                variables.add(match[1]);
+            }
+            
+            // Java variable declarations
+            const javaVarRegex = /\b(?:int|double|float|char|boolean|long|short|byte|String|ArrayList|HashMap|List|Map|Set|Queue|Stack)\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+            while ((match = javaVarRegex.exec(lineToCheck)) !== null) {
+                variables.add(match[1]);
+            }
+            
+            // For loop variables (for i in, for(int i =, etc.)
+            const forLoopRegex = /(?:for\s*\(\s*(?:int|char|double|float|long|short)?\s*)?([a-zA-Z_][a-zA-Z0-9_]*)/g;
+            while ((match = forLoopRegex.exec(lineToCheck)) !== null) {
+                variables.add(match[1]);
+            }
+        }
+        
+        return Array.from(variables);
+    };
+
+    // ── C ───────────────────────────────────────────────────────────────────
+    monaco.languages.registerCompletionItemProvider('c', {
+        triggerCharacters: ['.', '#', '<', '(', ' '],
+        provideCompletionItems(model, position) {
+            const word = model.getWordUntilPosition(position);
+            const range = mkRange(model, position, word);
+
+            // Get local variables from the current document
+            const localVariables = getLocalVariables(model, position);
+
+            const keywords = [
+                'auto', 'break', 'case', 'char', 'const', 'continue', 'default', 'do',
+                'double', 'else', 'enum', 'extern', 'float', 'for', 'goto', 'if',
+                'int', 'long', 'register', 'return', 'short', 'signed', 'sizeof', 'static',
+                'struct', 'switch', 'typedef', 'union', 'unsigned', 'void', 'volatile', 'while',
+                'true', 'false', 'NULL',
+            ].map(k => kw(k, range));
+
+            const snippets = [
+                snip('#include <stdio.h>', '#include <stdio.h>', 'Include stdio.h', range),
+                snip('#include <stdlib.h>', '#include <stdlib.h>', 'Include stdlib.h', range),
+                snip('#include <string.h>', '#include <string.h>', 'Include string.h', range),
+                snip('#include <math.h>', '#include <math.h>', 'Include math.h', range),
+                snip('#include <stdbool.h>', '#include <stdbool.h>', 'Include stdbool.h', range),
+                snip('#include <ctype.h>', '#include <ctype.h>', 'Include ctype.h', range),
+                snip('#include <limits.h>', '#include <limits.h>', 'Include limits.h', range),
+                snip('#include <time.h>', '#include <time.h>', 'Include time.h', range),
+                snip('main',
+                    'int main() {\n\t${1:// code}\n\treturn 0;\n}',
+                    'main() function', range),
+                snip('for', 'for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t$0\n}', 'for loop', range),
+                snip('while', 'while (${1:condition}) {\n\t$0\n}', 'while loop', range),
+                snip('if', 'if (${1:condition}) {\n\t$0\n}', 'if statement', range),
+                snip('ifelse', 'if (${1:condition}) {\n\t$2\n} else {\n\t$0\n}', 'if-else', range),
+                snip('struct', 'struct ${1:Name} {\n\t${2:type} ${3:member};\n\t$0\n};', 'struct definition', range),
+                snip('typedef', 'typedef struct {\n\t${2:type} ${3:member};\n\t$0\n} ${1:Name};', 'typedef struct', range),
+                snip('printf', 'printf("${1:%s}", ${2:arg});', 'printf', range),
+                snip('scanf', 'scanf("${1:%d}", &${2:var});', 'scanf', range),
+                snip('malloc', '${1:ptr} = (${2:type}*)malloc(sizeof(${2:type}) * ${3:size});', 'malloc', range),
+                snip('free', 'free(${1:ptr});', 'free', range),
+                snip('sizeof', 'sizeof(${1:type})', 'sizeof operator', range),
+                snip('switch', 'switch (${1:variable}) {\n\tcase ${2:value}:\n\t\t$0\n\t\tbreak;\n\tdefault:\n\t\tbreak;\n}', 'switch statement', range),
+                snip('do-while', 'do {\n\t$0\n} while (${1:condition});', 'do-while loop', range),
+                snip('function', '${1:return_type} ${2:function_name}(${3:params}) {\n\t$0\n}', 'function definition', range),
+                snip('pointer', '${1:type} *${2:pointer};', 'pointer declaration', range),
+            ];
+
+            const functions = [
+                fn('printf', 'printf("${1:format}", ${2:args});', 'Print formatted output', range),
+                fn('scanf', 'scanf("${1:format}", &${2:args});', 'Read formatted input', range),
+                fn('fprintf', 'fprintf(${1:stream}, "${2:format}", ${3:args});', 'Print to stream', range),
+                fn('fscanf', 'fscanf(${1:stream}, "${2:format}", &${3:args});', 'Read from stream', range),
+                fn('sprintf', 'sprintf(${1:buffer}, "${2:format}", ${3:args});', 'Print to string', range),
+                fn('sscanf', 'sscanf(${1:string}, "${2:format}", &${3:args});', 'Read from string', range),
+                fn('malloc', 'malloc(${1:size})', 'Allocate memory', range),
+                fn('calloc', 'calloc(${1:count}, ${2:size})', 'Allocate and zero memory', range),
+                fn('realloc', 'realloc(${1:ptr}, ${2:size})', 'Reallocate memory', range),
+                fn('free', 'free(${1:ptr})', 'Free memory', range),
+                fn('memcpy', 'memcpy(${1:dest}, ${2:src}, ${3:n})', 'Copy memory', range),
+                fn('memset', 'memset(${1:ptr}, ${2:value}, ${3:n})', 'Set memory', range),
+                fn('memmove', 'memmove(${1:dest}, ${2:src}, ${3:n})', 'Move memory', range),
+                fn('memcmp', 'memcmp(${1:ptr1}, ${2:ptr2}, ${3:n})', 'Compare memory', range),
+                fn('strlen', 'strlen(${1:str})', 'String length', range),
+                fn('strcpy', 'strcpy(${1:dest}, ${2:src})', 'Copy string', range),
+                fn('strncpy', 'strncpy(${1:dest}, ${2:src}, ${3:n})', 'Copy string with limit', range),
+                fn('strcat', 'strcat(${1:dest}, ${2:src})', 'Concatenate strings', range),
+                fn('strncat', 'strncat(${1:dest}, ${2:src}, ${3:n})', 'Concatenate with limit', range),
+                fn('strcmp', 'strcmp(${1:str1}, ${2:str2})', 'Compare strings', range),
+                fn('strncmp', 'strncmp(${1:str1}, ${2:str2}, ${3:n})', 'Compare strings with limit', range),
+                fn('strchr', 'strchr(${1:str}, ${2:ch})', 'Find character in string', range),
+                fn('strstr', 'strstr(${1:haystack}, ${2:needle})', 'Find substring', range),
+                fn('atoi', 'atoi(${1:str})', 'Convert string to int', range),
+                fn('atof', 'atof(${1:str})', 'Convert string to double', range),
+                fn('atol', 'atol(${1:str})', 'Convert string to long', range),
+                fn('sprintf', 'sprintf(${1:buffer}, "${2:format}", ${3:args});', 'Format string', range),
+                fn('abs', 'abs(${1:x})', 'Absolute value (int)', range),
+                fn('labs', 'labs(${1:x})', 'Absolute value (long)', range),
+                fn('fabs', 'fabs(${1:x})', 'Absolute value (double)', range),
+                fn('sqrt', 'sqrt(${1:x})', 'Square root', range),
+                fn('pow', 'pow(${1:base}, ${2:exp})', 'Power function', range),
+                fn('sin', 'sin(${1:x})', 'Sine function', range),
+                fn('cos', 'cos(${1:x})', 'Cosine function', range),
+                fn('tan', 'tan(${1:x})', 'Tangent function', range),
+                fn('log', 'log(${1:x})', 'Natural logarithm', range),
+                fn('log10', 'log10(${1:x})', 'Base-10 logarithm', range),
+                fn('exp', 'exp(${1:x})', 'Exponential function', range),
+                fn('rand', 'rand()', 'Random number', range),
+                fn('srand', 'srand(${1:seed})', 'Seed random generator', range),
+                fn('time', 'time(NULL)', 'Get current time', range),
+                fn('clock', 'clock()', 'Get processor time', range),
+                fn('exit', 'exit(${1:code})', 'Exit program', range),
+                fn('system', 'system("${1:command}")', 'Execute system command', range),
+                fn('fopen', 'fopen("${1:filename}", "${2:mode}")', 'Open file', range),
+                fn('fclose', 'fclose(${1:file})', 'Close file', range),
+                fn('fread', 'fread(${1:buffer}, ${2:size}, ${3:count}, ${4:file})', 'Read from file', range),
+                fn('fwrite', 'fwrite(${1:buffer}, ${2:size}, ${3:count}, ${4:file})', 'Write to file', range),
+                fn('fseek', 'fseek(${1:file}, ${2:offset}, ${3:whence})', 'Seek in file', range),
+                fn('ftell', 'ftell(${1:file})', 'Get file position', range),
+                fn('rewind', 'rewind(${1:file})', 'Rewind file', range),
+                fn('feof', 'feof(${1:file})', 'Check end of file', range),
+                fn('ferror', 'ferror(${1:file})', 'Check file error', range),
+                fn('clearerr', 'clearerr(${1:file})', 'Clear file error', range),
+                fn('remove', 'remove("${1:filename}")', 'Remove file', range),
+                fn('rename', 'rename("${1:oldname}", "${2:newname}")', 'Rename file', range),
+                fn('tmpfile', 'tmpfile()', 'Create temporary file', range),
+                fn('tmpnam', 'tmpnam(${1:buffer})', 'Create temporary filename', range),
+            ];
+
+            // Convert local variables to completion items
+            const localVarSuggestions = localVariables.map(varName => ({
+                label: varName,
+                kind: CK.Variable,
+                insertText: varName,
+                range,
+                documentation: `Local variable: ${varName}`
+            }));
+
+            return { suggestions: [...keywords, ...snippets, ...functions, ...localVarSuggestions] };
+        },
+    });
+
     // ── C++ ──────────────────────────────────────────────────────────────────
     monaco.languages.registerCompletionItemProvider('cpp', {
         triggerCharacters: ['.', ':', '>', '#', '<'],
         provideCompletionItems(model, position) {
             const word = model.getWordUntilPosition(position);
             const range = mkRange(model, position, word);
+
+            // Get local variables from the current document
+            const localVariables = getLocalVariables(model, position);
 
             const keywords = [
                 'auto', 'break', 'case', 'catch', 'class', 'const', 'constexpr', 'continue',
@@ -178,7 +361,16 @@ export function registerIntelliSense(editor, monaco) {
                 fn('strlen', 'strlen(${1:str})', 'strlen', range),
             ];
 
-            return { suggestions: [...keywords, ...snippets, ...functions] };
+            // Convert local variables to completion items
+            const localVarSuggestions = localVariables.map(varName => ({
+                label: varName,
+                kind: CK.Variable,
+                insertText: varName,
+                range,
+                documentation: `Local variable: ${varName}`
+            }));
+
+            return { suggestions: [...keywords, ...snippets, ...functions, ...localVarSuggestions] };
         },
     });
 
@@ -188,6 +380,9 @@ export function registerIntelliSense(editor, monaco) {
         provideCompletionItems(model, position) {
             const word = model.getWordUntilPosition(position);
             const range = mkRange(model, position, word);
+
+            // Get local variables from the current document
+            const localVariables = getLocalVariables(model, position);
 
             const keywords = [
                 'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class',
@@ -245,7 +440,16 @@ export function registerIntelliSense(editor, monaco) {
                 fn('values', '${1:d}.values()', 'dict.values()', range),
             ];
 
-            return { suggestions: [...keywords, ...snippets, ...builtins] };
+            // Convert local variables to completion items
+            const localVarSuggestions = localVariables.map(varName => ({
+                label: varName,
+                kind: CK.Variable,
+                insertText: varName,
+                range,
+                documentation: `Local variable: ${varName}`
+            }));
+
+            return { suggestions: [...keywords, ...snippets, ...builtins, ...localVarSuggestions] };
         },
     });
 
@@ -255,6 +459,9 @@ export function registerIntelliSense(editor, monaco) {
         provideCompletionItems(model, position) {
             const word = model.getWordUntilPosition(position);
             const range = mkRange(model, position, word);
+
+            // Get local variables from the current document
+            const localVariables = getLocalVariables(model, position);
 
             const keywords = [
                 'abstract', 'assert', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class',
@@ -312,7 +519,16 @@ export function registerIntelliSense(editor, monaco) {
                 fn('getOrDefault', '${1:map}.getOrDefault(${2:key}, ${3:def})', 'getOrDefault()', range),
             ];
 
-            return { suggestions: [...keywords, ...snippets, ...methods] };
+            // Convert local variables to completion items
+            const localVarSuggestions = localVariables.map(varName => ({
+                label: varName,
+                kind: CK.Variable,
+                insertText: varName,
+                range,
+                documentation: `Local variable: ${varName}`
+            }));
+
+            return { suggestions: [...keywords, ...snippets, ...methods, ...localVarSuggestions] };
         },
     });
 
@@ -322,6 +538,9 @@ export function registerIntelliSense(editor, monaco) {
         provideCompletionItems(model, position) {
             const word = model.getWordUntilPosition(position);
             const range = mkRange(model, position, word);
+
+            // Get potential table/column names from the current document
+            const localVariables = getLocalVariables(model, position);
 
             const keywords = [
                 'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL',
@@ -396,7 +615,16 @@ export function registerIntelliSense(editor, monaco) {
                 fn('REPLACE', 'REPLACE(${1:str}, "${2:find}", "${3:replace}")', 'REPLACE()', range),
             ];
 
-            return { suggestions: [...keywords, ...snippets, ...functions] };
+            // Convert detected table/column names to completion items
+            const tableColumnSuggestions = localVariables.map(varName => ({
+                label: varName,
+                kind: CK.Field,
+                insertText: varName,
+                range,
+                documentation: `Table/Column: ${varName}`
+            }));
+
+            return { suggestions: [...keywords, ...snippets, ...functions, ...tableColumnSuggestions] };
         },
     });
 }

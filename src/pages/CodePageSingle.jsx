@@ -551,25 +551,18 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    // Force language setting after mount
-    setTimeout(() => {
-      if (editor && monaco && selectedLanguage) {
-        const model = editor.getModel();
-        if (model) {
-          const mappedLang = getMonacoLanguage(selectedLanguage);
-          console.log('🔧 Force setting language on mount:', mappedLang);
-          monaco.editor.setModelLanguage(model, mappedLang);
+    // Register intellisense immediately on mount
+    registerIntelliSense(editor, monaco);
 
-          // Additional force refresh
-          setTimeout(() => {
-            editor.updateOptions({
-              ...editor.getOptions(),
-              language: mappedLang
-            });
-          }, 50);
-        }
+    // Force language setting immediately after mount
+    if (editor && monaco && selectedLanguage) {
+      const model = editor.getModel();
+      if (model) {
+        const mappedLang = getMonacoLanguage(selectedLanguage);
+        console.log('🔧 Setting language on mount:', mappedLang);
+        monaco.editor.setModelLanguage(model, mappedLang);
       }
-    }, 200);
+    }
 
     resizeObserverRef.current = new ResizeObserver((entries) => {
       if (layoutTimeoutRef.current) {
@@ -591,8 +584,6 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     if (container && resizeObserverRef.current) {
       resizeObserverRef.current.observe(container);
     }
-
-    registerIntelliSense(editor, monaco);
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
       const copyDisabled = getItemWithExpiry("copyDisabled");
@@ -637,7 +628,19 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       contextmenu: false,
     });
 
-  }, []);
+  }, [selectedLanguage]);
+
+  // Update language when monacoLanguage changes
+  useEffect(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    
+    const model = editorRef.current.getModel();
+    if (!model) return;
+
+    const mappedLang = getMonacoLanguage(selectedLanguage);
+    console.log('🔧 Updating language via useEffect:', mappedLang);
+    monacoRef.current.editor.setModelLanguage(model, mappedLang);
+  }, [monacoLanguage, selectedLanguage]);
 
   useEffect(() => {
     if (layoutTimeoutRef.current) {
@@ -1092,7 +1095,6 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
           {console.log('🔧 Editor rendering with:', { selectedLanguage, monacoLanguage })}
           <Editor
-            key={`${monacoLanguage}-${editorKey}`}
             height="100%"
             path="single-file"
             defaultLanguage='text'

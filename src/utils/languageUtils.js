@@ -14,13 +14,16 @@ export const normalizeLanguages = (languages) => {
   
   return langs.map(lang => {
     const l = String(lang).toLowerCase();
-    // Handle various C/C++ variations
-    if (l === 'c/c++' || l === 'c++' || l === 'c') return 'cpp';
+    // Handle C separately from C++
+    if (l === 'c') return 'c';
+    // Handle various C++ variations
+    if (l === 'c++' || l === 'cpp') return 'cpp';
     // Handle other variations
     if (l === 'python' || l === 'py') return 'python';
     if (l === 'javascript' || l === 'js') return 'javascript';
     if (l === 'typescript' || l === 'ts') return 'typescript';
     if (l === 'java') return 'java';
+    if (l === 'sql') return 'sql';
     return l;
   });
 };

@@ -812,18 +812,15 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    setTimeout(() => {
-      if (editor && monaco && selectedLanguage) {
-        const model = editor.getModel();
-        if (model) {
-          const mappedLang = getMonacoLanguage(selectedLanguage);
-          monaco.editor.setModelLanguage(model, mappedLang);
-          setTimeout(() => {
-            editor.updateOptions({ ...editor.getOptions(), language: mappedLang });
-          }, 50);
-        }
-      }
-    }, 200);
+    // Register intellisense immediately
+    registerIntelliSense(editor, monaco);
+
+    // Set language immediately
+    const model = editor.getModel();
+    if (model && selectedLanguage) {
+      const mappedLang = getMonacoLanguage(selectedLanguage);
+      monaco.editor.setModelLanguage(model, mappedLang);
+    }
 
     resizeObserverRef.current = new ResizeObserver(() => {
       if (layoutTimeoutRef.current) clearTimeout(layoutTimeoutRef.current);
@@ -842,8 +839,6 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
     if (container && resizeObserverRef.current) {
       resizeObserverRef.current.observe(container);
     }
-
-    registerIntelliSense(editor, monaco);
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
       const copyDisabled = getItemWithExpiry("copyDisabled");
@@ -873,7 +868,18 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
     });
 
     editor.updateOptions({ contextmenu: false });
-  }, []);
+  }, [selectedLanguage]);
+
+  // Update language when monacoLanguage changes
+  useEffect(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    
+    const model = editorRef.current.getModel();
+    if (!model) return;
+
+    const mappedLang = getMonacoLanguage(selectedLanguage);
+    monacoRef.current.editor.setModelLanguage(model, mappedLang);
+  }, [monacoLanguage, selectedLanguage]);
 
   useEffect(() => {
     if (layoutTimeoutRef.current) clearTimeout(layoutTimeoutRef.current);
@@ -1173,7 +1179,6 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
         </div>
         <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
           <Editor
-            key={`${monacoLanguage}-${activeFile}-${editorKey}`}
             height="100%"
             path={activeFile || 'multi-file'}
             defaultLanguage='text'
