@@ -1496,21 +1496,25 @@ function CodePage({ data, navigation }) {
 
     // Completely disable copy command
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+      toast.warning('Copy is not allowed');
       return false;
     });
 
     // Completely disable paste command
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+      toast.warning('Paste is not allowed');
       return false;
     });
 
     // Completely disable cut command
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+      toast.warning('Cut is not allowed');
       return false;
     });
 
     // Completely disable Shift+Insert paste
     editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
+      toast.warning('Paste is not allowed');
       return false;
     });
 
@@ -1530,6 +1534,7 @@ function CodePage({ data, navigation }) {
 
       // Prevent selection copy
       editorElement.addEventListener('copy', (e) => {
+        toast.warning('Copy is not allowed');
         e.preventDefault();
         e.stopPropagation();
         return false;
@@ -1537,6 +1542,7 @@ function CodePage({ data, navigation }) {
 
       // Prevent paste
       editorElement.addEventListener('paste', (e) => {
+        toast.warning('Paste is not allowed');
         e.preventDefault();
         e.stopPropagation();
         return false;
@@ -1544,6 +1550,7 @@ function CodePage({ data, navigation }) {
 
       // Prevent cut
       editorElement.addEventListener('cut', (e) => {
+        toast.warning('Cut is not allowed');
         e.preventDefault();
         e.stopPropagation();
         return false;
@@ -1551,6 +1558,7 @@ function CodePage({ data, navigation }) {
 
       // Prevent drag and drop
       editorElement.addEventListener('drop', (e) => {
+        toast.warning('Drag and drop is not allowed');
         e.preventDefault();
         e.stopPropagation();
         return false;
