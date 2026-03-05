@@ -153,6 +153,7 @@ const CourseDetailsPage = () => {
     const { theme } = useTheme();
     const navigate = useNavigate();
     const [selectedLesson, setSelectedLesson] = useState(1);
+    const [activeTab, setActiveTab] = useState('lessons'); // 'overview' or 'lessons'
 
     const course = courseContent[courseId];
 
@@ -182,122 +183,292 @@ const CourseDetailsPage = () => {
                             <ChevronLeft size={16} /> Courses
                         </button>
                         <span className={theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}>/</span>
-                        <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>{course.name} Tutorial</span>
+                        <span className={theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}>{course.name} - {activeTab === 'overview' ? 'Overview' : 'Tutorial'}</span>
+                    </div>
+                    {/* Tab Toggle */}
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setActiveTab('overview')}
+                            className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${activeTab === 'overview'
+                                ? theme === 'dark' ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white'
+                                : theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                        >
+                            Overview
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('lessons')}
+                            className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${activeTab === 'lessons'
+                                ? theme === 'dark' ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white'
+                                : theme === 'dark' ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                        >
+                            Lessons
+                        </button>
                     </div>
                 </div>
 
-                <div className="flex flex-col lg:flex-row gap-6 items-start flex-1 min-h-0 w-full max-w-full overflow-hidden">
-                    {/* Left Sidebar - GFG Style Index */}
-                    <div className={`w-full lg:w-64 shrink-0 lg:flex-shrink-0 flex flex-col lg:h-full rounded-lg overflow-hidden border shadow-sm max-h-[40vh] lg:max-h-full ${theme === 'dark' ? 'bg-[#1e293b] border-gray-700' : 'bg-white border-gray-200'}`}>
-                        <div className={`p-4 border-b shrink-0 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-                            <h2 className={`text-lg font-bold flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                                {course.icon} {course.name}
-                            </h2>
-                        </div>
-                        <div className="py-2 flex-1 overflow-y-auto custom-scrollbar">
-                            {course.lessons.map((l) => (
-                                <button
-                                    key={l.id}
-                                    onClick={() => setSelectedLesson(l.id)}
-                                    className={`w-full text-left px-5 py-2.5 text-sm transition-colors border-l-4 ${selectedLesson === l.id
-                                        ? theme === 'dark'
-                                            ? 'border-green-500 bg-green-900/20 text-green-400 font-bold'
-                                            : 'border-green-600 bg-green-50 text-green-700 font-bold'
-                                        : theme === 'dark'
-                                            ? 'border-transparent text-gray-300 hover:bg-gray-800'
-                                            : 'border-transparent text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    {l.id}. {l.title}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Main Content Area */}
-                    <div className={`flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar rounded-lg border shadow-sm ${theme === 'dark' ? 'bg-[#0f172a] border-gray-700' : 'bg-white border-gray-200'}`} id="main-content-area">
-                        {lesson && (
-                            <div className="p-6 md:p-10">
-                                {/* Article Header */}
-                                <div className="mb-8 border-b pb-6" style={{ borderColor: theme === 'dark' ? '#334155' : '#e2e8f0' }}>
-                                    <h1 className={`text-3xl md:text-4xl font-bold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'
-                                        }`}>
-                                        {lesson.title}
-                                    </h1>
-
-                                    <div className="flex flex-wrap items-center gap-4 text-sm mt-4">
-                                        <div className={`px-2.5 py-0.5 rounded-full font-medium ${lesson.difficulty === 'Beginner'
-                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                            : lesson.difficulty === 'Intermediate'
-                                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                            }`}>
-                                            {lesson.difficulty || 'Beginner'}
-                                        </div>
-                                        <div className={`flex items-center gap-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                                            ⏱️ {lesson.duration || '5 mins'} read
-                                        </div>
+                {activeTab === 'overview' ? (
+                    // Overview Tab
+                    <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-lg border shadow-sm ${theme === 'dark' ? 'bg-[#0f172a] border-gray-700' : 'bg-white border-gray-200'}`}>
+                        <div className="p-6 md:p-10 max-w-4xl">
+                            {/* Course Title and Stats */}
+                            <div className="mb-8">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <div className="text-5xl">{course.icon}</div>
+                                    <div>
+                                        <h1 className={`text-4xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                            {course.name}
+                                        </h1>
+                                        <p className={`text-lg ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
+                                            {course.longDescription || course.description}
+                                        </p>
                                     </div>
                                 </div>
 
-                                {/* Content Parsing */}
-                                <div className={`prose prose-sm md:prose-base max-w-none ${theme === 'dark' ? 'prose-invert' : ''
-                                    }`}>
-                                    {renderContent(lesson.content, theme)}
-                                </div>
-
-                                {/* Bottom Navigation */}
-                                <div className="flex justify-between items-center mt-12 pt-8 border-t" style={{
-                                    borderColor: theme === 'dark' ? '#334155' : '#e2e8f0'
-                                }}>
-                                    <button
-                                        onClick={() => {
-                                            const prevId = selectedLesson - 1;
-                                            if (prevId > 0) {
-                                                setSelectedLesson(prevId);
-                                                document.getElementById('main-content-area').scrollTo({ top: 0, behavior: 'smooth' });
-                                            }
-                                        }}
-                                        disabled={selectedLesson === 1}
-                                        className={`px-6 py-2.5 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${theme === 'dark'
-                                            ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
-                                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                                            }`}
-                                    >
-                                        ← Previous
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const nextId = selectedLesson + 1;
-                                            if (nextId <= course.lessons.length) {
-                                                setSelectedLesson(nextId);
-                                                document.getElementById('main-content-area').scrollTo({ top: 0, behavior: 'smooth' });
-                                            }
-                                        }}
-                                        disabled={selectedLesson === course.lessons.length}
-                                        className={`px-6 py-2.5 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${theme === 'dark'
-                                            ? 'bg-green-600 text-white hover:bg-green-700'
-                                            : 'bg-green-600 text-white hover:bg-green-700'
-                                            }`}
-                                    >
-                                        Next →
-                                    </button>
+                                {/* Stats Row */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                                    <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Duration</div>
+                                        <div className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{course.hours}+ hrs</div>
+                                    </div>
+                                    <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Students</div>
+                                        <div className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{(course.students / 1000).toFixed(0)}K</div>
+                                    </div>
+                                    <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Rating</div>
+                                        <div className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>⭐ {course.rating}</div>
+                                    </div>
+                                    <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>Level</div>
+                                        <div className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>{course.difficulty}</div>
+                                    </div>
                                 </div>
                             </div>
-                        )}
-                    </div>
 
-                    {/* Right Extra Padding for GFG look (Optional Practice section) */}
-                    <div className="hidden xl:block w-64 flex-shrink-0 h-full overflow-y-auto custom-scrollbar">
-                        <div className={`p-6 rounded-lg border shadow-sm text-center ${theme === 'dark' ? 'bg-[#1e293b] border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-600'}`}>
-                            <div className="text-sm font-bold mb-2">Practice With Us</div>
-                            <div className="text-xs mb-4">Master your skills with coding challenges tailored for you</div>
-                            <button onClick={() => navigate('/courses')} className={`w-full py-2 text-sm font-bold rounded transition-colors ${theme === 'dark' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-green-600 text-white hover:bg-green-700'}`}>
-                                Solve Problems
-                            </button>
+                            {/* Learning Objectives */}
+                            {course.learningObjectives && (
+                                <div className="mb-10 border-t pt-8" style={{ borderColor: theme === 'dark' ? '#334155' : '#e2e8f0' }}>
+                                    <h2 className={`text-2xl font-bold mb-4 flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                        🎯 Learning Objectives
+                                    </h2>
+                                    <ul className="space-y-3">
+                                        {course.learningObjectives.map((obj, idx) => (
+                                            <li key={idx} className={`flex items-start gap-3 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                <span className="text-green-500 font-bold mt-1">✓</span>
+                                                <span>{obj}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* Prerequisites */}
+                            {course.prerequisites && (
+                                <div className="mb-10 border-t pt-8" style={{ borderColor: theme === 'dark' ? '#334155' : '#e2e8f0' }}>
+                                    <h2 className={`text-2xl font-bold mb-4 flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                        📋 Prerequisites
+                                    </h2>
+                                    <ul className="space-y-3">
+                                        {course.prerequisites.map((prereq, idx) => (
+                                            <li key={idx} className={`flex items-start gap-3 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                <span className="text-blue-500 font-bold mt-1">•</span>
+                                                <span>{prereq}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* Key Topics */}
+                            {course.keyTopics && (
+                                <div className="mb-10 border-t pt-8" style={{ borderColor: theme === 'dark' ? '#334155' : '#e2e8f0' }}>
+                                    <h2 className={`text-2xl font-bold mb-4 flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                        📚 Key Topics
+                                    </h2>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                        {course.keyTopics.map((topic, idx) => (
+                                            <div
+                                                key={idx}
+                                                className={`p-3 rounded-lg border font-medium text-sm text-center ${theme === 'dark'
+                                                    ? 'bg-purple-900/20 border-purple-700 text-purple-300'
+                                                    : 'bg-purple-100 border-purple-300 text-purple-700'
+                                                    }`}
+                                            >
+                                                {topic}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Lessons Preview */}
+                            <div className="border-t pt-8 mt-10" style={{ borderColor: theme === 'dark' ? '#334155' : '#e2e8f0' }}>
+                                <h2 className={`text-2xl font-bold mb-6 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                    📖 Course Contents ({course.lessons.length} lessons)
+                                </h2>
+                                <div className="space-y-3">
+                                    {course.lessons.map((l) => (
+                                        <div
+                                            key={l.id}
+                                            className={`p-4 rounded-lg border cursor-pointer transition-all hover:border-blue-500 ${theme === 'dark'
+                                                ? 'bg-gray-800/50 border-gray-700 hover:bg-gray-800'
+                                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                                                }`}
+                                            onClick={() => {
+                                                setSelectedLesson(l.id);
+                                                setActiveTab('lessons');
+                                            }}
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <h3 className={`font-bold mb-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                                        {l.id}. {l.title}
+                                                    </h3>
+                                                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                        {l.description}
+                                                    </p>
+                                                </div>
+                                                <div className="flex gap-2 ml-4 mt-1">
+                                                    {l.difficulty && (
+                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${l.difficulty === 'Beginner'
+                                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                            : l.difficulty === 'Intermediate'
+                                                                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                            }`}>
+                                                            {l.difficulty}
+                                                        </span>
+                                                    )}
+                                                    {l.duration && (
+                                                        <span className={`text-xs whitespace-nowrap ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                            ⏱️ {l.duration}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                ) : (
+                    // Lessons Tab
+                    <div className="flex flex-col lg:flex-row gap-6 items-start flex-1 min-h-0 w-full max-w-full overflow-hidden">
+                        {/* Left Sidebar - GFG Style Index */}
+                        <div className={`w-full lg:w-64 shrink-0 lg:flex-shrink-0 flex flex-col lg:h-full rounded-lg overflow-hidden border shadow-sm max-h-[40vh] lg:max-h-full ${theme === 'dark' ? 'bg-[#1e293b] border-gray-700' : 'bg-white border-gray-200'}`}>
+                            <div className={`p-4 border-b shrink-0 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                                <h2 className={`text-lg font-bold flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                    {course.icon} {course.name}
+                                </h2>
+                            </div>
+                            <div className="py-2 flex-1 overflow-y-auto custom-scrollbar">
+                                {course.lessons.map((l) => (
+                                    <button
+                                        key={l.id}
+                                        onClick={() => setSelectedLesson(l.id)}
+                                        className={`w-full text-left px-5 py-2.5 text-sm transition-colors border-l-4 ${selectedLesson === l.id
+                                            ? theme === 'dark'
+                                                ? 'border-green-500 bg-green-900/20 text-green-400 font-bold'
+                                                : 'border-green-600 bg-green-50 text-green-700 font-bold'
+                                            : theme === 'dark'
+                                                ? 'border-transparent text-gray-300 hover:bg-gray-800'
+                                                : 'border-transparent text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        {l.id}. {l.title}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Main Content Area */}
+                        <div className={`flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar rounded-lg border shadow-sm ${theme === 'dark' ? 'bg-[#0f172a] border-gray-700' : 'bg-white border-gray-200'}`} id="main-content-area">
+                            {lesson && (
+                                <div className="p-6 md:p-10">
+                                    {/* Article Header */}
+                                    <div className="mb-8 border-b pb-6" style={{ borderColor: theme === 'dark' ? '#334155' : '#e2e8f0' }}>
+                                        <h1 className={`text-3xl md:text-4xl font-bold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'
+                                            }`}>
+                                            {lesson.title}
+                                        </h1>
+
+                                        <div className="flex flex-wrap items-center gap-4 text-sm mt-4">
+                                            <div className={`px-2.5 py-0.5 rounded-full font-medium ${lesson.difficulty === 'Beginner'
+                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                : lesson.difficulty === 'Intermediate'
+                                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                }`}>
+                                                {lesson.difficulty || 'Beginner'}
+                                            </div>
+                                            <div className={`flex items-center gap-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                ⏱️ {lesson.duration || '5 mins'} read
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Content Parsing */}
+                                    <div className={`prose prose-sm md:prose-base max-w-none ${theme === 'dark' ? 'prose-invert' : ''
+                                        }`}>
+                                        {renderContent(lesson.content, theme)}
+                                    </div>
+
+                                    {/* Bottom Navigation */}
+                                    <div className="flex justify-between items-center mt-12 pt-8 border-t" style={{
+                                        borderColor: theme === 'dark' ? '#334155' : '#e2e8f0'
+                                    }}>
+                                        <button
+                                            onClick={() => {
+                                                const prevId = selectedLesson - 1;
+                                                if (prevId > 0) {
+                                                    setSelectedLesson(prevId);
+                                                    document.getElementById('main-content-area').scrollTo({ top: 0, behavior: 'smooth' });
+                                                }
+                                            }}
+                                            disabled={selectedLesson === 1}
+                                            className={`px-6 py-2.5 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${theme === 'dark'
+                                                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
+                                                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                                                }`}
+                                        >
+                                            ← Previous
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const nextId = selectedLesson + 1;
+                                                if (nextId <= course.lessons.length) {
+                                                    setSelectedLesson(nextId);
+                                                    document.getElementById('main-content-area').scrollTo({ top: 0, behavior: 'smooth' });
+                                                }
+                                            }}
+                                            disabled={selectedLesson === course.lessons.length}
+                                            className={`px-6 py-2.5 rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${theme === 'dark'
+                                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                                : 'bg-green-600 text-white hover:bg-green-700'
+                                                }`}
+                                        >
+                                            Next →
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Right Extra Padding for GFG look (Optional Practice section) */}
+                        <div className="hidden xl:block w-64 flex-shrink-0 h-full overflow-y-auto custom-scrollbar">
+                            <div className={`p-6 rounded-lg border shadow-sm text-center ${theme === 'dark' ? 'bg-[#1e293b] border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-600'}`}>
+                                <div className="text-sm font-bold mb-2">Practice With Us</div>
+                                <div className="text-xs mb-4">Master your skills with coding challenges tailored for you</div>
+                                <button onClick={() => navigate('/courses')} className={`w-full py-2 text-sm font-bold rounded transition-colors ${theme === 'dark' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+                                    Solve Problems
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

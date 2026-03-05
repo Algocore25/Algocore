@@ -122,7 +122,10 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
         output: 'Error: No code to execute.',
         passed: false,
         status: 'done',
-        isFirstFailure: true
+        isFirstFailure: true,
+        time: 0,
+        memory: 0,
+        timeout: false,
       }]);
       return;
     }
@@ -133,6 +136,9 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
       output: '',
       passed: false,
       status: 'running',
+      time: 0,
+      memory: 0,
+      timeout: false,
     }));
 
     setTestResults(initialResults);
@@ -161,6 +167,9 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
           output: result.output,
           passed,
           status: 'done',
+          time: result.time || 0,
+          memory: result.memory || 0,
+          timeout: result.timeout || false,
         };
 
         updatedResults[i] = currentResult;
@@ -173,6 +182,9 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
           expected: expectedOutput,
           output: error.message || 'Error',
           passed: false,
+          time: 0,
+          memory: 0,
+          timeout: false,
           status: 'done',
         };
         updatedResults[i] = errorResult;
@@ -232,7 +244,10 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
         output: 'Error: No code to execute.',
         passed: false,
         status: 'done',
-        isFirstFailure: true
+        isFirstFailure: true,
+        time: 0,
+        memory: 0,
+        timeout: false,
       }]);
       return;
     }
@@ -243,7 +258,10 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
       output: '',
       passed: false,
       status: 'running',
-      isFirstFailure: false
+      isFirstFailure: false,
+      time: 0,
+      memory: 0,
+      timeout: false,
     }));
 
     setTestResults(initialResults);
@@ -270,7 +288,10 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
           output: resultOutput,
           passed,
           status: 'done',
-          isFirstFailure: false
+          isFirstFailure: false,
+          time: result.cpuTime || 0,
+          memory: result.memory || 0,
+          timeout: result.timeout || false,
         };
         updatedResults[i] = currentResult;
         setTestResults([...updatedResults]);
@@ -282,7 +303,10 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
           output: error.message || 'Error',
           passed: false,
           status: 'done',
-          isFirstFailure: false
+          isFirstFailure: false,
+          time: 0,
+          memory: 0,
+          timeout: false,
         };
         updatedResults[i] = errorResult;
         setTestResults([...updatedResults]);

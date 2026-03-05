@@ -14,6 +14,7 @@ import { ref, get, set, child } from "firebase/database";
 import AnimatedTestResults from './AnimatedTestResults';
 import { executeCode } from './api';
 import GoogleAd from '../components/GoogleAd';
+import CompletionAnimation from '../components/CompletionAnimation';
 import { useAuth } from '../context/AuthContext';
 
 import { ToastContainer, toast } from "react-toastify";
@@ -34,6 +35,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const [selectedLanguage, setSelectedLanguage] = useState(propSelectedLanguage || '');
   const [monacoLanguage, setMonacoLanguage] = useState('plaintext');
   const [isCompleted, setIsCompleted] = useState(false);
+  const [showCompletion, setShowCompletion] = useState(false);
   const { theme } = useTheme();
   const [questionData, setQuestionData] = useState(propQuestionData || null);
   const [courseData, setCourseData] = useState(null);
@@ -42,6 +44,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0);
   const [editorKey, setEditorKey] = useState(0);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [showSubmissionModal, setShowSubmissionModal] = useState(false);
 
   const inputRef = useRef(null);
   const outputRef = useRef(null);
@@ -102,6 +106,9 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       output: '',
       passed: false,
       status: 'running',
+      time: 0,
+      memory: 0,
+      timeout: false,
     }));
 
     console.log(initialResults);
@@ -133,6 +140,9 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
           output: result.output,
           passed,
           status: 'done',
+          time: result.cpuTime || 0,
+          memory: result.memory || 0,
+          timeout: result.timeout || false,
         };
 
         updatedResults[i] = currentResult;
@@ -146,6 +156,9 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
           output: error.message || 'Error',
           passed: false,
           status: 'done',
+          time: 0,
+          memory: 0,
+          timeout: false,
         };
         updatedResults[i] = errorResult;
         setTestResults([...updatedResults]);
@@ -156,8 +169,18 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     await Promise.all(promises);
 
     const allPassed = updatedResults.every(tc => tc.passed);
+    if (allPassed) {
+      setShowCompletion(true);
+    }
     await markProblemAsCompleted(allPassed);
     await logSubmission(allPassed ? 'correct' : 'wrong', sourceCode);
+  };
+
+  const copySubmissionToEditor = (submission) => {
+    setCode(submission.code);
+    setSelectedLanguage(submission.language);
+    setShowSubmissionModal(false);
+    setActiveTab('description');
   };
 
   const markProblemAsCompleted = async (isCorrect) => {
@@ -190,7 +213,10 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         output: '',
         passed: false,
         status: 'running',
-        isFirstFailure: false
+        isFirstFailure: false,
+        time: 0,
+        memory: 0,
+        timeout: false,
       }));
 
       setTestResults(initialResults);
@@ -217,7 +243,10 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
             output: resultOutput,
             passed,
             status: 'done',
-            isFirstFailure: false
+            isFirstFailure: false,
+            time: result.cpuTime || 0,
+            memory: result.memory || 0,
+            timeout: result.timeout || false,
           };
           updatedResults[i] = currentResult;
           setTestResults([...updatedResults]);
@@ -230,7 +259,10 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
             output: error.message || 'Error executing code',
             passed: false,
             status: 'done',
-            isFirstFailure: false
+            isFirstFailure: false,
+            time: 0,
+            memory: 0,
+            timeout: false,
           };
           updatedResults[i] = errorResult;
           setTestResults([...updatedResults]);
@@ -261,7 +293,10 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         output: error.message || 'Error executing test cases',
         passed: false,
         status: 'done',
-        isFirstFailure: true
+        isFirstFailure: true,
+        time: 0,
+        memory: 0,
+        timeout: false,
       }]);
     }
   };
@@ -773,357 +808,455 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   }, [testCaseTab, testCasesrun, activeTab]);
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">
-      <div
-        className="bg-white dark:bg-dark-secondary border-r border-gray-200 dark:border-dark-tertiary flex flex-col overflow-hidden h-full"
-        style={{ width: `${leftPanelWidth}%` }}
-      >
-        <div className="flex whitespace-nowrap border-b border-gray-200 dark:border-dark-tertiary overflow-x-auto">
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'description' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
-              }`}
-            onClick={() => setActiveTab('description')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.FileText />
-              Description
-            </div>
-          </button>
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'testcases' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
-              }`}
-            onClick={() => setActiveTab('testcases')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.Code2 />
-              Test Cases
-            </div>
-          </button>
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'output' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
-              }`}
-            onClick={() => setActiveTab('output')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.Terminal />
-              Output
-            </div>
-          </button>
-          <button
-            className={`px-4 py-3 text-sm font-medium ${activeTab === 'submissions' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
-            onClick={() => setActiveTab('submissions')}
-          >
-            <div className="flex items-center gap-2">
-              <Icons.Clock />
-              Submissions
-            </div>
-          </button>
-        </div>
+    <>
+      <CompletionAnimation isVisible={showCompletion} onClose={() => setShowCompletion(false)} />
+      <div className="h-[calc(100vh-4rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">
+        <div
+          className="bg-white dark:bg-dark-secondary border-r border-gray-200 dark:border-dark-tertiary flex flex-col overflow-hidden h-full"
+          style={{ width: `${leftPanelWidth}%` }}
+        >
+          <div className="flex whitespace-nowrap border-b border-gray-200 dark:border-dark-tertiary overflow-x-auto">
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'description' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
+                }`}
+              onClick={() => setActiveTab('description')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.FileText />
+                Description
+              </div>
+            </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'testcases' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
+                }`}
+              onClick={() => setActiveTab('testcases')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.Code2 />
+                Test Cases
+              </div>
+            </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'output' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'
+                }`}
+              onClick={() => setActiveTab('output')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.Terminal />
+                Output
+              </div>
+            </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'submissions' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
+              onClick={() => setActiveTab('submissions')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.Clock />
+                Submissions
+              </div>
+            </button>
+          </div>
 
-        <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
-          {activeTab === 'description' && (
-            <div className="text-gray-700 dark:text-gray-400">
-              <div className="mb-6">
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)}</h1>
-                  {isCompleted && (
-                    <svg className="w-6 h-6 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                    </svg>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-4 mt-2">
-                  <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">Easy</span>
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Icons.Trophy />
-                    <span className="text-sm">2.5K</span>
+          <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
+            {activeTab === 'description' && (
+              <div className="text-gray-700 dark:text-gray-400">
+                <div className="mb-6">
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{String(questionData?.questionname)}</h1>
+                    {isCompleted && (
+                      <svg className="w-6 h-6 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                      </svg>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Icons.Clock />
-                    <span className="text-sm">15 min</span>
+                  <div className="flex flex-wrap items-center gap-4 mt-2">
+                    <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">Easy</span>
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Icons.Trophy />
+                      <span className="text-sm">2.5K</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Icons.Clock />
+                      <span className="text-sm">15 min</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="break-words">
+                    {questionData?.question}
+                  </p>
+
+                  <div className="mt-6">
+                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 1:</h2>
+                    <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
+                      {questionData?.Example?.[0] || 'No example provided'}
+                    </pre>
+                  </div>
+
+                  {questionData?.Example?.[1] && (
+                    <div className="mt-6">
+                      <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
+                      <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
+                        {questionData?.Example?.[1]}
+                      </pre>
+                    </div>
+                  )}
+
+                  <div className="mt-6">
+                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
+                    <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
+                      <li>{questionData?.constraints?.[0] || 'No constraints provided'}</li>
+                      <li>{questionData?.constraints?.[1]}</li>
+                    </ul>
                   </div>
                 </div>
               </div>
+            )}
 
-              <div className="space-y-4">
-                <p className="break-words">
-                  {questionData?.question}
+            {activeTab === 'testcases' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
+                      <Icons.Code2 size={20} />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Manual Test Cases</h3>
+                  </div>
+                  <button
+                    onClick={runCode}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+                  >
+                    <Icons.Play size={16} />
+                    Run Tests
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 mb-6">
+                  {testCasesrun.map((_, idx) => (
+                    <button
+                      key={idx}
+                      className={`group flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${testCaseTab === idx
+                        ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white shadow-md'
+                        : 'bg-white dark:bg-dark-secondary text-gray-500 dark:text-gray-400 border-gray-200 dark:border-dark-tertiary hover:border-gray-400 dark:hover:border-gray-600'
+                        }`}
+                      onClick={() => setTestCaseTab(idx)}
+                    >
+                      <span>Case {idx + 1}</span>
+                      {testCasesrun.length > 1 && testCaseTab === idx && (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const updated = testCasesrun.filter((_, i) => i !== idx);
+                            setTestCases(updated);
+                            setTestCaseTab(prev => Math.max(0, prev - 1));
+                          }}
+                          className="p-0.5 rounded-md hover:bg-red-500/20 text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          <Icons.X size={12} />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-dark-tertiary text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all border border-dashed border-gray-300 dark:border-gray-600"
+                    onClick={() => {
+                      setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
+                      setTestCaseTab(testCasesrun.length);
+                    }}
+                    title="Add New Case"
+                  >
+                    <Icons.Plus size={18} />
+                  </button>
+                </div>
+
+                <div className="bg-white dark:bg-dark-secondary rounded-2xl border border-gray-200 dark:border-dark-tertiary overflow-hidden shadow-sm">
+                  <div className="p-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-dark-tertiary">
+                    <div className="p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Input Data</label>
+                        <span className="text-[10px] font-bold text-gray-400 italic">Standard In</span>
+                      </div>
+                      <textarea
+                        ref={inputRef}
+                        className="w-full p-4 border-none focus:ring-0 bg-gray-50/50 dark:bg-dark-tertiary/20 rounded-xl text-gray-900 dark:text-gray-200 font-mono text-sm min-h-[120px] resize-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600"
+                        value={testCasesrun[testCaseTab]?.input || ''}
+                        onChange={e => {
+                          const updated = [...testCasesrun];
+                          updated[testCaseTab].input = e.target.value;
+                          setTestCases(updated);
+                          requestAnimationFrame(() => adjustTextareaHeight(e.target));
+                        }}
+                        placeholder="e.g. 5 10 15"
+                      />
+                    </div>
+                    <div className="p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Expected Output</label>
+                        <span className="text-[10px] font-bold text-gray-400 italic">Correct Response</span>
+                      </div>
+                      <textarea
+                        ref={outputRef}
+                        className="w-full p-4 border-none focus:ring-0 bg-gray-50/50 dark:bg-dark-tertiary/20 rounded-xl text-gray-900 dark:text-gray-200 font-mono text-sm min-h-[120px] resize-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600"
+                        value={testCasesrun[testCaseTab]?.expectedOutput || ''}
+                        onChange={e => {
+                          const updated = [...testCasesrun];
+                          updated[testCaseTab].expectedOutput = e.target.value;
+                          setTestCases(updated);
+                          requestAnimationFrame(() => adjustTextareaHeight(e.target));
+                        }}
+                        placeholder="e.g. 30"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-4 text-[11px] text-gray-400 dark:text-gray-500 text-center italic">
+                  Tests are run against current code version in editor.
                 </p>
+              </div>
+            )}
 
-                <div className="mt-6">
-                  <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 1:</h2>
-                  <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                    {questionData?.Example?.[0] || 'No example provided'}
+            {activeTab === 'output' && (
+              <div className="py-8 px-4 flex flex-col items-center">
+                {output ? (
+                  <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
+                ) : (
+                  <>
+                    <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
+                  </>
+                )}
+                <GoogleAd className="mt-8" />
+              </div>
+            )}
+
+            {activeTab === 'submissions' && (
+              <div className="space-y-4">
+                {submissions.length === 0 ? (
+                  <p className="text-gray-600 dark:text-gray-300">No submissions yet for this question.</p>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-dark-tertiary">
+                    <thead>
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Language</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-dark-tertiary">
+                      {submissions.map((s, idx) => (
+                        <tr key={idx}>
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+                            {(() => {
+                              const fixed = s.timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})_(\d{3})Z/, 'T$1:$2:$3.$4Z');
+                              const date = new Date(fixed);
+                              return isNaN(date.getTime())
+                                ? 'N/A'
+                                : date.toLocaleString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                });
+                            })()}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+                            {s.language}
+                          </td>
+                          <td className={`px-4 py-2 text-sm font-medium ${s.status === 'correct' ? 'text-green-600' : 'text-red-500'}`}>
+                            {s.status}
+                          </td>
+                          <td className="px-4 py-2 text-sm flex gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedSubmission(s);
+                                setShowSubmissionModal(true);
+                              }}
+                              className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-xs font-medium transition"
+                            >
+                              View
+                            </button>
+                            {/* <button
+                              onClick={() => copySubmissionToEditor(s)}
+                              className="px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded-md text-xs font-medium transition"
+                            >
+                              Copy to Editor
+                            </button> */}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          className={`w-1 bg-gray-200 dark:bg-dark-tertiary hover:bg-[#4285F4] cursor-col-resize flex items-center justify-center group transition-colors duration-150 ${isDragging ? 'bg-[#4285F4]' : ''}`}
+          onMouseDown={handleMouseDown}
+          style={{ zIndex: 10 }}
+        >
+          <Icons.GripVertical
+            size={16}
+            className="text-gray-400 group-hover:text-[#4285F4] opacity-0 group-hover:opacity-100"
+          />
+        </div>
+
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6 flex-shrink-0">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={resetCode}
+                title="Reset to initial code"
+                className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
+              >
+                <Icons.History className="w-3 h-3" />
+                Reset
+              </button>
+              <select
+                className="bg-white dark:bg-dark-secondary text-gray-900 dark:text-white border border-gray-300 dark:border-dark-tertiary rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#4285F4] focus:border-transparent"
+                value={selectedLanguage}
+                onChange={handleLanguageChange}
+              >
+                {allowlanguages.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {lang}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={runCode}
+                className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-dark-tertiary text-gray-700 dark:text-gray-300 font-bold text-xs transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
+              >
+                <Icons.Play size={14} className="group-hover:text-indigo-600 transition-colors" />
+                Run Code
+              </button>
+
+              <button
+                onClick={handleSubmit2}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xs transition-all shadow-lg shadow-green-500/20 active:scale-95"
+              >
+                <Icons.ChevronRight size={14} />
+                Submit Solution
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
+            {console.log('🔧 Editor rendering with:', { selectedLanguage, monacoLanguage })}
+            <Editor
+              height="100%"
+              path="single-file"
+              defaultLanguage='text'
+              language={monacoLanguage}
+              theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
+              value={typeof code === 'string' ? code : String(code || '')}
+              onChange={handleCodeChange}
+              onMount={handleEditorDidMount}
+              options={{
+                ...INTELLISENSE_OPTIONS,
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                roundedSelection: false,
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                tabSize: 2,
+                dragAndDrop: true,
+                formatOnPaste: true,
+                formatOnType: true,
+                readOnly: false,
+              }}
+            />
+          </div>
+        </div>
+
+        <ToastContainer />
+
+        {/* Submission Modal */}
+        {showSubmissionModal && selectedSubmission && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white dark:bg-dark-secondary border-b border-gray-200 dark:border-dark-tertiary p-6 flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Submission Details</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {((timestamp) => {
+                      const fixed = timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})_(\d{3})Z/, 'T$1:$2:$3.$4Z');
+                      const date = new Date(fixed);
+                      return isNaN(date.getTime()) ? 'N/A' : date.toLocaleString();
+                    })(selectedSubmission.timestamp)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowSubmissionModal(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Language
+                    </label>
+                    <p className="text-gray-900 dark:text-white bg-gray-50 dark:bg-dark-tertiary p-3 rounded">
+                      {selectedSubmission.language}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Status
+                    </label>
+                    <p className={`p-3 rounded font-medium ${selectedSubmission.status === 'correct'
+                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                        : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                      }`}>
+                      {selectedSubmission.status}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Code
+                  </label>
+                  <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono max-h-96">
+                    {selectedSubmission.code}
                   </pre>
                 </div>
 
-                {questionData?.Example?.[1] && (
-                  <div className="mt-6">
-                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
-                    <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                      {questionData?.Example?.[1]}
-                    </pre>
-                  </div>
-                )}
-
-                <div className="mt-6">
-                  <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
-                  <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
-                    <li>{questionData?.constraints?.[0] || 'No constraints provided'}</li>
-                    <li>{questionData?.constraints?.[1]}</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'testcases' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
-                    <Icons.Code2 size={20} />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Manual Test Cases</h3>
-                </div>
-                <button
-                  onClick={runCode}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
-                >
-                  <Icons.Play size={16} />
-                  Run Tests
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 mb-6">
-                {testCasesrun.map((_, idx) => (
+                <div className="flex gap-3 pt-4">
                   <button
-                    key={idx}
-                    className={`group flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${testCaseTab === idx
-                      ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white shadow-md'
-                      : 'bg-white dark:bg-dark-secondary text-gray-500 dark:text-gray-400 border-gray-200 dark:border-dark-tertiary hover:border-gray-400 dark:hover:border-gray-600'
-                      }`}
-                    onClick={() => setTestCaseTab(idx)}
+                    onClick={() => copySubmissionToEditor(selectedSubmission)}
+                    className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded-lg transition"
                   >
-                    <span>Case {idx + 1}</span>
-                    {testCasesrun.length > 1 && testCaseTab === idx && (
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const updated = testCasesrun.filter((_, i) => i !== idx);
-                          setTestCases(updated);
-                          setTestCaseTab(prev => Math.max(0, prev - 1));
-                        }}
-                        className="p-0.5 rounded-md hover:bg-red-500/20 text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <Icons.X size={12} />
-                      </div>
-                    )}
+                    Copy to Editor
                   </button>
-                ))}
-                <button
-                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-dark-tertiary text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all border border-dashed border-gray-300 dark:border-gray-600"
-                  onClick={() => {
-                    setTestCases([...testCasesrun, { input: '', expectedOutput: '' }]);
-                    setTestCaseTab(testCasesrun.length);
-                  }}
-                  title="Add New Case"
-                >
-                  <Icons.Plus size={18} />
-                </button>
-              </div>
-
-              <div className="bg-white dark:bg-dark-secondary rounded-2xl border border-gray-200 dark:border-dark-tertiary overflow-hidden shadow-sm">
-                <div className="p-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100 dark:divide-dark-tertiary">
-                  <div className="p-5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Input Data</label>
-                      <span className="text-[10px] font-bold text-gray-400 italic">Standard In</span>
-                    </div>
-                    <textarea
-                      ref={inputRef}
-                      className="w-full p-4 border-none focus:ring-0 bg-gray-50/50 dark:bg-dark-tertiary/20 rounded-xl text-gray-900 dark:text-gray-200 font-mono text-sm min-h-[120px] resize-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600"
-                      value={testCasesrun[testCaseTab]?.input || ''}
-                      onChange={e => {
-                        const updated = [...testCasesrun];
-                        updated[testCaseTab].input = e.target.value;
-                        setTestCases(updated);
-                        requestAnimationFrame(() => adjustTextareaHeight(e.target));
-                      }}
-                      placeholder="e.g. 5 10 15"
-                    />
-                  </div>
-                  <div className="p-5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Expected Output</label>
-                      <span className="text-[10px] font-bold text-gray-400 italic">Correct Response</span>
-                    </div>
-                    <textarea
-                      ref={outputRef}
-                      className="w-full p-4 border-none focus:ring-0 bg-gray-50/50 dark:bg-dark-tertiary/20 rounded-xl text-gray-900 dark:text-gray-200 font-mono text-sm min-h-[120px] resize-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600"
-                      value={testCasesrun[testCaseTab]?.expectedOutput || ''}
-                      onChange={e => {
-                        const updated = [...testCasesrun];
-                        updated[testCaseTab].expectedOutput = e.target.value;
-                        setTestCases(updated);
-                        requestAnimationFrame(() => adjustTextareaHeight(e.target));
-                      }}
-                      placeholder="e.g. 30"
-                    />
-                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedSubmission.code);
+                      toast.success('Code copied to clipboard!');
+                    }}
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 rounded-lg transition"
+                  >
+                    Copy Code
+                  </button>
                 </div>
               </div>
-              <p className="mt-4 text-[11px] text-gray-400 dark:text-gray-500 text-center italic">
-                Tests are run against current code version in editor.
-              </p>
             </div>
-          )}
-
-          {activeTab === 'output' && (
-            <div className="py-8 px-4 flex flex-col items-center">
-              {output ? (
-                <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
-              ) : (
-                <>
-                  <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
-                </>
-              )}
-              <GoogleAd className="mt-8" />
-            </div>
-          )}
-
-          {activeTab === 'submissions' && (
-            <div className="space-y-4">
-              {submissions.length === 0 ? (
-                <p className="text-gray-600 dark:text-gray-300">No submissions yet for this question.</p>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-dark-tertiary">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Language</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-dark-tertiary">
-                    {submissions.map((s, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
-                          {(() => {
-                            const fixed = s.timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})_(\d{3})Z/, 'T$1:$2:$3.$4Z');
-                            const date = new Date(fixed);
-                            return isNaN(date.getTime())
-                              ? 'N/A'
-                              : date.toLocaleString('en-US', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                              });
-                          })()}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
-                          {s.language}
-                        </td>
-                        <td className={`px-4 py-2 text-sm font-medium ${s.status === 'correct' ? 'text-green-600' : 'text-red-500'}`}>
-                          {s.status}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div
-        className={`w-1 bg-gray-200 dark:bg-dark-tertiary hover:bg-[#4285F4] cursor-col-resize flex items-center justify-center group transition-colors duration-150 ${isDragging ? 'bg-[#4285F4]' : ''}`}
-        onMouseDown={handleMouseDown}
-        style={{ zIndex: 10 }}
-      >
-        <Icons.GripVertical
-          size={16}
-          className="text-gray-400 group-hover:text-[#4285F4] opacity-0 group-hover:opacity-100"
-        />
-      </div>
-
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6 flex-shrink-0">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={resetCode}
-              title="Reset to initial code"
-              className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-md flex items-center gap-1 text-xs transition-colors duration-150"
-            >
-              <Icons.History className="w-3 h-3" />
-              Reset
-            </button>
-            <select
-              className="bg-white dark:bg-dark-secondary text-gray-900 dark:text-white border border-gray-300 dark:border-dark-tertiary rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#4285F4] focus:border-transparent"
-              value={selectedLanguage}
-              onChange={handleLanguageChange}
-            >
-              {allowlanguages.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
-                </option>
-              ))}
-            </select>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={runCode}
-              className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-dark-tertiary text-gray-700 dark:text-gray-300 font-bold text-xs transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
-            >
-              <Icons.Play size={14} className="group-hover:text-indigo-600 transition-colors" />
-              Run Code
-            </button>
-
-            <button
-              onClick={handleSubmit2}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xs transition-all shadow-lg shadow-green-500/20 active:scale-95"
-            >
-              <Icons.ChevronRight size={14} />
-              Submit Solution
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 bg-white dark:bg-gray-900 min-w-0 overflow-hidden">
-          {console.log('🔧 Editor rendering with:', { selectedLanguage, monacoLanguage })}
-          <Editor
-            height="100%"
-            path="single-file"
-            defaultLanguage='text'
-            language={monacoLanguage}
-            theme={theme === 'dark' ? 'vs-dark' : 'vs-light'}
-            value={typeof code === 'string' ? code : String(code || '')}
-            onChange={handleCodeChange}
-            onMount={handleEditorDidMount}
-            options={{
-              ...INTELLISENSE_OPTIONS,
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              roundedSelection: false,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              wordWrap: 'on',
-              tabSize: 2,
-              dragAndDrop: true,
-              formatOnPaste: true,
-              formatOnType: true,
-              readOnly: false,
-            }}
-          />
-        </div>
+        )}
       </div>
-
-      <ToastContainer />
-    </div>
+    </>
   );
 };
 

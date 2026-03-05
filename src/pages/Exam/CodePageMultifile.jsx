@@ -253,6 +253,9 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
       output: '',
       passed: false,
       status: 'running',
+      time: 0,
+      memory: 0,
+      timeout: false,
     }));
 
     console.log(initialResults);
@@ -284,6 +287,9 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
           output: result.output,
           passed,
           status: 'done',
+          time: result.cpuTime || 0,
+          memory: result.memory || 0,
+          timeout: result.timeout || false,
         };
 
         updatedResults[i] = currentResult;
@@ -297,6 +303,9 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
           output: error.message || 'Error',
           passed: false,
           status: 'done',
+          time: 0,
+          memory: 0,
+          timeout: false,
         };
         updatedResults[i] = errorResult;
         setTestResults([...updatedResults]);
@@ -360,7 +369,10 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
         output: '',
         passed: false,
         status: 'running',
-        isFirstFailure: false
+        isFirstFailure: false,
+        time: 0,
+        memory: 0,
+        timeout: false,
       }));
 
       setTestResults(initialResults);
@@ -387,7 +399,10 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
             output: resultOutput,
             passed,
             status: 'done',
-            isFirstFailure: false
+            isFirstFailure: false,
+            time: result.cpuTime || 0,
+            memory: result.memory || 0,
+            timeout: result.timeout || false,
           };
           updatedResults[i] = currentResult;
           setTestResults([...updatedResults]);
@@ -400,7 +415,10 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
             output: error.message || 'Error executing code',
             passed: false,
             status: 'done',
-            isFirstFailure: false
+            isFirstFailure: false,
+            time: 0,
+            memory: 0,
+            timeout: false,
           };
           updatedResults[i] = errorResult;
           setTestResults([...updatedResults]);
@@ -431,7 +449,10 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
         output: error.message || 'Error executing test cases',
         passed: false,
         status: 'done',
-        isFirstFailure: true
+        isFirstFailure: true,
+        time: 0,
+        memory: 0,
+        timeout: false,
       }]);
     }
   };

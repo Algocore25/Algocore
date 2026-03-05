@@ -14,6 +14,7 @@ import { ref, get, set, child } from "firebase/database";
 import AnimatedTestResults from './AnimatedTestResults';
 import { executeCode } from './api';
 import GoogleAd from '../components/GoogleAd';
+import CompletionAnimation from '../components/CompletionAnimation';
 import { useAuth } from '../context/AuthContext';
 
 
@@ -1043,6 +1044,8 @@ function SqlPage({ data, navigation }) {
 
   const [submissions, setSubmissions] = useState([]);
   const [submissionTrigger, setSubmissionTrigger] = useState(0); // New state to trigger submission refresh
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [showSubmissionModal, setShowSubmissionModal] = useState(false);
 
   const { course: encCourse, subcourse: encSubcourse, questionId: encQuestionId } = useParams();
   const course = decodeShort(encCourse);
@@ -1320,6 +1323,19 @@ function SqlPage({ data, navigation }) {
         status: 'done',
         isFirstFailure: true
       }]);
+    }
+  };
+
+  const copySubmissionToEditor = (submission) => {
+    if (!submission) return;
+
+    try {
+      setCode(submission.code);
+      setSelectedLanguage(submission.language);
+      setShowSubmissionModal(false);
+      setActiveTab('description');
+    } catch (error) {
+      console.error('Error copying submission to editor:', error);
     }
   };
 
@@ -1669,38 +1685,7 @@ function SqlPage({ data, navigation }) {
   return (
     <>
       {/* Completion Animation */}
-      {showCompletionAnimation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-          <div className="relative flex flex-col items-center">
-            {/* Checkmark Circle Animation */}
-            <div className="animate-bounce">
-              <div className="w-32 h-32 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-2xl">
-                <svg className="w-20 h-20 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-            {/* Confetti-like circles */}
-            <div className="absolute w-32 h-32 flex items-center justify-center">
-              {[...Array(8)].map((_, i) => (
-                <div
-                  key={i}
-                  className="absolute w-2 h-2 rounded-full bg-green-400 animate-ping"
-                  style={{
-                    animationDelay: `${i * 0.1}s`,
-                    transform: `rotate(${i * 45}deg) translateY(-60px)`,
-                  }}
-                />
-              ))}
-            </div>
-            {/* Congratulations text */}
-            <div className="mt-12 text-center animate-fadeIn">
-              <h2 className="text-4xl font-bold text-green-600 drop-shadow-lg">Congratulations!</h2>
-              <p className="text-xl text-gray-700 dark:text-gray-300 mt-2 font-semibold">Problem Solved Successfully!</p>
-            </div>
-          </div>
-        </div>
-      )}
+      <CompletionAnimation isVisible={showCompletionAnimation} onClose={() => setShowCompletionAnimation(false)} />
       <div className="h-[calc(100vh-4rem)] w-full flex bg-white dark:bg-dark-primary select-none overflow-hidden">      {/* Left Panel */}
         <div
           className="bg-white dark:bg-dark-secondary border-r border-gray-200 dark:border-dark-tertiary flex flex-col overflow-hidden h-full"
@@ -2050,6 +2035,7 @@ function SqlPage({ data, navigation }) {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Language</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-dark-tertiary">
@@ -2076,6 +2062,23 @@ function SqlPage({ data, navigation }) {
                           </td>
                           <td className={`px-4 py-2 text-sm font-medium ${s.status === 'correct' ? 'text-green-600' : 'text-red-500'}`}>
                             {s.status}
+                          </td>
+                          <td className="px-4 py-2 text-sm space-x-2">
+                            <button
+                              onClick={() => {
+                                setSelectedSubmission(s);
+                                setShowSubmissionModal(true);
+                              }}
+                              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                            >
+                              View
+                            </button>
+                            {/* <button
+                              onClick={() => copySubmissionToEditor(s)}
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                            >
+                              Copy to Editor
+                            </button> */}
                           </td>
                         </tr>
                       ))}
@@ -2162,6 +2165,65 @@ function SqlPage({ data, navigation }) {
         </div>
 
 
+
+        {showSubmissionModal && selectedSubmission && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-lg max-w-2xl w-full max-h-96 flex flex-col">
+              <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-dark-tertiary">
+                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">Query</h2>
+                <button
+                  onClick={() => setShowSubmissionModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Language: <span className="font-bold text-blue-600 dark:text-blue-400">{selectedSubmission.language}</span>
+                  </label>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Status: <span className={`font-bold ${selectedSubmission.status === 'correct' ? 'text-green-600' : 'text-red-600'}`}>{selectedSubmission.status}</span>
+                  </label>
+                </div>
+
+                <div className="bg-gray-800 dark:bg-gray-950 rounded-lg p-4 overflow-x-auto">
+                  <pre className="text-gray-100 text-sm font-mono whitespace-pre-wrap break-words">
+                    {selectedSubmission.code}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 p-6 border-t border-gray-200 dark:border-dark-tertiary">
+                <button
+                  onClick={() => copySubmissionToEditor(selectedSubmission)}
+                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  Copy to Editor
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedSubmission.code).then(() => {
+                      const toast = document.createElement('div');
+                      toast.textContent = 'Query copied to clipboard';
+                      toast.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded';
+                      document.body.appendChild(toast);
+                      setTimeout(() => toast.remove(), 3000);
+                    });
+                  }}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  Copy Query
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <ToastContainer />
       </div>

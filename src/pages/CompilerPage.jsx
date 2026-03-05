@@ -22,6 +22,8 @@ const CompilerPage = () => {
     stderr: null,
     time: null,
     memory: null,
+    timeout: false,
+    statusId: null,
   });
   const [language, setLanguage] = useState('cpp');
   const [input, setInput] = useState('');
@@ -371,7 +373,7 @@ const CompilerPage = () => {
 
   const handleRunCode = async () => {
     setIsLoading(true);
-    setOutput({ stdout: 'Executing...', stderr: null, time: null, memory: null });
+    setOutput({ stdout: 'Executing...', stderr: null, time: null, memory: null, timeout: false, statusId: null });
     try {
       const result = await executeCode(language, code, input);
       setOutput({
@@ -379,6 +381,8 @@ const CompilerPage = () => {
         stderr: result.run.stderr || '',
         time: `${result.run.cpuTime} ms`,
         memory: `${result.run.memory} KB`,
+        timeout: result.run.timeout || false,
+        statusId: result.run.statusId || null,
       });
     } catch (error) {
       setOutput({
@@ -386,6 +390,8 @@ const CompilerPage = () => {
         stderr: error.message || 'Execution failed.',
         time: null,
         memory: null,
+        timeout: false,
+        statusId: null,
       });
     }
     setIsLoading(false);
@@ -689,30 +695,91 @@ const CompilerPage = () => {
 
         {/* Output Panel */}
         <div className="flex flex-col h-1/2 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden flex-1 border border-gray-200 dark:border-gray-700">
-          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-gray-800 dark:text-gray-200 font-semibold text-sm flex items-center gap-2">
-              <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              Output
-            </h2>
-            {output.time && output.memory && (
-              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                <span className="flex items-center gap-1" title="Execution Time">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  {output.time}
-                </span>
-                <span className="w-px h-3 bg-gray-300 dark:bg-gray-600 border-l"></span>
-                <span className="flex items-center gap-1" title="Memory Used">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
-                  {output.memory.replace(/[A-Za-z]/g, '').trim()} KB
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h2 className="text-gray-800 dark:text-gray-200 font-semibold text-sm flex items-center gap-2">
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                Output
+              </h2>
+            </div>
+
+            {/* Execution Metrics Bar */}
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              {/* Execution Time */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/30 rounded border border-blue-200 dark:border-blue-800">
+                <svg className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-gray-600 dark:text-gray-300">
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">{output.time ? output.time : 'N/A'}</span>
                 </span>
               </div>
-            )}
+
+              {/* Memory Used */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-50 dark:bg-purple-900/30 rounded border border-purple-200 dark:border-purple-800">
+                <svg className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                <span className="text-gray-600 dark:text-gray-300">
+                  <span className="font-semibold text-purple-600 dark:text-purple-400">{output.memory ? output.memory.replace(/[A-Za-z]/g, '').trim() + ' KB' : 'N/A'}</span>
+                </span>
+              </div>
+
+              {/* Timeout Status */}
+              {output.timeout && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 dark:bg-red-900/30 rounded border border-red-200 dark:border-red-800 animate-pulse">
+                  <svg className="w-3.5 h-3.5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+                  </svg>
+                  <span className="font-semibold text-red-600 dark:text-red-400">⏱️ TIMEOUT</span>
+                </div>
+              )}
+
+              {/* Error Status Badge */}
+              {output.statusId === 6 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-yellow-50 dark:bg-yellow-900/30 rounded border border-yellow-200 dark:border-yellow-800">
+                  <svg className="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                  </svg>
+                  <span className="font-semibold text-yellow-600 dark:text-yellow-400">Compilation Error</span>
+                </div>
+              )}
+
+              {output.statusId === 7 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-50 dark:bg-orange-900/30 rounded border border-orange-200 dark:border-orange-800">
+                  <svg className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                  </svg>
+                  <span className="font-semibold text-orange-600 dark:text-orange-400">Runtime Error</span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex-grow overflow-auto p-4 bg-[#f8f9fa] dark:bg-[#1e1e1e]">
-            {output.stderr ? (
-              <pre className="text-red-600 dark:text-red-400 font-mono text-sm whitespace-pre-wrap">{output.stderr}</pre>
+            {output.timeout ? (
+              <div className="text-center py-8">
+                <svg className="w-12 h-12 text-red-400 mx-auto mb-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-red-600 dark:text-red-400 font-semibold mb-1">Execution Timeout!</p>
+                <p className="text-sm text-red-500 dark:text-red-300">The code took too long to execute. Check for infinite loops or optimize your code.</p>
+                {output.stdout && (
+                  <div className="mt-4 text-left">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Partial output before timeout:</p>
+                    <pre className="text-gray-800 dark:text-gray-200 font-mono text-sm whitespace-pre-wrap bg-white dark:bg-gray-900 p-3 rounded border border-gray-300 dark:border-gray-700">{output.stdout}</pre>
+                  </div>
+                )}
+              </div>
+            ) : output.stderr ? (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-semibold">Error Output:</p>
+                <pre className="text-red-600 dark:text-red-400 font-mono text-sm whitespace-pre-wrap">{output.stderr}</pre>
+              </div>
             ) : (
-              <pre className="text-gray-800 dark:text-gray-200 font-mono text-sm whitespace-pre-wrap">{output.stdout}</pre>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-semibold">Standard Output:</p>
+                <pre className="text-gray-800 dark:text-gray-200 font-mono text-sm whitespace-pre-wrap">{output.stdout}</pre>
+              </div>
             )}
           </div>
         </div>

@@ -1,23 +1,5 @@
 
 import axios from "axios";
-// firebase.js
-
-const API = axios.create({
-  baseURL: "https://emkc.org/api/v2/piston",
-});
-
-
-
-
-
-const LANGUAGE_VERSIONS = {
-  python: "3.10.0",
-  java: "15.0.2",
-  cpp: "10.2.0",  // You can specify the desired version here
-  javascript: "18.15.0",
-  sql: "3.36.0" // SQLite 3 support for Piston if available
-};
-
 
 const JUDGE0_LANGUAGE_IDS = {
   python: 71,
@@ -29,127 +11,81 @@ const JUDGE0_LANGUAGE_IDS = {
 };
 
 export const executeCode = async (language, sourceCode, input) => {
-  try {
-    let finalSourceCode = sourceCode;
+  const judge0LangId = JUDGE0_LANGUAGE_IDS[language];
+  if (!judge0LangId) {
+    throw new Error(`Judge0 does not support language: ${language}`);
+  }
 
-    // For SQL, prepend headers configuration
-    if (language === 'sql') {
-      finalSourceCode = `.headers on\n.mode list\n.separator "|\"\n${sourceCode}`;
+  let finalSourceCode = sourceCode;
+
+  // For SQL, prepend headers configuration
+  if (language === 'sql') {
+    finalSourceCode = `.headers on\n.mode list\n.separator "|\"\n${sourceCode}`;
+  }
+
+  try {
+    // Validate inputs before sending
+    if (!finalSourceCode || finalSourceCode.trim() === '') {
+      throw new Error('Source code cannot be empty');
     }
 
     // Unescape literal \n sequences to real newlines
-    const normalizedStdin = String(input || "").replace(/\\n/g, "\n");
+    const normalizedInput = String(input || "").replace(/\\n/g, "\n");
 
-    const response = await API.post("/execute", {
-      language: language,
-      version: LANGUAGE_VERSIONS[language],
-      files: [
-        {
-          name: language === 'sql' ? "main.sql" : "main.c",
-          content: finalSourceCode,
-        },
-      ],
-      stdin: normalizedStdin,
-    });
-    console.log(response.data);
-    return response.data;
-  } catch (error) {
-    console.warn("Piston API failed, falling back to Judge0 API...", error.message);
-
-    const judge0LangId = JUDGE0_LANGUAGE_IDS[language];
-    if (!judge0LangId) {
-      throw new Error(`Execution failed and fallback Judge0 does not support language: ${language}`);
-    }
-
-    let finalSourceCode = sourceCode;
-
-    // For SQL, prepend headers configuration
-    if (language === 'sql') {
-      finalSourceCode = `.headers on\n.mode list\n.separator "|\"\n${sourceCode}`;
-    }
-
-
-    const payload = {
-      source_code: finalSourceCode,
-      language_id: judge0LangId,
-      stdin: input || "" // ensure stdin is always a string, not undefined
+    const requestData = {
+      source_code: btoa(unescape(encodeURIComponent(finalSourceCode))), // Base64 encode (Unicode-safe)
+      language_id: String(judge0LangId), // Convert to string
+      stdin: btoa(unescape(encodeURIComponent(normalizedInput))) // Base64 encode stdin too
     };
 
-    console.log("Judge0 Fallback Payload:", payload);
+    console.log("Judge0 Request:", { language, languageId: judge0LangId });
 
-    try {
-      // Validate inputs before sending
-      if (!finalSourceCode || finalSourceCode.trim() === '') {
-        throw new Error('Source code cannot be empty');
+    const judge0Response = await axios.post("https://ce.judge0.com/submissions?base64_encoded=true&wait=true", requestData, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
-      if (!judge0LangId) {
-        throw new Error(`Invalid language ID for ${language}`);
+    });
+    const data = judge0Response.data;
+
+    console.log("Judge0 Response:", data);
+
+    // Decode base64 outputs from Judge0
+    const decodeBase64 = (str) => {
+      try {
+        return str ? atob(str) : "";
+      } catch (e) {
+        console.error("Error decoding base64 from Judge0:", e);
+        return str || "";
       }
+    };
 
-      // Unescape literal \n sequences to real newlines (common when stored from JSON/DB)
-      const normalizedInput = String(input || "").replace(/\\n/g, "\n");
+    const decodedStdout = decodeBase64(data.stdout);
+    const decodedStderr = decodeBase64(data.stderr || data.compile_output);
 
-      const requestData = {
-        source_code: btoa(unescape(encodeURIComponent(finalSourceCode))), // Base64 encode (Unicode-safe)
-        language_id: String(judge0LangId), // Convert to string
-        stdin: btoa(unescape(encodeURIComponent(normalizedInput))) // Base64 encode stdin too (required when base64_encoded=true)
-      };
+    // Map Judge0 response format
+    // Status IDs: 1=In Queue, 2=Processing, 3=Accepted, 4=Wrong Answer, 5=Time Limit Exceeded, 6=Compilation Error, 7=Runtime Error, 8=Internal Error, 9=Exec Format Error
+    const isTimeout = data.status?.id === 5;
 
-      console.log("Judge0 Fallback Request Data:", {
-        sourceCodeLength: finalSourceCode.length,
-        languageId: judge0LangId,
-        language: language,
-        stdinLength: (input || "").length,
-        requestData: {
-          ...requestData,
-          source_code: `[Base64 encoded, length: ${requestData.source_code.length}]`
-        }
-      });
-
-      const judge0Response = await axios.post("https://ce.judge0.com/submissions?base64_encoded=true&wait=true", requestData, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-      const data = judge0Response.data;
-
-      console.log("Judge0 Fallback Response:", data);
-
-      // Decode base64 outputs from Judge0
-      const decodeBase64 = (str) => {
-        try {
-          return str ? atob(str) : "";
-        } catch (e) {
-          console.error("Error decoding base64 from Judge0:", e);
-          return str || "";
-        }
-      };
-
-      const decodedStdout = decodeBase64(data.stdout);
-      const decodedStderr = decodeBase64(data.stderr || data.compile_output);
-
-      // Map Judge0 response Format to match Piston's expected format
-      return {
-        language: language,
-        version: LANGUAGE_VERSIONS[language],
-        run: {
-          stdout: decodedStdout,
-          stderr: decodedStderr,
-          output: decodedStdout ? decodedStdout : decodedStderr,
-          code: data.status?.id === 3 ? 0 : 1, // 3 means "Accepted"
-          cpuTime: parseFloat(data.time) * 1000 || 0,
-          memory: data.memory || 0,
-          signal: null,
-        }
-      };
-    } catch (jError) {
-      console.error("Judge0 API also failed:", jError.message);
-      if (jError.response) {
-        console.error("Judge0 Error Data:", jError.response.data);
+    return {
+      run: {
+        stdout: decodedStdout,
+        stderr: decodedStderr,
+        output: decodedStdout ? decodedStdout : decodedStderr,
+        code: data.status?.id === 3 ? 0 : 1, // 3 means "Accepted"
+        cpuTime: parseFloat(data.time) * 1000 || 0, // Convert seconds to milliseconds
+        memory: data.memory || 0,
+        signal: null,
+        timeout: isTimeout,
+        statusId: data.status?.id,
       }
-      throw new Error(`Execution failed on both main API and fallback API. Judge0 Response: ${JSON.stringify(jError.response?.data || jError.message)}`);
+    };
+  } catch (jError) {
+    console.error("Judge0 API failed:", jError.message);
+    if (jError.response) {
+      console.error("Judge0 Error:", jError.response.data);
     }
+    throw new Error(`Code execution failed. ${jError.message}`);
   }
 };
 

@@ -238,19 +238,13 @@ function ProfilePage() {
       setFollowerCount(followersSnap.exists() ? Object.keys(followersSnap.val()).length : 0);
       setFollowingCount(followingSnap.exists() ? Object.keys(followingSnap.val()).length : 0);
 
-      // 2. Load progress → list of courses + accepted count
+      // 2. Load progress → list of courses
       const progressSnap = await get(child(dbRef, `userprogress/${user.uid}`));
-      let accepted = 0;
       const courseSet = new Set();
       if (progressSnap.exists()) {
         const pd = progressSnap.val();
         for (const courseKey in pd) {
           courseSet.add(courseKey);
-          for (const subKey in pd[courseKey]) {
-            for (const qId in pd[courseKey][subKey]) {
-              if (pd[courseKey][subKey][qId] === true) accepted++;
-            }
-          }
         }
       }
       setCourses([...courseSet]);
@@ -258,6 +252,7 @@ function ProfilePage() {
       // 3. Load submissions
       const subSnap = await get(child(dbRef, `Submissions/${user.uid}`));
       let total = 0;
+      let accepted = 0;
       const subList = [];
       if (subSnap.exists()) {
         const subData = subSnap.val();
@@ -267,6 +262,10 @@ function ProfilePage() {
               for (const ts in subData[courseKey][subKey][qId]) {
                 const s = subData[courseKey][subKey][qId][ts];
                 total++;
+                // Count accepted submissions from actual submission status
+                if (s.status === "correct") {
+                  accepted++;
+                }
                 subList.push({
                   problem: qId,
                   course: courseKey,

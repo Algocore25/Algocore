@@ -320,6 +320,35 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null }) 
                     {test.passed ? 'Passed' : 'Failed'}
                   </span>
                 </div>
+
+                {/* Execution Metrics */}
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {/* Execution Time */}
+                  <div className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded border border-blue-200 dark:border-blue-800">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{test.time ? `${test.time}ms` : 'N/A'}</span>
+                  </div>
+
+                  {/* Memory Used */}
+                  <div className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 rounded border border-purple-200 dark:border-purple-800">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg>
+                    <span>{test.memory ? `${test.memory}KB` : 'N/A'}</span>
+                  </div>
+
+                  {/* Timeout Badge */}
+                  {test.timeout && (
+                    <div className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 rounded border border-red-200 dark:border-red-800 animate-pulse">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+                      </svg>
+                      <span>TIMEOUT</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-6">
@@ -653,6 +682,9 @@ function SqlPage({ question }) {
       output: '',
       passed: false,
       status: 'running',
+      time: 0,
+      memory: 0,
+      timeout: false,
     }));
 
     setTestResults(initialResults);
@@ -691,6 +723,9 @@ function SqlPage({ question }) {
           output: result.output,
           passed,
           status: 'done',
+          time: result.cpuTime || 0,
+          memory: result.memory || 0,
+          timeout: result.timeout || false,
         };
 
         updatedResults[i] = currentResult;
@@ -704,6 +739,9 @@ function SqlPage({ question }) {
           output: error.message || 'Error',
           passed: false,
           status: 'done',
+          time: 0,
+          memory: 0,
+          timeout: false,
         };
         updatedResults[i] = errorResult;
         setTestResults([...updatedResults]);
@@ -790,7 +828,10 @@ function SqlPage({ question }) {
         output: '',
         passed: false,
         status: 'running',
-        isFirstFailure: false
+        isFirstFailure: false,
+        time: 0,
+        memory: 0,
+        timeout: false,
       }));
 
       setTestResults(initialResults);
@@ -831,7 +872,10 @@ function SqlPage({ question }) {
             output: result.output,
             passed,
             status: 'done',
-            isFirstFailure: false
+            isFirstFailure: false,
+            time: result.cpuTime || 0,
+            memory: result.memory || 0,
+            timeout: result.timeout || false,
           };
           updatedResults[i] = currentResult;
           setTestResults([...updatedResults]);
@@ -844,7 +888,10 @@ function SqlPage({ question }) {
             output: error.message || 'Error executing code',
             passed: false,
             status: 'done',
-            isFirstFailure: false
+            isFirstFailure: false,
+            time: 0,
+            memory: 0,
+            timeout: false,
           };
           updatedResults[i] = errorResult;
           setTestResults([...updatedResults]);
