@@ -68,6 +68,52 @@ const getStatusColor = (status) => {
   return "text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900/30";
 };
 
+// ─── Calculate Streak ─────────────────────────────────────────────────────────
+const calculateStreak = (submissions) => {
+  if (!submissions || submissions.length === 0) return 0;
+
+  // Get unique dates with submissions (format: YYYY-MM-DD)
+  const submissionDates = new Set();
+  submissions.forEach(s => {
+    const date = new Date(s.timestamp);
+    const dateStr = date.toISOString().split('T')[0];
+    submissionDates.add(dateStr);
+  });
+
+  // Start from today and go backwards
+  let streak = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let currentDate = new Date(today);
+
+  // Check if there's a submission today or yesterday to start counting
+  const todayStr = today.toISOString().split('T')[0];
+  const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  if (!submissionDates.has(todayStr) && !submissionDates.has(yesterdayStr)) {
+    return 0;
+  }
+
+  // If today has no submission but yesterday does, start from yesterday
+  if (!submissionDates.has(todayStr) && submissionDates.has(yesterdayStr)) {
+    currentDate = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  }
+
+  // Count consecutive days backwards
+  while (true) {
+    const dateStr = currentDate.toISOString().split('T')[0];
+    if (submissionDates.has(dateStr)) {
+      streak++;
+      currentDate.setDate(currentDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+};
+
 // ─── Icon set ────────────────────────────────────────────────────────────────
 const Ic = {
   Edit: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>,
@@ -116,6 +162,7 @@ function ProfilePage() {
   // ── Profile state ──────────────────────────────────────────────────────────
   const [profileData, setProfileData] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [currentStreak, setCurrentStreak] = useState(0);
 
   // Username editing
   const [editingName, setEditingName] = useState(false);
@@ -283,6 +330,10 @@ function ProfilePage() {
       subList.sort((a, b) => b.timestamp - a.timestamp);
       setAllSubmissions(subList);
       setFilteredSubs(subList);
+
+      // Calculate streak from submissions
+      const streak = calculateStreak(subList);
+      setCurrentStreak(streak);
 
       setProfileData(prev => ({
         ...prev,
@@ -863,7 +914,8 @@ function ProfilePage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="text-center">
                       <div className="text-2xl mb-2">🔥</div>
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">7-Day Streak</p>
+                      <p className="text-3xl font-bold text-orange-500 mb-1">{currentStreak}</p>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Day Streak</p>
                     </div>
                     <div className="text-center">
                       <div className="text-2xl mb-2">⭐</div>
