@@ -7,7 +7,15 @@ const ExamSideNotification = () => {
     const { user } = useAuth();
     const { exams } = useScheduledExams(user);
     const [notifications, setNotifications] = useState([]);
-    const [notifiedExams, setNotifiedExams] = useState(new Map()); // Use Map to store timestamps
+    const [notifiedExams, setNotifiedExams] = useState(() => {
+        // Load notification timestamps from localStorage on mount
+        try {
+            const stored = localStorage.getItem('examNotificationTimestamps');
+            return stored ? new Map(JSON.parse(stored)) : new Map();
+        } catch {
+            return new Map();
+        }
+    });
 
     // Don't show on admin pages
     const isAdminPage = /^\/(admin|testedit|exammonitor|adminresults|monitor)/i.test(window.location.pathname);
@@ -20,9 +28,18 @@ const ExamSideNotification = () => {
         return (now - lastNotified) > 600000; // 10 minutes in milliseconds
     };
 
-    // Helper function to mark exam as notified
+    // Helper function to mark exam as notified and persist to localStorage
     const markAsNotified = (notificationId) => {
-        setNotifiedExams(prev => new Map(prev.set(notificationId, Date.now())));
+        setNotifiedExams(prev => {
+            const updated = new Map(prev.set(notificationId, Date.now()));
+            // Persist to localStorage
+            try {
+                localStorage.setItem('examNotificationTimestamps', JSON.stringify(Array.from(updated.entries())));
+            } catch {
+                console.warn('Failed to persist notification timestamps to localStorage');
+            }
+            return updated;
+        });
     };
 
     useEffect(() => {
