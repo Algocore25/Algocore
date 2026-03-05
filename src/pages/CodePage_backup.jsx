@@ -77,9 +77,9 @@ function CodePage({ data, navigation }) {
     for (const fileName of Object.keys(languageFiles)) {
       // Skip the order field as it's not a file
       if (fileName === 'order') continue;
-      
+
       const fileData = languageFiles[fileName];
-      
+
       if (fileData?.editable) {
         // Try to load saved code from Firebase
         const fileCodeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}/${fileName}`;
@@ -89,7 +89,7 @@ function CodePage({ data, navigation }) {
             let savedCode = fileSnapshot.val();
             // Normalize line endings and remove \r characters
             savedCode = savedCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            
+
             allFileData[fileName] = {
               code: savedCode,
               editable: true,
@@ -100,7 +100,7 @@ function CodePage({ data, navigation }) {
             let defaultCode = fileData.code || '';
             // Normalize line endings and remove \r characters
             defaultCode = defaultCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            
+
             allFileData[fileName] = {
               code: defaultCode,
               editable: true,
@@ -113,7 +113,7 @@ function CodePage({ data, navigation }) {
           let fallbackCode = fileData.code || '';
           // Normalize line endings and remove \r characters
           fallbackCode = fallbackCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-          
+
           allFileData[fileName] = {
             code: fallbackCode,
             editable: true,
@@ -126,7 +126,7 @@ function CodePage({ data, navigation }) {
         let defaultCode = fileData.code || '';
         // Normalize line endings and remove \r characters
         defaultCode = defaultCode.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        
+
         allFileData[fileName] = {
           code: defaultCode,
           editable: false,
@@ -153,26 +153,26 @@ function CodePage({ data, navigation }) {
 
     console.log('🔗 Combining multi-files for execution...');
     const combinedParts = [];
-    
+
     // Get file order from questionData, default to alphabetical if not specified
     const languageFiles = questionData?.defaultCode?.[selectedLanguage] || {};
     const fileOrder = questionData?.defaultCode?.[selectedLanguage]?.order || Object.keys(languageFiles).filter(key => key !== 'order').sort();
-    
+
     console.log('📋 File order from Firebase:', fileOrder);
     console.log('📋 Available language files:', Object.keys(languageFiles).filter(key => key !== 'order'));
-    
+
     for (const fileName of fileOrder) {
       // Skip if fileName is 'order' (not a file)
       if (fileName === 'order') {
         console.log('⏭️ Skipping order field:', fileName);
         continue;
       }
-      
+
       const fileData = multiFileData[fileName];
       if (fileData && fileData.code) {
         // Check if file is visible before including
         const isVisible = languageFiles[fileName]?.visible !== false;
-        
+
         if (isVisible) {
           // Normalize line endings and remove \r characters
           const normalizedCode = fileData.code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -185,7 +185,7 @@ function CodePage({ data, navigation }) {
         console.log(`❌ File data not found: ${fileName}`);
       }
     }
-    
+
     const combinedCode = combinedParts.join('\n');
     console.log('✅ Combined code created:', {
       totalFiles: fileOrder.length,
@@ -194,7 +194,7 @@ function CodePage({ data, navigation }) {
       files: fileOrder,
       hasCarriageReturns: combinedCode.includes('\r')
     });
-    
+
     return combinedCode;
   }, [isMultiFile, multiFileData, code, questionData, selectedLanguage]);
 
@@ -254,7 +254,7 @@ function CodePage({ data, navigation }) {
     );
   }, [isMultiFile]);
 
- 
+
   const [isStateFinalized, setIsStateFinalized] = useState(false);
 
   // Prevent copy, cut, and paste
@@ -435,12 +435,12 @@ function CodePage({ data, navigation }) {
 
   const handleSubmit2 = async () => {
 
-    console.log( JSON.stringify(multiFileData) )
+    console.log(JSON.stringify(multiFileData))
 
-    
+
 
     const testCases = questionData.testcases;
-    
+
     // Get combined code for multi-file projects
     const sourceCode = combineMultiFileCode();
     console.log('🚀 Submitting code with:', {
@@ -448,10 +448,10 @@ function CodePage({ data, navigation }) {
       sourceLength: sourceCode.length,
       language: selectedLanguage
     });
-    
+
     // Set combined code for display
     setCombinedCodeDisplay(sourceCode);
-    
+
     const initialResults = testCases.map(tc => ({
       input: tc.input,
       expected: tc.expectedOutput,
@@ -704,11 +704,11 @@ function CodePage({ data, navigation }) {
 
       if (shouldBeMultiFile) {
 
-        if (activeFile === null || activeFile === undefined || activeFile === "" ) {
+        if (activeFile === null || activeFile === undefined || activeFile === "") {
           setActiveFileDirect(availableFiles[0]);
         }
 
-        
+
 
 
         console.log('🔥 USING MULTI-FILE MODE');
@@ -779,7 +779,7 @@ function CodePage({ data, navigation }) {
         } else {
           // Use default code for this file
           let rawCode = questionData?.defaultCode[selectedLanguage][activeFile]?.code || "";
-          
+
           console.log('📄 Loading default code for editable file:', {
             activeFile,
             defaultCodeLength: rawCode?.length,
@@ -840,7 +840,7 @@ function CodePage({ data, navigation }) {
         } else {
           // Use language template for single file mode
           let rawCode = languageTemplates[selectedLanguage] || "";
-          
+
           console.log('📄 Loading language template:', {
             selectedLanguage,
             hasTemplate: !!languageTemplates[selectedLanguage],
@@ -918,22 +918,22 @@ function CodePage({ data, navigation }) {
         const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}/${activeFile}`;
         const dbRef = ref(database, codeKey);
         console.log('💾 Saving multi-file code to:', codeKey);
-        
+
         // 🟡 UPLOADING TO FIREBASE
         console.log(
           `%c🟡 UPLOADING TO FIREBASE\nFile: ${activeFile}\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nCode Length: ${codeToSave?.length}\nTimestamp: ${new Date().toISOString()}`,
           'background: #fff3cd; color: #856404; padding: 8px; border-radius: 4px; font-weight: bold; font-family: monospace; border-left: 4px solid #856404;'
         );
-        
+
         await set(dbRef, codeToSave);
-        
+
         // 🟢 UPLOAD COMPLETED
         console.log(
           `%c🟢 UPLOAD COMPLETED\nFile: ${activeFile}\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nTimestamp: ${new Date().toISOString()}`,
           'background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; font-weight: bold; font-family: monospace; border-left: 4px solid #155724;'
         );
         console.log(`✅ Code auto-saved for ${activeFile} successfully!`);
-        
+
         // 🟢 CODE SAVED TO FIREBASE
         console.log(
           `%c🟢 CODE SAVED TO FIREBASE\nFile: ${activeFile}\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nTimestamp: ${new Date().toISOString()}`,
@@ -944,22 +944,22 @@ function CodePage({ data, navigation }) {
         const codeKey = `savedCode/${user.uid}/${course}/${questionId}/${selectedLanguage}`;
         const dbRef = ref(database, codeKey);
         console.log('💾 Saving single-file code to:', codeKey);
-        
+
         // 🟡 UPLOADING TO FIREBASE
         console.log(
           `%c🟡 UPLOADING TO FIREBASE\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nCode Length: ${codeToSave?.length}\nTimestamp: ${new Date().toISOString()}`,
           'background: #fff3cd; color: #856404; padding: 8px; border-radius: 4px; font-weight: bold; font-family: monospace; border-left: 4px solid #856404;'
         );
-        
+
         await set(dbRef, codeToSave);
-        
+
         // 🟢 UPLOAD COMPLETED
         console.log(
           `%c🟢 UPLOAD COMPLETED\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nTimestamp: ${new Date().toISOString()}`,
           'background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; font-weight: bold; font-family: monospace; border-left: 4px solid #155724;'
         );
         console.log("✅ Code auto-saved successfully!");
-        
+
         // 🟢 CODE SAVED TO FIREBASE
         console.log(
           `%c🟢 CODE SAVED TO FIREBASE\nLanguage: ${selectedLanguage}\nPath: ${codeKey}\nTimestamp: ${new Date().toISOString()}`,
@@ -1006,12 +1006,12 @@ function CodePage({ data, navigation }) {
       console.log('Waiting for questionData...');
       return;
     }
-    if(!isMultiFile){
+    if (!isMultiFile) {
       console.log('Waiting for isMultiFile...');
       return;
     }
 
-    if(!activeFile){
+    if (!activeFile) {
       console.log('Waiting for activeFile...');
       return;
     }
@@ -1030,7 +1030,7 @@ function CodePage({ data, navigation }) {
     // Get current file data directly from questionData to avoid stale state
     const currentFileData = questionData?.defaultCode?.[selectedLanguage]?.[activeFile];
     const currentEditable = currentFileData?.editable;
-    
+
     // Check if this change is for the current active file
     // If not, this is a stale change from a previous file, ignore it
     if (!currentFileData) {
@@ -1041,8 +1041,8 @@ function CodePage({ data, navigation }) {
       });
       return;
     }
-    
-    if(!currentEditable === true){
+
+    if (!currentEditable === true) {
       console.log('Waiting for editable file...', { activeFile, currentFileData, currentEditable });
       return;
     }
@@ -1100,7 +1100,7 @@ function CodePage({ data, navigation }) {
     }
 
     console.log('⏰ Autosave scheduled in 500ms...');
-    
+
     // Double-check before scheduling autosave
     if (isMultiFile && activeFile && !currentEditable) {
       console.log('🚫 Autosave blocked - file is not editable:', {
@@ -1110,7 +1110,7 @@ function CodePage({ data, navigation }) {
       });
       return;
     }
-    
+
     saveTimeoutRef.current = setTimeout(() => {
       saveCode(newValue);
     }, 500);
@@ -1121,7 +1121,7 @@ function CodePage({ data, navigation }) {
     setSelectedLanguage(newLanguage);
   }, []);
 
- 
+
 
   // Load code when component mounts or language changes
   useEffect(() => {
@@ -1245,8 +1245,8 @@ function CodePage({ data, navigation }) {
         const fileData = langFiles[fileName];
         // New structure: { code: "...", editable: true/false }
         const fileCode = fileData?.code || fileData || ""; // Handle both old and new format
-        const isEditable = fileData?.editable !== undefined ? fileData.editable : 
-                        (fileName.toLowerCase() === 'drivecode' || fileName.toLowerCase().includes('drive'));
+        const isEditable = fileData?.editable !== undefined ? fileData.editable :
+          (fileName.toLowerCase() === 'drivecode' || fileName.toLowerCase().includes('drive'));
 
         // Ensure fileCode is always stored as a string
         const stringCode = typeof fileCode === 'string' ? fileCode : String(fileCode || '');
@@ -1333,7 +1333,7 @@ function CodePage({ data, navigation }) {
     if (isMultiFile && activeFile && code !== undefined) {
       // Normalize line endings and remove \r characters
       const normalizedCode = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      
+
       setMultiFileData(prev => ({
         ...prev,
         [activeFile]: {
@@ -1352,7 +1352,7 @@ function CodePage({ data, navigation }) {
       const defaultCode = typeof rawCode === 'string' ? rawCode : String(rawCode || '');
       setCode(defaultCode);
       console.log(`Reset ${activeFile} to default:`, defaultCode);
-      
+
       // Save the reset code
       saveCode(defaultCode);
     } else {
@@ -1361,11 +1361,11 @@ function CodePage({ data, navigation }) {
       const template = typeof rawCode === 'string' ? rawCode : String(rawCode || '');
       setCode(template);
       console.log(`Reset to template for ${selectedLanguage}:`, template);
-      
+
       // Save the reset code
       saveCode(template);
     }
-    
+
   };
 
   async function getAllowedLanguageTemplates() {
@@ -1494,64 +1494,74 @@ function CodePage({ data, navigation }) {
 
     registerIntelliSense(editor, monaco);
 
-    // Disable Copy (Ctrl + C)
+    // Completely disable copy command
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-      const copyDisabled = getItemWithExpiry("copyDisabled");
-      console.log(copyDisabled)
-      if (copyDisabled === null) {
-        toast.error("Copy disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("copyDisabled", true, 5000);
-
-        return;
-      }
-
-
+      return false;
     });
 
-    // Disable Paste (Ctrl + V)
+    // Completely disable paste command
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-      const pasteDisabled = getItemWithExpiry("pasteDisabled");
-      if (pasteDisabled === null) {
-        toast.error("Paste disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("pasteDisabled", true, 5000);
-        return;
-      }
-
-
+      return false;
     });
 
+    // Completely disable cut command
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+      return false;
+    });
+
+    // Completely disable Shift+Insert paste
     editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
-      const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
-      if (shiftInsertDisabled === null) {
-        toast.error("Shift insert disabled!😭", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("shiftInsertDisabled", true, 5000);
-
-        return;
-      }
-
-
+      return false;
     });
 
-
-    // 🚫 2. Remove Paste from Right-Click Menu
+    // Disable context menu and right-click
     editor.updateOptions({
-      contextmenu: false, // Disables right-click menu
+      contextmenu: false,
     });
 
-    // 🚫 3. Block Clipboard Events (Prevents extensions & force-paste)
-    const blockPaste = (event) => {
-      event.preventDefault();
-      alert("Pasting is completely disabled!");
-    };
+    // Prevent right-click context menu
+    const editorElement = editor.getDomNode();
+    if (editorElement) {
+      editorElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent selection copy
+      editorElement.addEventListener('copy', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent paste
+      editorElement.addEventListener('paste', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent cut
+      editorElement.addEventListener('cut', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent drag and drop
+      editorElement.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      editorElement.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+    }
 
   }, []);
 
@@ -1973,8 +1983,8 @@ function CodePage({ data, navigation }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-auto">
         <div className="bg-white dark:bg-dark-secondary border-t border-gray-200 dark:border-dark-tertiary p-2 flex justify-between items-center gap-6">
           <div className="flex items-center gap-4">
-          
-            
+
+
             {/* File navigation tabs for multi-file questions */}
             {isMultiFile && availableFiles.length > 0 && (
               <div className="flex items-center gap-2 bg-gray-100 dark:bg-dark-tertiary rounded-lg p-1">
@@ -2102,7 +2112,7 @@ function CodePage({ data, navigation }) {
                 });
                 return;
               }
-              
+
               const isEditable = questionData?.defaultCode?.[selectedLanguage]?.[activeFile]?.editable;
               if (!isEditable) {
                 console.log('🚫 Editor change ignored - file not editable:', {
@@ -2111,7 +2121,7 @@ function CodePage({ data, navigation }) {
                 });
                 return;
               }
-              
+
               // If we pass all checks, handle the change
               handleCodeChange(newValue);
             }}

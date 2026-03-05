@@ -620,48 +620,74 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       resizeObserverRef.current.observe(container);
     }
 
+    // Completely disable copy command
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-      const copyDisabled = getItemWithExpiry("copyDisabled");
-      console.log(copyDisabled)
-      if (copyDisabled === null) {
-        toast.error("Copy disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("copyDisabled", true, 5000);
-
-        return;
-      }
+      return false;
     });
 
+    // Completely disable paste command
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
-      const pasteDisabled = getItemWithExpiry("pasteDisabled");
-      if (pasteDisabled === null) {
-        toast.error("Paste disabled!", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("pasteDisabled", true, 5000);
-        return;
-      }
+      return false;
     });
 
+    // Completely disable cut command
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+      return false;
+    });
+
+    // Completely disable Shift+Insert paste
     editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Insert, () => {
-      const shiftInsertDisabled = getItemWithExpiry("shiftInsertDisabled");
-      if (shiftInsertDisabled === null) {
-        toast.error("Shift insert disabled!😭", {
-          position: "top-right",
-          autoClose: 3000,
-        });
-        setItemWithExpiry("shiftInsertDisabled", true, 5000);
-
-        return;
-      }
+      return false;
     });
 
+    // Disable context menu and right-click
     editor.updateOptions({
       contextmenu: false,
     });
+
+    // Prevent right-click context menu
+    const editorElement = editor.getDomNode();
+    if (editorElement) {
+      editorElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent selection copy
+      editorElement.addEventListener('copy', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent paste
+      editorElement.addEventListener('paste', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent cut
+      editorElement.addEventListener('cut', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      // Prevent drag and drop
+      editorElement.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+
+      editorElement.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, true);
+    }
 
   }, [selectedLanguage]);
 
@@ -1217,8 +1243,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                       Status
                     </label>
                     <p className={`p-3 rounded font-medium ${selectedSubmission.status === 'correct'
-                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                        : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                      : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
                       }`}>
                       {selectedSubmission.status}
                     </p>
