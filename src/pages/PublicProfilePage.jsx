@@ -83,6 +83,7 @@ export default function PublicProfilePage() {
     const [profile, setProfile] = useState(null);
     const [profileUid, setProfileUid] = useState(null);
     const [submissions, setSubmissions] = useState([]);
+    const [courses, setCourses] = useState([]);
     const [activeTab, setActiveTab] = useState("activity");
     const [page, setPage] = useState(0);
     const [copiedLink, setCopiedLink] = useState(false);
@@ -91,6 +92,25 @@ export default function PublicProfilePage() {
     const [followerCount, setFollowerCount] = useState(0);
     const [followingCount, setFollowingCount] = useState(0);
     const PAGE_SIZE = 10;
+
+    const calculateCourseProgress = (lessons, userProgress) => {
+        if (!lessons || typeof lessons !== 'object') return 0;
+        let total = 0;
+        let completed = 0;
+        Object.keys(lessons).forEach(topicKey => {
+            const topic = lessons[topicKey];
+            if (typeof topic !== 'object' || !topic.description) return;
+            const questions = Array.isArray(topic.questions)
+                ? topic.questions
+                : (typeof topic.questions === 'object' ? Object.keys(topic.questions) : []);
+            total += questions.length;
+            const tProg = (userProgress && userProgress[topicKey]) || {};
+            questions.forEach(q => {
+                if (tProg && tProg[q] === true) completed += 1;
+            });
+        });
+        return total > 0 ? Math.round((completed / total) * 100) : 0;
+    };
 
     useEffect(() => {
         if (!username) { setState("notfound"); return; }
@@ -135,6 +155,35 @@ export default function PublicProfilePage() {
                         }
                 }
                 subList.sort((a, b) => b.timestamp - a.timestamp);
+
+                // Fetch courses with progress
+                const coursesSnap = await get(ref(database, 'Courses'));
+                let coursesList = [];
+                if (coursesSnap.exists()) {
+                    const coursesData = coursesSnap.val();
+                    const coursesArr = Array.isArray(coursesData) ? coursesData : Object.values(coursesData);
+                    
+                    coursesList = await Promise.all(
+                        coursesArr.filter(Boolean).map(async (course) => {
+                            try {
+                                const [lessonsSnap, progressSnap] = await Promise.all([
+                                    get(ref(database, `AlgoCore/${course.id}/lessons`)),
+                                    get(ref(database, `userprogress/${foundUid}/${course.id}`))
+                                ]);
+                                const lessons = lessonsSnap.exists() ? lessonsSnap.val() : {};
+                                const userProg = progressSnap.exists() ? progressSnap.val() : {};
+                                const progress = calculateCourseProgress(lessons, userProg);
+                                return { ...course, progress };
+                            } catch (e) {
+                                console.error('Error fetching course progress:', e);
+                                return { ...course, progress: 0 };
+                            }
+                        })
+                    );
+                    // Filter courses with progress > 0
+                    coursesList = coursesList.filter(c => c.progress > 0);
+                }
+                setCourses(coursesList);
 
                 // Follow counts
                 const [followersSnap, followingSnap] = await Promise.all([
@@ -307,9 +356,10 @@ export default function PublicProfilePage() {
                 {/* ── Tab Card ── */}
                 <div className="bg-white/50 dark:bg-dark-tertiary/50 backdrop-blur-md rounded-xl shadow-sm border border-gray-200/50 dark:border-dark-tertiary/50 overflow-hidden w-full">
                     {/* Tab strip */}
-                    <div className="flex border-b border-gray-200 dark:border-gray-700 px-2">
+                    <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 overflow-x-auto">
                         {[
                             { key: "activity", label: "Activity" },
+                            { key: "courses", label: `Courses (${courses.length})` },
                             { key: "submissions", label: `Submissions (${submissions.length})` },
                         ].map(({ key, label }) => (
                             <button
@@ -331,6 +381,36 @@ export default function PublicProfilePage() {
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Coding Activity — Last 6 Months</h3>
                                 <ActivityCalendar submissions={submissions} />
+                            </div>
+                        )}
+
+                        {/* Courses Tab */}
+                        {activeTab === "courses" && (
+                            <div className="space-y-4">
+                                {courses.length === 0 ? (
+                                    <div className="text-center py-16 text-gray-400 dark:text-gray-500">No courses with progress yet.</div>
+                                ) : (
+                                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                                        {courses.map((course, idx) => (
+                                            <div key={idx} className="bg-white/40 dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50 rounded-lg p-4">
+                                                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 line-clamp-2">{course.title}</h4>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 line-clamp-1">{course.description}</p>
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between items-center text-xs">
+                                                        <span className="text-gray-600 dark:text-gray-300">Progress</span>
+                                                        <span className="font-semibold text-blue-600 dark:text-blue-400">{Math.round(course.progress)}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-200/60 dark:bg-gray-700/60 rounded-full h-2 overflow-hidden">
+                                                        <div
+                                                            className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-700"
+                                                            style={{ width: `${Math.round(course.progress)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 
