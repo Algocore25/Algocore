@@ -83,7 +83,7 @@ const disableCopyPaste = () => {
 };
 
 
-// disableCopyPaste();
+disableCopyPaste();
 
 // Disable console logs in production
 if (process.env.NODE_ENV === 'production') {
