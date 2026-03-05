@@ -111,18 +111,10 @@ export default function PublicProfilePage() {
 
                 setProfileUid(foundUid);
 
-                // Progress
-                const progSnap = await get(ref(database, `userprogress/${foundUid}`));
-                let accepted = 0;
-                if (progSnap.exists()) {
-                    const pd = progSnap.val();
-                    for (const ck in pd) for (const sk in pd[ck]) for (const qId in pd[ck][sk])
-                        if (pd[ck][sk][qId] === true) accepted++;
-                }
-
-                // Submissions
+                // Submissions (count both total and accepted from the same source)
                 const subSnap = await get(ref(database, `Submissions/${foundUid}`));
                 let total = 0;
+                let accepted = 0;
                 const subList = [];
                 if (subSnap.exists()) {
                     const sd = subSnap.val();
@@ -130,6 +122,10 @@ export default function PublicProfilePage() {
                         for (const ts in sd[ck][sk][qId]) {
                             const s = sd[ck][sk][qId][ts];
                             total++;
+                            // Count accepted submissions from actual submission status
+                            if (s.status === "correct") {
+                                accepted++;
+                            }
                             subList.push({
                                 problem: qId, course: ck, subcourse: sk,
                                 language: s.language || "N/A",
