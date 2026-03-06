@@ -118,7 +118,7 @@ export const AuthProvider = ({ children }) => {
           const snap = await get(sessionRef);
           const currentSession = snap.val();
 
-        
+
 
 
           if (!currentSession || currentSession.sessionId === sessionIdRef.current || isManualLogoutRef.current) {
@@ -425,8 +425,8 @@ export const AuthProvider = ({ children }) => {
 
       const result = await signInWithPopup(auth, provider);
 
-      // Store user data in database
-      await set(ref(database, `users/${result.user.uid}`), {
+      // Store user data in database using update() to preserve existing profile data
+      await update(ref(database, `users/${result.user.uid}`), {
         email: result.user.email,
         name: result.user.displayName,
         profilePhoto: result.user.photoURL,
