@@ -21,12 +21,20 @@ const ActivityCalendar = ({ submissions }) => {
   const gridEnd = new Date(today);
   gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()));
 
+  // Helper to get local date string YYYY-MM-DD
+  const getLocalDateStr = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Map submission counts per date
   const countsMap = useMemo(() => {
     const map = new Map();
     submissions.forEach((s) => {
       const d = new Date(s.timestamp);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = getLocalDateStr(d);
       map.set(dateStr, (map.get(dateStr) || 0) + 1);
     });
     return map;
@@ -37,7 +45,7 @@ const ActivityCalendar = ({ submissions }) => {
     const days = [];
     const cur = new Date(gridStart);
     while (cur <= gridEnd) {
-      const dateStr = cur.toISOString().split("T")[0];
+      const dateStr = getLocalDateStr(cur);
       days.push({
         date: new Date(cur),
         dateStr,
@@ -151,7 +159,7 @@ const ActivityCalendar = ({ submissions }) => {
                 style={{ gap: `${cellGap}px` }}
               >
                 {week.map((day, j) => {
-                  const isToday = day.dateStr === today.toISOString().split("T")[0];
+                  const isToday = day.dateStr === getLocalDateStr(today);
                   const hasSubmissions = day.count > 0;
 
                   return (

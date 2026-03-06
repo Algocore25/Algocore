@@ -72,37 +72,43 @@ const getStatusColor = (status) => {
 const calculateStreak = (submissions) => {
   if (!submissions || submissions.length === 0) return 0;
 
+  // Helper to get local date string YYYY-MM-DD
+  const getLocalDateStr = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Get unique dates with submissions (format: YYYY-MM-DD)
   const submissionDates = new Set();
   submissions.forEach(s => {
     const date = new Date(s.timestamp);
-    const dateStr = date.toISOString().split('T')[0];
-    submissionDates.add(dateStr);
+    submissionDates.add(getLocalDateStr(date));
   });
 
   // Start from today and go backwards
   let streak = 0;
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayStr = getLocalDateStr(today);
 
-  let currentDate = new Date(today);
-
-  // Check if there's a submission today or yesterday to start counting
-  const todayStr = today.toISOString().split('T')[0];
-  const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = getLocalDateStr(yesterday);
 
   if (!submissionDates.has(todayStr) && !submissionDates.has(yesterdayStr)) {
     return 0;
   }
 
+  let currentDate = new Date(today);
   // If today has no submission but yesterday does, start from yesterday
   if (!submissionDates.has(todayStr) && submissionDates.has(yesterdayStr)) {
-    currentDate = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    currentDate = yesterday;
   }
 
   // Count consecutive days backwards
   while (true) {
-    const dateStr = currentDate.toISOString().split('T')[0];
+    const dateStr = getLocalDateStr(currentDate);
     if (submissionDates.has(dateStr)) {
       streak++;
       currentDate.setDate(currentDate.getDate() - 1);
