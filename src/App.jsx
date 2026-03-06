@@ -34,7 +34,6 @@ const LearnPage = lazy(() => import('./pages/LearnPage'));
 const CourseDetailsPage = lazy(() => import('./pages/CourseDetailsPage'));
 const FirebaseUploadPage = lazy(() => import('./pages/FirebaseUploadPage'));
 const DeleteProgressPage = lazy(() => import('./pages/DeleteProgressPage'));
-const QuestionSearchAndEdit = lazy(() => import('./pages/QuestionSearchAndEdit'));
 const AllQuestionsPage = lazy(() => import('./pages/AllQuestionsPage'));
 
 
@@ -122,7 +121,6 @@ function App() {
                 <>
                   <Route path="/firebase-upload" element={<FirebaseUploadPage />} />
                   <Route path="/delete-progress" element={<DeleteProgressPage />} />
-                  <Route path="/question-search" element={<QuestionSearchAndEdit />} />
                 </>
               )}
 

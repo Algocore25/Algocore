@@ -75,11 +75,10 @@ const Navbar = () => {
     isAdmin && { label: 'Students', href: '/adminmonitor' },
     isAdmin && { label: 'All Questions', href: '/all-questions' },
     isAdmin && { label: 'Reports', href: '/admin-reports' },
-    isAdmin && { label: 'Email Center', href: '/admin-email' },
+    // isAdmin && { label: 'Email Center', href: '/admin-email' },
     { label: 'Compiler', href: '/compiler' },
     process.env.NODE_ENV === 'development' && { label: 'Firebase Upload', href: '/firebase-upload' },
     process.env.NODE_ENV === 'development' && { label: 'Delete Progress', href: '/delete-progress' },
-    process.env.NODE_ENV === 'development' && { label: 'Question Search', href: '/question-search' },
   ].filter(Boolean);
 
   // Learn item - separate to be positioned on the right
