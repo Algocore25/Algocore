@@ -26,7 +26,7 @@ const wrapInHtmlTemplate = (title, body, name) => {
           ${formattedBody}
         </div>
         <div style="margin-top: 32px; padding-top: 24px; border-t: 1px solid #f1f5f9;">
-          <a href="https://algocore.in" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">Visit AlgoCore</a>
+          <a href="https://algocore.netlify.app/" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">Visit AlgoCore</a>
         </div>
       </div>
       <div style="padding: 24px; background-color: #f8fafc; text-align: center; border-top: 1px solid #f1f5f9;">

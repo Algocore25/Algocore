@@ -46,7 +46,7 @@ export const getWelcomeTemplate = (name) => {
             <li>Compete in upcoming coding assessments</li>
           </ul>
         </div>
-        <a href="https://algocore.in" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; transition: background-color 0.2s;">Get Started Now</a>
+        <a href="https://algocore.netlify.app/" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; transition: background-color 0.2s;">Get Started Now</a>
       </div>
       <div style="padding: 24px; background-color: #f1f5f9; text-align: center;">
         <p style="font-size: 12px; color: #64748b; margin: 0;">&copy; 2026 AlgoCore. All rights reserved.</p>
