@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import emailjs from '@emailjs/browser';
+import { sendEmailService } from '../../utils/emailService';
 import { ref, get, set as fbSet } from 'firebase/database';
 import { database } from '../../firebase';
 import toast from 'react-hot-toast';
@@ -8,11 +8,33 @@ import {
     FiAlertCircle, FiSettings, FiEye, FiEdit3, FiSearch
 } from 'react-icons/fi';
 
-// ─── EmailJS Config ────────────────────────────────────────────────────────────
-// Fill in YOUR EmailJS credentials here:
-const EMAILJS_SERVICE_ID = 'YOUR_SERVICE_ID';   // e.g. 'service_abc123'
-const EMAILJS_TEMPLATE_ID = 'YOUR_TEMPLATE_ID';  // e.g. 'template_xyz789'
-const EMAILJS_PUBLIC_KEY = 'YOUR_PUBLIC_KEY';   // e.g. 'A1b2C3d4E5f6G7h8'
+// ─── EmailJS Config — DEPRECATED (Using Netlify Functions now) ──────────────────
+// No longer needs public/private keys in frontend.
+
+/**
+ * Helper to wrap plain text body into a premium responsive HTML email.
+ */
+const wrapInHtmlTemplate = (title, body, name) => {
+    const formattedBody = body.replace(/\{\{to_name\}\}/g, name).replace(/\n/g, '<br/>');
+    return `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+      <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 32px 24px; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">${title}</h1>
+      </div>
+      <div style="padding: 32px 24px;">
+        <div style="color: #334155; font-size: 16px; line-height: 1.6;">
+          ${formattedBody}
+        </div>
+        <div style="margin-top: 32px; padding-top: 24px; border-t: 1px solid #f1f5f9;">
+          <a href="https://algocore.in" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">Visit AlgoCore</a>
+        </div>
+      </div>
+      <div style="padding: 24px; background-color: #f8fafc; text-align: center; border-top: 1px solid #f1f5f9;">
+        <p style="font-size: 12px; color: #94a3b8; margin: 0;">&copy; 2026 AlgoCore — Advanced Learning Platform</p>
+      </div>
+    </div>
+  `;
+};
 
 // ─── Pre-built templates ───────────────────────────────────────────────────────
 const PRESET_TEMPLATES = [
@@ -297,29 +319,8 @@ const EmailPage = () => {
         setPreview(false);
     };
 
-    // ── Save EmailJS config to Firebase ──────────────────────────────────────
-    const saveConfig = async () => {
-        if (!serviceId.trim() || !templateId.trim() || !publicKey.trim()) {
-            toast.error('All three fields are required.');
-            return;
-        }
-        setSavingConfig(true);
-        try {
-            await fbSet(ref(database, 'adminConfig/emailjs'), {
-                serviceId: serviceId.trim(),
-                templateId: templateId.trim(),
-                publicKey: publicKey.trim(),
-                updatedAt: new Date().toISOString(),
-            });
-            setShowConfig(false);
-            toast.success('✅ EmailJS configuration saved to Firebase!');
-        } catch (err) {
-            console.error('Failed to save EmailJS config:', err);
-            toast.error('Failed to save configuration. Check Firebase rules.');
-        } finally {
-            setSavingConfig(false);
-        }
-    };
+    // Config functions removed as EmailJS is no longer used
+    const saveConfig = () => { };
 
     // ── Send emails ───────────────────────────────────────────────────────────
     const handleSend = async () => {
@@ -350,19 +351,18 @@ const EmailPage = () => {
             }
 
             try {
-                await emailjs.send(
-                    serviceId.trim(),
-                    templateId.trim(),
-                    {
-                        to_email: student.email,
-                        to_name: student.name,
-                        subject,
-                        message: body.replace(/\{\{to_name\}\}/g, student.name),
-                        reply_to: 'noreply@algocore.in',
-                    },
-                    { publicKey: publicKey.trim() }
-                );
-                sent++;
+                const result = await sendEmailService({
+                    to: student.email,
+                    subject,
+                    text: body.replace(/\{\{to_name\}\}/g, student.name),
+                    html: wrapInHtmlTemplate(subject, body, student.name)
+                });
+                if (result.success) {
+                    sent++;
+                } else {
+                    console.error(`Status failed for ${student.email}:`, result.error);
+                    failed++;
+                }
             } catch (err) {
                 console.error(`Failed to send to ${student.email}:`, err);
                 failed++;
@@ -401,14 +401,7 @@ const EmailPage = () => {
                     </p>
                 </div>
 
-                {/* Config button */}
-                <button
-                    onClick={() => setShowConfig(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-blue-400 dark:hover:border-blue-500 transition-all text-sm font-medium"
-                >
-                    <FiSettings size={15} />
-                    EmailJS Config
-                </button>
+                {/* Config button hidden as it's no longer needed */}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -607,77 +600,7 @@ const EmailPage = () => {
                 </div>
             </div>
 
-            {/* ── EmailJS Config Modal ──────────────────────────────────────────── */}
-            {showConfig && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                <FiSettings className="text-blue-500" /> EmailJS Configuration
-                            </h3>
-                            <button onClick={() => setShowConfig(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                                <FiX size={20} />
-                            </button>
-                        </div>
-                        <div className="px-6 py-5 space-y-4">
-                            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
-                                Get your credentials from{' '}
-                                <a
-                                    href="https://www.emailjs.com/"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="underline font-semibold"
-                                >
-                                    emailjs.com
-                                </a>
-                                . These are stored locally in your browser.
-                            </div>
-
-                            {[
-                                { label: 'Service ID', value: serviceId, set: setServiceId, ph: 'service_abc123' },
-                                { label: 'Template ID', value: templateId, set: setTemplateId, ph: 'template_xyz789' },
-                                { label: 'Public Key', value: publicKey, set: setPublicKey, ph: 'A1b2C3d4E5f6...' },
-                            ].map(({ label, value, set, ph }) => (
-                                <div key={label}>
-                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">
-                                        {label}
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={value}
-                                        onChange={(e) => set(e.target.value)}
-                                        placeholder={ph}
-                                        className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white text-sm font-mono focus:outline-none focus:border-blue-400 transition-colors"
-                                    />
-                                </div>
-                            ))}
-
-                            <div className="pt-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
-                                <strong className="text-gray-600 dark:text-gray-300">EmailJS Template Variables:</strong>
-                                <br />
-                                Your template must use these variables:
-                                <code className="block mt-1 bg-gray-100 dark:bg-gray-700 rounded p-2 font-mono">
-                                    {'{{to_email}}, {{to_name}}, {{subject}}, {{message}}, {{reply_to}}'}
-                                </code>
-                            </div>
-                        </div>
-                        <div className="px-6 pb-5 flex justify-end gap-3">
-                            <button
-                                onClick={() => setShowConfig(false)}
-                                className="px-4 py-2 rounded-xl border-2 border-gray-200 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={saveConfig}
-                                className="px-5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold shadow-lg shadow-blue-500/30 transition-all"
-                            >
-                                Save Configuration
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Configuration modal removed as service is now centralized */}
         </div>
     );
 };

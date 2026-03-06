@@ -13,6 +13,7 @@ import { ref, set, onValue, onDisconnect, remove, update, get } from 'firebase/d
 import { database } from '../firebase';
 
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { sendEmailService, getWelcomeTemplate, getLoginNotificationTemplate } from '../utils/emailService';
 
 const AuthContext = createContext(null);
 
@@ -425,14 +426,44 @@ export const AuthProvider = ({ children }) => {
 
       const result = await signInWithPopup(auth, provider);
 
+      const userRef = ref(database, `users/${result.user.uid}`);
+      const userSnap = await get(userRef);
+      const isFirstLogin = !userSnap.exists();
+
       // Store user data in database using update() to preserve existing profile data
-      await update(ref(database, `users/${result.user.uid}`), {
+      await update(userRef, {
         email: result.user.email,
         name: result.user.displayName,
         profilePhoto: result.user.photoURL,
         lastLogin: Date.now(),
         provider: 'google'
       });
+
+      // Send appropriate email notification
+      try {
+        const userName = result.user.displayName || 'User';
+        const userEmail = result.user.email;
+
+        if (isFirstLogin) {
+          await sendEmailService({
+            to: userEmail,
+            subject: 'Welcome to AlgoCore!',
+            text: `Hi ${userName}, Welcome to AlgoCore! We're thrilled to have you join our community.`,
+            html: getWelcomeTemplate(userName)
+          });
+          console.log('Welcome email sent to new user');
+        } else {
+          await sendEmailService({
+            to: userEmail,
+            subject: 'New Login Detected - AlgoCore',
+            text: `Hello ${userName}, your AlgoCore account was just accessed from a new device.`,
+            html: getLoginNotificationTemplate(userName)
+          });
+          console.log('Login notification email sent to existing user');
+        }
+      } catch (err) {
+        console.warn('Silent failure sending login email:', err);
+      }
 
       console.log('Google sign-in successful');
       toast.success('Signed in successfully!');
@@ -461,6 +492,19 @@ export const AuthProvider = ({ children }) => {
       const user = userCredential.user;
       console.log('User signed in:', user);
       toast.success('Successfully signed in!');
+
+      // Send login notification for email/password login too
+      try {
+        const userName = user.displayName || user.email.split('@')[0];
+        await sendEmailService({
+          to: user.email,
+          subject: 'New Login Detected - AlgoCore',
+          text: `Hello ${userName}, your AlgoCore account was just accessed.`,
+          html: getLoginNotificationTemplate(userName)
+        });
+      } catch (err) {
+        console.warn('Failed to send login email for password user:', err);
+      }
     } catch (error) {
       console.error('Error during login:', error);
       if (error.code === 'auth/wrong-password') {
