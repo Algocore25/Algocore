@@ -412,10 +412,10 @@ function AllQuestionsPage() {
   // Get difficulty color
   const getDifficultyColor = (difficulty) => {
     switch (difficulty?.toLowerCase()) {
-      case 'easy': return 'text-green-600 bg-green-100';
-      case 'medium': return 'text-yellow-600 bg-yellow-100';
-      case 'hard': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'easy': return 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400';
+      case 'medium': return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400';
+      case 'hard': return 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400';
+      default: return 'text-gray-600 bg-gray-100 dark:bg-dark-tertiary dark:text-gray-400';
     }
   };
 
@@ -940,33 +940,31 @@ function AllQuestionsPage() {
                     </div>
                   </div>
 
-                  <div className="border-t border-gray-200 dark:border-dark-tertiary pt-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Course Mapping:</span>
-                        {question.isMapped ? (
-                          <span className="text-xs text-green-600 font-medium">
-                            ✓ {question.mappedCourses.length} course(s)
-                          </span>
-                        ) : (
-                          <span className="text-xs text-red-600 font-medium">✗ Not mapped</span>
-                        )}
-                      </div>
-                      {question.isMapped && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {question.mappedCourses.map(course => (
-                            <span key={course.id} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-medium border border-blue-200">
-                              📘 {course.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {!question.isMapped && (
-                        <div className="text-xs text-gray-500 italic">
-                          This question is not assigned to any course
-                        </div>
+                  <div className="border-t border-gray-200 dark:border-dark-tertiary pt-6 mt-2">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">Course Mapping</span>
+                      {question.isMapped ? (
+                        <span className="text-sm text-green-600 dark:text-green-400 font-bold">
+                          ✓ {question.mappedCourses.length} Courses Linked
+                        </span>
+                      ) : (
+                        <span className="text-sm text-red-500 dark:text-red-400 font-bold uppercase italic tracking-tighter">✗ Unmapped</span>
                       )}
                     </div>
+                    {question.isMapped && (
+                      <div className="flex flex-wrap gap-2">
+                        {question.mappedCourses.map(course => (
+                          <span key={course.id} className="px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 text-xs rounded-lg font-bold border border-blue-100 dark:border-blue-800/50">
+                            {course.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {!question.isMapped && (
+                      <div className="text-xs text-gray-500 dark:text-gray-500 italic bg-gray-50 dark:bg-dark-tertiary/20 p-2 rounded-lg border border-dashed border-gray-200 dark:border-dark-tertiary">
+                        This question is floating and not assigned to any educational journey yet.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -974,106 +972,106 @@ function AllQuestionsPage() {
           </div>
         )}
 
-      {/* No Results */}
-      {filteredQuestions.length === 0 && (
-        <div className="text-center py-20 bg-white dark:bg-dark-secondary rounded-xl border border-gray-200 dark:border-dark-tertiary shadow-sm">
-          <div className="text-gray-400 dark:text-gray-600 mb-6">
-            <Search size={64} className="mx-auto" />
+        {/* No Results */}
+        {filteredQuestions.length === 0 && (
+          <div className="text-center py-20 bg-white dark:bg-dark-secondary rounded-xl border border-gray-200 dark:border-dark-tertiary shadow-sm">
+            <div className="text-gray-400 dark:text-gray-600 mb-6">
+              <Search size={64} className="mx-auto" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No questions found</h3>
+            <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+              We couldn't find any questions matching your current search or filter criteria. Try adjusting them.
+            </p>
           </div>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No questions found</h3>
-          <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-            We couldn't find any questions matching your current search or filter criteria. Try adjusting them.
-          </p>
+        )}
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && questionToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm shadow-2xl" onClick={() => setShowDeleteModal(false)}></div>
+          <div className="bg-white dark:bg-dark-secondary rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative z-10 animate-slideUp">
+            <div className="p-8">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Delete Question</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    This action is permanent and cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-8 p-4 bg-gray-50 dark:bg-dark-tertiary/50 rounded-xl border border-gray-100 dark:border-dark-tertiary">
+                <p className="text-base font-bold text-gray-900 dark:text-white">{questionToDelete.questionname}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">ID: {questionToDelete.id}</p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setQuestionToDelete(null);
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-tertiary hover:bg-gray-200 dark:hover:bg-dark-tertiary/80 rounded-xl transition-all"
+                >
+                  Keep Question
+                </button>
+                <button
+                  onClick={() => deleteQuestion(questionToDelete.id)}
+                  className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 rounded-xl transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
-    </div>
 
-    {/* Delete Confirmation Modal */}
-    {showDeleteModal && questionToDelete && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm shadow-2xl" onClick={() => setShowDeleteModal(false)}></div>
-        <div className="bg-white dark:bg-dark-secondary rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative z-10 animate-slideUp">
-          <div className="p-8">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm shadow-2xl" onClick={() => setShowBulkDeleteModal(false)}></div>
+          <div className="bg-white dark:bg-dark-secondary rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative z-10 animate-slideUp">
+            <div className="p-8">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Bulk Delete</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    You are about to delete multiple questions.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Delete Question</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  This action is permanent and cannot be undone.
-                </p>
+
+              <div className="mb-8 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-900/40 text-center">
+                <span className="text-3xl font-black text-red-600 dark:text-red-400">{selectedQuestions.size}</span>
+                <p className="text-sm font-bold text-red-700 dark:text-red-300 mt-1 uppercase tracking-wider">Questions Selected</p>
               </div>
-            </div>
 
-            <div className="mb-8 p-4 bg-gray-50 dark:bg-dark-tertiary/50 rounded-xl border border-gray-100 dark:border-dark-tertiary">
-              <p className="text-base font-bold text-gray-900 dark:text-white">{questionToDelete.questionname}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">ID: {questionToDelete.id}</p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setQuestionToDelete(null);
-                }}
-                className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-tertiary hover:bg-gray-200 dark:hover:bg-dark-tertiary/80 rounded-xl transition-all"
-              >
-                Keep Question
-              </button>
-              <button
-                onClick={() => deleteQuestion(questionToDelete.id)}
-                className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 rounded-xl transition-all"
-              >
-                Delete
-              </button>
+              <div className="flex flex-col sm:flex-row justify-end gap-3">
+                <button
+                  onClick={() => setShowBulkDeleteModal(false)}
+                  className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-tertiary hover:bg-gray-200 dark:hover:bg-dark-tertiary/80 rounded-xl transition-all"
+                >
+                  Keep Questions
+                </button>
+                <button
+                  onClick={bulkDeleteQuestions}
+                  className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 rounded-xl transition-all"
+                >
+                  Delete {selectedQuestions.size} Questions
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    )}
-
-    {/* Bulk Delete Confirmation Modal */}
-    {showBulkDeleteModal && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm shadow-2xl" onClick={() => setShowBulkDeleteModal(false)}></div>
-        <div className="bg-white dark:bg-dark-secondary rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative z-10 animate-slideUp">
-          <div className="p-8">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="flex-shrink-0 w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Bulk Delete</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  You are about to delete multiple questions.
-                </p>
-              </div>
-            </div>
-
-            <div className="mb-8 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-900/40 text-center">
-              <span className="text-3xl font-black text-red-600 dark:text-red-400">{selectedQuestions.size}</span>
-              <p className="text-sm font-bold text-red-700 dark:text-red-300 mt-1 uppercase tracking-wider">Questions Selected</p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
-              <button
-                onClick={() => setShowBulkDeleteModal(false)}
-                className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-dark-tertiary hover:bg-gray-200 dark:hover:bg-dark-tertiary/80 rounded-xl transition-all"
-              >
-                Keep Questions
-              </button>
-              <button
-                onClick={bulkDeleteQuestions}
-                className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 rounded-xl transition-all"
-              >
-                Delete {selectedQuestions.size} Questions
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
+      )}
     </div>
   );
 }
