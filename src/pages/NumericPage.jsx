@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { ref, get, set } from "firebase/database";
 import { database } from "../firebase";
 import { decodeShort } from '../utils/urlEncoder';
+import { aiApi } from './api';
+
 
 // SVG Icons
 const Icons = {
@@ -31,7 +33,10 @@ function NumericPage({ data }) {
     const [activeTab, setActiveTab] = useState('description');
     const [numericAnswer, setNumericAnswer] = useState('');
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [aiExplanation, setAiExplanation] = useState('');
+    const [loadingAi, setLoadingAi] = useState(false);
     const [leftPanelWidth, setLeftPanelWidth] = useState(45);
+
     const { theme } = useTheme();
     const { user } = useAuth();
     const { course: encCourse, subcourse: encSubcourse, questionId: encQuestionId } = useParams();
@@ -62,7 +67,35 @@ function NumericPage({ data }) {
         };
 
         loadUserAnswer();
+
+        return () => {
+            setNumericAnswer('');
+            setIsSubmitted(false);
+            setAiExplanation('');
+        };
     }, [user, course, subcourse, questionId, data]);
+
+    useEffect(() => {
+        const fetchAiExplanation = async () => {
+            if (isSubmitted && !data.explanation && !aiExplanation && !loadingAi) {
+                setLoadingAi(true);
+                try {
+                    const prompt = `Question: ${data.question}\nCorrect Answer: ${data.numericAnswer}\nProvide a step-by-step mathematical explanation.`;
+                    const res = await aiApi.solveAptitude(prompt);
+                    if (res.data.success) {
+                        setAiExplanation(res.data.response);
+                    }
+                } catch (error) {
+                    console.error("AI Explanation fetch failed:", error);
+                } finally {
+                    setLoadingAi(false);
+                }
+            }
+        };
+
+        fetchAiExplanation();
+    }, [isSubmitted, data, aiExplanation, loadingAi]);
+
 
     const handleSubmit = async () => {
         if (numericAnswer.toString().trim() === '' || !user || !course || !subcourse || !questionId || !data) return;
@@ -140,10 +173,12 @@ function NumericPage({ data }) {
                                         <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
                                             <h2 className="text-lg font-semibold mb-2 text-blue-800 dark:text-blue-200">Explanation</h2>
                                             <p className="text-blue-700 dark:text-blue-300 whitespace-pre-wrap">
-                                                {data.explanation}
+                                                {data.explanation || aiExplanation}
+                                                {loadingAi && <span className="italic block mt-2 opacity-70">Generating AI explanation...</span>}
                                             </p>
                                         </div>
                                     )}
+
                                 </div>
                             </div>
                         )}

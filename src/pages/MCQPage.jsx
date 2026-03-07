@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { ref, get, child, set } from "firebase/database";
 import { database } from "../firebase";
 import { decodeShort } from '../utils/urlEncoder';
+import { aiApi } from './api';
+
 
 // SVG Icons
 const Icons = {
@@ -31,7 +33,10 @@ function MCQPage({ data }) {
   const [activeTab, setActiveTab] = useState('description');
   const [selectedOption, setSelectedOption] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [aiExplanation, setAiExplanation] = useState('');
+  const [loadingAi, setLoadingAi] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(45);
+
   const { theme } = useTheme();
 
   const { user } = useAuth();
@@ -85,8 +90,31 @@ function MCQPage({ data }) {
     return () => {
       setSelectedOption(null);
       setIsSubmitted(false);
+      setAiExplanation('');
     };
   }, [user, course, subcourse, questionId, data]);
+
+  useEffect(() => {
+    const fetchAiExplanation = async () => {
+      if (isSubmitted && !(data.explanation || data.Explanation) && !aiExplanation && !loadingAi) {
+        setLoadingAi(true);
+        try {
+          const prompt = `Question: ${data.question}\nOptions: ${data.options.map((o, i) => `${String.fromCharCode(65 + i)}. ${o}`).join(', ')}\nCorrect Answer: ${String.fromCharCode(64 + data.correctAnswer)}\nProvide a step-by-step explanation.`;
+          const res = await aiApi.solveAptitude(prompt);
+          if (res.data.success) {
+            setAiExplanation(res.data.response);
+          }
+        } catch (error) {
+          console.error("AI Explanation fetch failed:", error);
+        } finally {
+          setLoadingAi(false);
+        }
+      }
+    };
+
+    fetchAiExplanation();
+  }, [isSubmitted, data, aiExplanation, loadingAi]);
+
 
   const handleSubmit2 = async () => {
     if (selectedOption === null || !user || !course || !subcourse || !questionId || !data) return;
@@ -178,10 +206,12 @@ function MCQPage({ data }) {
                     <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
                       <h2 className="text-lg font-semibold mb-2 text-blue-800 dark:text-blue-200">Explanation</h2>
                       <p className="text-blue-700 dark:text-blue-300">
-                        {data.explanation || data.Explanation}
+                        {data.explanation || data.Explanation || aiExplanation}
+                        {loadingAi && <span className="italic block mt-2 opacity-70">Generating AI explanation...</span>}
                       </p>
                     </div>
                   )}
+
                 </div>
               </div>
             )}

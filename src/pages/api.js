@@ -88,7 +88,10 @@ export const executeCode = async (language, sourceCode, input) => {
     throw new Error(`Code execution failed. ${jError.message}`);
   }
 };
-
-
-
-
+export const aiApi = {
+  chat: (messages) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/chat", { messages }),
+  solveAptitude: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/aptitude/solve", { text }),
+  evaluateCode: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/coding/evaluate", { text }),
+  analyzeComplexity: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/coding/complexity", { text }),
+  summarize: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/summarize", { text }),
+};

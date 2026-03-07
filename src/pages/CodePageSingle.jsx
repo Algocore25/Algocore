@@ -22,6 +22,8 @@ import "react-toastify/dist/ReactToastify.css";
 
 import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry";
 import { decodeShort } from '../utils/urlEncoder';
+import { aiApi } from './api';
+
 
 function CodePageSingle({ data, navigation, questionData: propQuestionData, selectedLanguage: propSelectedLanguage }) {
   const [code, setCode] = useState("");
@@ -46,6 +48,11 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const [editorKey, setEditorKey] = useState(0);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [complexity, setComplexity] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+
 
   const inputRef = useRef(null);
   const outputRef = useRef(null);
@@ -110,6 +117,17 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       memory: 0,
       timeout: false,
     }));
+
+    setComplexity(null);
+    try {
+      const compRes = await aiApi.analyzeComplexity(code);
+      if (compRes.data.success) {
+        setComplexity(compRes.data.response);
+      }
+    } catch (err) {
+      console.error("Complexity analysis failed:", err);
+    }
+
 
     console.log(initialResults);
 
@@ -218,6 +236,17 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         memory: 0,
         timeout: false,
       }));
+
+      setComplexity(null);
+      try {
+        const compRes = await aiApi.analyzeComplexity(code);
+        if (compRes.data.success) {
+          setComplexity(compRes.data.response);
+        }
+      } catch (err) {
+        console.error("Complexity analysis failed:", err);
+      }
+
 
       setTestResults(initialResults);
       setOutput(null);
@@ -891,6 +920,15 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                 Submissions
               </div>
             </button>
+            <button
+              className={`px-4 py-3 text-sm font-medium ${activeTab === 'chat' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
+              onClick={() => setActiveTab('chat')}
+            >
+              <div className="flex items-center gap-2">
+                <Icons.MessageSquare />
+                Chat
+              </div>
+            </button>
           </div>
 
           <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
@@ -1053,17 +1091,99 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
             )}
 
             {activeTab === 'output' && (
-              <div className="py-8 px-4 flex flex-col items-center">
+              <div className="py-8 px-4 flex flex-col items-center w-full">
+                {complexity && (
+                  <div className="w-full mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl">
+                    <h3 className="text-indigo-900 dark:text-indigo-100 font-bold mb-2 flex items-center gap-2">
+                      <Icons.Zap size={16} /> Complexity Analysis
+                    </h3>
+                    <p className="text-indigo-800 dark:text-indigo-200 text-sm italic">{complexity}</p>
+                  </div>
+                )}
                 {output ? (
                   <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
                 ) : (
-                  <>
+                  <div className="w-full">
                     <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
-                  </>
+                  </div>
                 )}
                 <GoogleAd className="mt-8" />
               </div>
             )}
+
+            {activeTab === 'chat' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex-1 overflow-y-auto space-y-4 p-4 min-h-0">
+                  {chatMessages.length === 0 && (
+                    <div className="text-center text-gray-400 py-10">
+                      <Icons.Bot size={48} className="mx-auto mb-4 opacity-20" />
+                      <p>Ask anything about this problem or your code!</p>
+                    </div>
+                  )}
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user'
+                        ? 'bg-indigo-600 text-white rounded-tr-none'
+                        : 'bg-gray-100 dark:bg-dark-tertiary text-gray-800 dark:text-gray-200 rounded-tl-none'
+                        }`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-gray-100 dark:bg-dark-tertiary p-3 rounded-2xl rounded-tl-none text-sm animate-pulse">
+                        Thinking...
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-4 border-t border-gray-200 dark:border-dark-tertiary bg-white dark:bg-dark-secondary">
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!chatInput.trim() || isChatLoading) return;
+
+                      const newMessages = [...chatMessages, { role: 'user', content: chatInput }];
+                      setChatMessages(newMessages);
+                      setChatInput('');
+                      setIsChatLoading(true);
+
+                      try {
+                        const history = newMessages.map(m => m.role === 'user' ? `User: ${m.content}` : `Assistant: ${m.content}`).join('\n');
+                        const prompt = `Context: Solving coding problem "${questionData?.questionname}".\nCurrent Code:\n${code}\n\n${history}`;
+                        // We use the chat endpoint. It expects a messages array normally, but our API helper maps it.
+                        const res = await aiApi.chat(newMessages);
+                        if (res.data.success) {
+                          setChatMessages([...newMessages, { role: 'assistant', content: res.data.response }]);
+                        }
+                      } catch (err) {
+                        toast.error("Failed to get AI response");
+                      } finally {
+                        setIsChatLoading(false);
+                      }
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Ask the AI..."
+                      className="flex-1 bg-gray-50 dark:bg-dark-tertiary border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isChatLoading || !chatInput.trim()}
+                      className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    >
+                      <Icons.Send size={20} />
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
 
             {activeTab === 'submissions' && (
               <div className="space-y-4">
@@ -1212,11 +1332,13 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
             />
           </div>
         </div>
+      </div>
 
-        <ToastContainer />
+      <ToastContainer />
 
-        {/* Submission Modal */}
-        {showSubmissionModal && selectedSubmission && (
+      {/* Submission Modal */}
+      {
+        showSubmissionModal && selectedSubmission && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto">
               <div className="sticky top-0 bg-white dark:bg-dark-secondary border-b border-gray-200 dark:border-dark-tertiary p-6 flex justify-between items-center">
@@ -1290,8 +1412,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
               </div>
             </div>
           </div>
-        )}
-      </div>
+        )
+      }
     </>
   );
 };
