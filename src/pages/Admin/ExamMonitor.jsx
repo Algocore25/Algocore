@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import LoadingPage from '../LoadingPage';
 import LiveStreamViewer from '../../LiveProctoring/components/LiveStreamViewerV2';
 import { useNavigate } from 'react-router-dom';
+import { FiUnlock, FiCheckSquare, FiRotateCcw } from 'react-icons/fi';
 
 const ExamMonitor = () => {
     const params = useParams();
@@ -165,6 +166,63 @@ const ExamMonitor = () => {
         } catch (error) {
             console.error('Error unblocking user:', error);
             toast.error('Failed to unblock user.');
+        }
+    };
+
+    const forceSubmitUser = async (userId) => {
+        if (!window.confirm('Are you sure you want to force submit this user\'s exam?')) {
+            return;
+        }
+        try {
+            const progressRef = ref(database, `Exam/${testid}/Properties/Progress/${userId}/status`);
+            const violationRef = ref(database, `Exam/${testid}/Properties2/Progress/${userId}`);
+
+            await set(progressRef, 'completed');
+            await set(violationRef, 0);
+
+            // Calculate and save time taken if startTime exists
+            const user = monitoredData.find(u => u.userId === userId);
+            if (user && user.startTime) {
+                const start = new Date(user.startTime);
+                const now = new Date();
+                const timeTaken = Math.floor((now - start) / 1000); // in seconds
+
+                const timeTakenRef = ref(database, `ExamSubmissions/${testid}/${userId}/timeTaken`);
+                await set(timeTakenRef, timeTaken);
+            }
+
+            toast.success('User\'s exam has been force submitted.');
+        } catch (error) {
+            console.error('Error force submitting user:', error);
+            toast.error('Failed to force submit exam.');
+        }
+    };
+
+    const resetUser = async (userId) => {
+        if (!window.confirm('Are you sure you want to RESET this user? This will delete all their answers and progress. This action cannot be undone!')) {
+            return;
+        }
+        try {
+            // Paths to clear
+            const paths = [
+                `Exam/${testid}/Properties/Progress/${userId}`,
+                `Exam/${testid}/Properties2/Progress/${userId}`,
+                `Exam/${testid}/myquestions/${userId}`,
+                `Exam/${testid}/Violations/${userId}`,
+                `ExamSubmissions/${testid}/${userId}`
+            ];
+
+            const updates = {};
+            paths.forEach(path => {
+                updates[path] = null;
+            });
+
+            await update(ref(database), updates);
+
+            toast.success('User has been reset successfully.');
+        } catch (error) {
+            console.error('Error resetting user:', error);
+            toast.error('Failed to reset user.');
         }
     };
 
@@ -615,14 +673,38 @@ const ExamMonitor = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            {user.status === 'blocked' && (
-                                                <button
-                                                    onClick={() => unblockUser(user.userId)}
-                                                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors duration-200 text-xs"
-                                                >
-                                                    Unblock
-                                                </button>
-                                            )}
+                                            <div className="flex gap-2">
+                                                {user.status === 'blocked' && (
+                                                    <button
+                                                        onClick={() => unblockUser(user.userId)}
+                                                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-all duration-200 text-xs shadow-sm hover:shadow"
+                                                        title="Unblock User"
+                                                    >
+                                                        <FiUnlock className="w-3.5 h-3.5" />
+                                                        Unblock
+                                                    </button>
+                                                )}
+                                                {user.status === 'started' && (
+                                                    <button
+                                                        onClick={() => forceSubmitUser(user.userId)}
+                                                        className="flex items-center gap-1 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-md transition-all duration-200 text-xs shadow-sm hover:shadow"
+                                                        title="Force Submit Exam"
+                                                    >
+                                                        <FiCheckSquare className="w-3.5 h-3.5" />
+                                                        Force Submit
+                                                    </button>
+                                                )}
+                                                {(user.status === 'started' || user.status === 'completed' || user.status === 'blocked') && (
+                                                    <button
+                                                        onClick={() => resetUser(user.userId)}
+                                                        className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md transition-all duration-200 text-xs shadow-sm hover:shadow"
+                                                        title="Reset User Progress"
+                                                    >
+                                                        <FiRotateCcw className="w-3.5 h-3.5" />
+                                                        Reset
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                     {expandedQuestions[user.userId] && (
