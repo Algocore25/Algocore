@@ -18,14 +18,6 @@ import { sendEmailService, getWelcomeTemplate, getLoginNotificationTemplate } fr
 const AuthContext = createContext(null);
 
 
-// List of emails allowed to have multiple sessions and admin privileges
-export const ADMIN_EMAILS = [
-  '99220041106@klu.ac.in'
-];
-
-const MULTI_SESSION_ALLOWED = ADMIN_EMAILS;
-
-
 // Session configuration
 const SESSION_CONFIG = {
   HEARTBEAT_INTERVAL: 30000, // 30 seconds
@@ -35,6 +27,19 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sessionEnforced, setSessionEnforced] = useState(true);
+  const [adminUids, setAdminUids] = useState([]);
+
+  useEffect(() => {
+    const adminRef = ref(database, 'Admins');
+    const unsub = onValue(adminRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setAdminUids(Object.keys(snapshot.val()));
+      } else {
+        setAdminUids([]);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Session management refs
   const sessionIdRef = React.useRef(null);
@@ -395,10 +400,10 @@ export const AuthProvider = ({ children }) => {
     }
 
 
-    const isMultiSessionUser = MULTI_SESSION_ALLOWED.includes(user.email);
+    const isMultiSessionUser = adminUids.includes(user.uid);
 
     if (isMultiSessionUser) {
-      console.log(`Multi-session allowed for ${user.email}. Skipping single-session enforcement.`);
+      console.log(`Multi-session allowed for admin ${user.uid}. Skipping single-session enforcement.`);
       return; // ✅ Skip session enforcement entirely
     }
 
@@ -415,12 +420,12 @@ export const AuthProvider = ({ children }) => {
       clearTimeout(timeoutId);
       cleanupSessionListeners();
     };
-  }, [user?.uid, sessionEnforced, loading, initSingleSession, cleanupSessionListeners]);
+  }, [user?.uid, sessionEnforced, loading, initSingleSession, cleanupSessionListeners, adminUids]);
 
   // Security restrictions (Copy/Paste disable)
   useEffect(() => {
     // Determine admin status
-    const isAdmin = user && user.email && ADMIN_EMAILS.some(email => user.email.includes(email));
+    const isAdmin = user && adminUids.includes(user.uid);
 
     // Skip restrictions on compiler page
     const isCompilerPage = window.location.pathname.startsWith('/compiler');
@@ -431,6 +436,12 @@ export const AuthProvider = ({ children }) => {
       if (isAdmin || isCompilerPage) return;
       e.preventDefault();
     };
+
+    console.log('Security restrictions enabled for user:', user?.uid);
+    console.log('Admin status:', isAdmin);
+    console.log('Compiler page:', isCompilerPage);
+
+    console.log('Admin UIDs:', adminUids);
 
     // Attach listeners
     document.addEventListener("contextmenu", preventDef);
@@ -448,7 +459,7 @@ export const AuthProvider = ({ children }) => {
       document.removeEventListener("selectstart", preventDef);
       document.removeEventListener("dragstart", preventDef);
     };
-  }, [user]);
+  }, [user, adminUids]);
 
   // Enhanced Google sign-in
   const googleSignIn = async () => {

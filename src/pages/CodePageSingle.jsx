@@ -56,6 +56,9 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const [evaluation, setEvaluation] = useState(null); // { score, improvements: [] }
   const [isEvaluating, setIsEvaluating] = useState(false);
 
+  // Global settings
+  const [globalChatbotEnabled, setGlobalChatbotEnabled] = useState(true);
+  const [globalCodeEvaluateEnabled, setGlobalCodeEvaluateEnabled] = useState(true);
 
   const inputRef = useRef(null);
   const outputRef = useRef(null);
@@ -536,6 +539,24 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   }, [user, course, subcourse, questionId, questionData]);
 
   useEffect(() => {
+    const fetchSettings = async () => {
+      if (user?.uid) {
+        try {
+          const snapshot = await get(ref(database, `users/${user.uid}/profile/settings`));
+          if (snapshot.exists()) {
+            const s = snapshot.val();
+            setGlobalChatbotEnabled(s.chatbotEnabled !== false);
+            setGlobalCodeEvaluateEnabled(s.codeEvaluateEnabled !== false);
+          }
+        } catch (e) {
+          console.error("Failed to load settings", e);
+        }
+      }
+    };
+    fetchSettings();
+  }, [user]);
+
+  useEffect(() => {
     if (questionData) {
       const testCases = [
         { input: questionData?.testcases?.[0]?.input || '', expectedOutput: questionData?.testcases?.[0]?.expectedOutput || '' },
@@ -923,15 +944,17 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                 Submissions
               </div>
             </button>
-            <button
-              className={`px-4 py-3 text-sm font-medium ${activeTab === 'chat' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
-              onClick={() => setActiveTab('chat')}
-            >
-              <div className="flex items-center gap-2">
-                <Icons.MessageSquare />
-                Chat
-              </div>
-            </button>
+            {globalChatbotEnabled && (
+              <button
+                className={`px-4 py-3 text-sm font-medium ${activeTab === 'chat' ? 'text-[#4285F4] border-b-2 border-[#4285F4]' : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-white'}`}
+                onClick={() => setActiveTab('chat')}
+              >
+                <div className="flex items-center gap-2">
+                  <Icons.MessageSquare />
+                  Chat
+                </div>
+              </button>
+            )}
           </div>
 
           <div className="p-6 flex-1 min-h-0 overflow-auto h-full">
@@ -1113,79 +1136,81 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                 )}
 
                 {/* ── Evaluate Section ── */}
-                <div className="w-full mb-4">
-                  <button
-                    onClick={async () => {
-                      if (!code?.trim()) return;
-                      setIsEvaluating(true);
-                      setEvaluation(null);
-                      try {
-                        const prompt = `You are a strict code reviewer. Evaluate the following code for the problem "${questionData?.questionname || 'Unknown'}".\n\nCode:\n${code}\n\nRespond ONLY in this exact JSON format (no markdown, no explanation outside JSON):\n{"score": <number 0-100>, "improvements": ["<point 1>", "<point 2>", ...]}`;
-                        const res = await aiApi.evaluateCode(prompt);
-                        const raw = res.data?.response || res.data?.reply || res.data?.content || '';
-                        // Extract JSON from response
-                        const jsonMatch = raw.match(/{[\s\S]*}/);
-                        if (jsonMatch) {
-                          const parsed = JSON.parse(jsonMatch[0]);
-                          setEvaluation(parsed);
-                        } else {
-                          setEvaluation({ score: null, improvements: [raw] });
+                {globalCodeEvaluateEnabled && (
+                  <div className="w-full mb-4">
+                    <button
+                      onClick={async () => {
+                        if (!code?.trim()) return;
+                        setIsEvaluating(true);
+                        setEvaluation(null);
+                        try {
+                          const prompt = `You are a strict code reviewer. Evaluate the following code for the problem "${questionData?.questionname || 'Unknown'}".\n\nCode:\n${code}\n\nRespond ONLY in this exact JSON format (no markdown, no explanation outside JSON):\n{"score": <number 0-100>, "improvements": ["<point 1>", "<point 2>", ...]}`;
+                          const res = await aiApi.evaluateCode(prompt);
+                          const raw = res.data?.response || res.data?.reply || res.data?.content || '';
+                          // Extract JSON from response
+                          const jsonMatch = raw.match(/{[\s\S]*}/);
+                          if (jsonMatch) {
+                            const parsed = JSON.parse(jsonMatch[0]);
+                            setEvaluation(parsed);
+                          } else {
+                            setEvaluation({ score: null, improvements: [raw] });
+                          }
+                        } catch (e) {
+                          console.error('Evaluation failed:', e);
+                          setEvaluation({ score: null, improvements: ['Evaluation failed. Please try again.'] });
+                        } finally {
+                          setIsEvaluating(false);
                         }
-                      } catch (e) {
-                        console.error('Evaluation failed:', e);
-                        setEvaluation({ score: null, improvements: ['Evaluation failed. Please try again.'] });
-                      } finally {
-                        setIsEvaluating(false);
-                      }
-                    }}
-                    disabled={isEvaluating || !code?.trim()}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow transition-all"
-                  >
-                    {isEvaluating ? (
-                      <><Icons.Loader size={14} className="animate-spin" /> Evaluating…</>
-                    ) : (
-                      <><Icons.Star size={14} /> Evaluate Code</>
-                    )}
-                  </button>
+                      }}
+                      disabled={isEvaluating || !code?.trim()}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow transition-all"
+                    >
+                      {isEvaluating ? (
+                        <><Icons.Loader size={14} className="animate-spin" /> Evaluating…</>
+                      ) : (
+                        <><Icons.Star size={14} /> Evaluate Code</>
+                      )}
+                    </button>
 
-                  {evaluation && (
-                    <div className="mt-4 p-4 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
-                      {/* Score ring */}
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black border-4 ${evaluation.score >= 80 ? 'border-green-500 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
+                    {evaluation && (
+                      <div className="mt-4 p-4 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+                        {/* Score ring */}
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black border-4 ${evaluation.score >= 80 ? 'border-green-500 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
                             : evaluation.score >= 50 ? 'border-yellow-500 text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20'
                               : 'border-red-500 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
-                          }`}>
-                          {evaluation.score ?? '?'}
-                        </div>
-                        <div>
-                          <p className="text-base font-bold text-gray-800 dark:text-gray-100">Code Score</p>
-                          <p className={`text-sm font-semibold ${evaluation.score >= 80 ? 'text-green-600 dark:text-green-400'
+                            }`}>
+                            {evaluation.score ?? '?'}
+                          </div>
+                          <div>
+                            <p className="text-base font-bold text-gray-800 dark:text-gray-100">Code Score</p>
+                            <p className={`text-sm font-semibold ${evaluation.score >= 80 ? 'text-green-600 dark:text-green-400'
                               : evaluation.score >= 50 ? 'text-yellow-600 dark:text-yellow-400'
                                 : 'text-red-600 dark:text-red-400'
-                            }`}>
-                            {evaluation.score >= 80 ? '🎉 Great job!' : evaluation.score >= 50 ? '👍 Room to improve' : '⚠️ Needs work'}
-                          </p>
+                              }`}>
+                              {evaluation.score >= 80 ? '🎉 Great job!' : evaluation.score >= 50 ? '👍 Room to improve' : '⚠️ Needs work'}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Improvements */}
-                      {evaluation.improvements?.length > 0 && evaluation.score < 100 && (
-                        <div>
-                          <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">What to improve:</p>
-                          <ul className="space-y-1.5">
-                            {evaluation.improvements.map((point, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                <span className="mt-0.5 text-violet-500 shrink-0">•</span>
-                                {point}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        {/* Improvements */}
+                        {evaluation.improvements?.length > 0 && evaluation.score < 100 && (
+                          <div>
+                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">What to improve:</p>
+                            <ul className="space-y-1.5">
+                              {evaluation.improvements.map((point, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                  <span className="mt-0.5 text-violet-500 shrink-0">•</span>
+                                  {point}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <GoogleAd className="mt-8" />
               </div>

@@ -14,6 +14,7 @@ import SignInRequiredPage from "./SignInRequiredPage";
 import LoadingPage from "./LoadingPage";
 import useUserActivityTime from '../hooks/useUserActivityTime';
 import ActivityCalendar from './ActivityCalendar';
+import { sendEmailService } from '../utils/emailService';
 import AnimatedBackground from '../components/AnimatedBackground';
 import GoogleAd from '../components/GoogleAd';
 import Footer from '../components/Footer';
@@ -229,6 +230,11 @@ function ProfilePage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 10;
 
+  // Global Settings
+  const [globalChatbotEnabled, setGlobalChatbotEnabled] = useState(true);
+  const [globalCodeEvaluateEnabled, setGlobalCodeEvaluateEnabled] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
   // ── Data loading ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
@@ -271,6 +277,12 @@ function ProfilePage() {
       const gh = profileNode.githubLink || '';
       setGithubLink(gh);
       setGithubDraft(gh);
+
+      // Settings
+      if (profileNode.settings) {
+        setGlobalChatbotEnabled(profileNode.settings.chatbotEnabled !== false);
+        setGlobalCodeEvaluateEnabled(profileNode.settings.codeEvaluateEnabled !== false);
+      }
 
       setProfileData({
         username: profileNode.username,
@@ -514,6 +526,10 @@ function ProfilePage() {
 
   // ── Follow toggle from search tab ────────────────────────────────────────
   const handleSearchFollow = async (e, targetUid) => {
+
+
+
+
     e.stopPropagation();
     setSearchLoadingFollow(prev => new Set(prev).add(targetUid));
     const curFollowing = searchFollowingSet.has(targetUid);
@@ -534,6 +550,34 @@ function ProfilePage() {
         setSearchFollowingSet(prev => new Set(prev).add(targetUid));
         setSearchUsers(prev => prev.map(u => u.uid === targetUid ? { ...u, followers: u.followers + 1 } : u));
         setFollowingCount(c => c + 1);
+
+        // send mail to the followed user
+        try {
+          const targetUserSnap = await get(ref(database, `users/${targetUid}/profile`));
+          if (targetUserSnap.exists()) {
+            const targetProfile = targetUserSnap.val();
+            if (targetProfile.email) {
+              await sendEmailService({
+                to: targetProfile.email,
+                subject: 'You have a new follower - AlgoCore',
+                text: `${user.displayName || 'Someone'} has started following you on AlgoCore.`,
+                html: `
+                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
+                    <h2 style="color: #2563eb; margin-top: 0;">New Follower Alert!</h2>
+                    <p style="color: #333; font-size: 16px;">
+                      Hi <strong>${targetProfile.displayName || targetProfile.username || 'User'}</strong>,
+                    </p>
+                    <p style="color: #555; font-size: 16px;">
+                      <strong>${user.displayName || 'Someone'}</strong> has just started following you on AlgoCore.
+                    </p>
+                  </div>
+                `
+              });
+            }
+          }
+        } catch (mailError) {
+          console.error("Failed to send follow notification email:", mailError);
+        }
       }
     } catch (e) { console.error(e); }
     setSearchLoadingFollow(prev => { const n = new Set(prev); n.delete(targetUid); return n; });
@@ -610,6 +654,19 @@ function ProfilePage() {
     if (status && status !== "All Status") f = f.filter(s => s.status === status);
     setFilteredSubs(f);
     setPage(0);
+  };
+
+  const handleToggleSetting = async (settingName, currentValue) => {
+    setSettingsSaving(true);
+    const newValue = !currentValue;
+    try {
+      await set(ref(database, `users/${user.uid}/profile/settings/${settingName}`), newValue);
+      if (settingName === 'chatbotEnabled') setGlobalChatbotEnabled(newValue);
+      if (settingName === 'codeEvaluateEnabled') setGlobalCodeEvaluateEnabled(newValue);
+    } catch (e) {
+      console.error("Error saving setting:", e);
+    }
+    setSettingsSaving(false);
   };
 
   // ── Guards ────────────────────────────────────────────────────────────────
@@ -817,7 +874,7 @@ function ProfilePage() {
         <div className="bg-white/50 dark:bg-dark-tertiary/50 backdrop-blur-md rounded-xl shadow-sm border border-gray-200/50 dark:border-dark-tertiary/50 overflow-hidden w-full">
           {/* Tab bar */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 overflow-x-auto">
-            {["overview", "submissions", "find-users", "social", "linked-accounts", "reset-progress"].map(tab => (
+            {["overview", "submissions", "find-users", "social", "linked-accounts", "settings", "reset-progress"].map(tab => (
               <button
                 key={tab}
                 onClick={() => { setActiveTab(tab); if (tab === 'social') loadSocialLists(); if (tab === 'find-users') loadSearchUsers(); }}
@@ -830,7 +887,8 @@ function ProfilePage() {
                   : tab === 'linked-accounts' ? '🔗 Linked Accounts'
                     : tab === 'social' ? '👥 Social'
                       : tab === 'find-users' ? '🔍 Find Users'
-                        : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        : tab === 'settings' ? '⚙️ Settings'
+                          : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -1064,6 +1122,43 @@ function ProfilePage() {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {/* ── Settings Tab ─────────────────────────────────────────── */}
+            {activeTab === "settings" && (
+              <div className="space-y-6">
+                <div className="bg-white/40 dark:bg-gray-800/40 border border-gray-200/50 dark:border-gray-700/50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">⚙️ Global Settings</h3>
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">Enable AI Chatbot</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Allow using the AI chatbot globally across all courses.</p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleSetting('chatbotEnabled', globalChatbotEnabled)}
+                        disabled={settingsSaving}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${globalChatbotEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'} disabled:opacity-50`}
+                      >
+                        <span aria-hidden="true" className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${globalChatbotEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">Enable AI Code Evaluation</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Allow using the AI to evaluate code and suggest fixes.</p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleSetting('codeEvaluateEnabled', globalCodeEvaluateEnabled)}
+                        disabled={settingsSaving}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${globalCodeEvaluateEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'} disabled:opacity-50`}
+                      >
+                        <span aria-hidden="true" className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${globalCodeEvaluateEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
