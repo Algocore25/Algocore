@@ -14,7 +14,7 @@ import SignInRequiredPage from "./SignInRequiredPage";
 import LoadingPage from "./LoadingPage";
 import useUserActivityTime from '../hooks/useUserActivityTime';
 import ActivityCalendar from './ActivityCalendar';
-import { sendEmailService } from '../utils/emailService';
+import { sendEmailService, getUserEmail } from '../utils/emailService';
 import AnimatedBackground from '../components/AnimatedBackground';
 import GoogleAd from '../components/GoogleAd';
 import Footer from '../components/Footer';
@@ -526,10 +526,6 @@ function ProfilePage() {
 
   // ── Follow toggle from search tab ────────────────────────────────────────
   const handleSearchFollow = async (e, targetUid) => {
-
-
-
-
     e.stopPropagation();
     setSearchLoadingFollow(prev => new Set(prev).add(targetUid));
     const curFollowing = searchFollowingSet.has(targetUid);
@@ -551,29 +547,35 @@ function ProfilePage() {
         setSearchUsers(prev => prev.map(u => u.uid === targetUid ? { ...u, followers: u.followers + 1 } : u));
         setFollowingCount(c => c + 1);
 
-        // send mail to the followed user
+        // Send email notification to the followed user
         try {
-          const targetUserSnap = await get(ref(database, `users/${targetUid}/profile`));
-          if (targetUserSnap.exists()) {
-            const targetProfile = targetUserSnap.val();
-            if (targetProfile.email) {
-              await sendEmailService({
-                to: targetProfile.email,
-                subject: 'You have a new follower - AlgoCore',
-                text: `${user.displayName || 'Someone'} has started following you on AlgoCore.`,
-                html: `
-                  <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-                    <h2 style="color: #2563eb; margin-top: 0;">New Follower Alert!</h2>
-                    <p style="color: #333; font-size: 16px;">
-                      Hi <strong>${targetProfile.displayName || targetProfile.username || 'User'}</strong>,
-                    </p>
-                    <p style="color: #555; font-size: 16px;">
-                      <strong>${user.displayName || 'Someone'}</strong> has just started following you on AlgoCore.
-                    </p>
-                  </div>
-                `
-              });
-            }
+          const targetEmail = await getUserEmail(targetUid);
+
+          if (targetEmail) {
+            const [targetUserSnap] = await Promise.all([
+              get(ref(database, `users/${targetUid}/profile`))
+            ]);
+            const targetProfile = targetUserSnap.exists() ? targetUserSnap.val() : {};
+            const followerName = user.displayName || user.email?.split('@')[0] || "Someone";
+
+            await sendEmailService({
+              to: targetEmail,
+              subject: "New Follower on AlgoCore! 🎉",
+              text: `Hi! ${followerName} just started following you on AlgoCore.`,
+              html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; text-align: center;">
+                  <h2 style="color: #1a56db;">You have a new follower! 🎉</h2>
+                  <p style="font-size: 16px; color: #4b5563;">
+                    Hi <strong>${targetProfile.displayName || targetProfile.username || 'User'}</strong>,
+                  </p>
+                  <p style="font-size: 16px; color: #4b5563;">
+                    <strong>${followerName}</strong> just started following you on AlgoCore.
+                  </p>
+                  <br />
+                  <a href="https://algocore.netlify.app/u/${profileData.username}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Profile</a>
+                </div>
+              `
+            });
           }
         } catch (mailError) {
           console.error("Failed to send follow notification email:", mailError);

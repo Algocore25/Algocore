@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ref, get, set, remove } from "firebase/database";
 import { database } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { sendEmailService } from "../utils/emailService";
+import { sendEmailService, getUserEmail } from "../utils/emailService";
 import AnimatedBackground from "../components/AnimatedBackground";
 
 const GRADIENTS = [
@@ -103,9 +103,8 @@ export default function SearchUsersPage() {
 
                 // Send email notification to user being followed
                 try {
-                    const targetEmailSnap = await get(ref(database, `users/${targetUid}/email`));
-                    if (targetEmailSnap.exists()) {
-                        const targetEmail = targetEmailSnap.val();
+                    const targetEmail = await getUserEmail(targetUid);
+                    if (targetEmail) {
                         const followerName = user.displayName || user.email?.split('@')[0] || "Someone";
                         await sendEmailService({
                             to: targetEmail,
@@ -118,6 +117,7 @@ export default function SearchUsersPage() {
                                         <strong>${followerName}</strong> just started following you on AlgoCore.
                                     </p>
                                     <br />
+                                    <a href="https://algocore.netlify.app/u/${user.displayName || user.email?.split('@')[0]}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">View Profile</a>
                                 </div>
                             `
                         });

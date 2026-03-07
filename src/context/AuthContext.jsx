@@ -366,7 +366,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     console.log('Setting up auth state listener');
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('Auth state changed:', firebaseUser?.uid || 'null');
 
       if (firebaseUser) {
@@ -377,6 +377,18 @@ export const AuthProvider = ({ children }) => {
           photoURL: firebaseUser.photoURL
         };
         setUser(userData);
+
+        // Ensure email is in database for notifications
+        try {
+          if (firebaseUser.email) {
+            await update(ref(database, `users/${firebaseUser.uid}`), {
+              email: firebaseUser.email,
+              lastLogin: Date.now()
+            });
+          }
+        } catch (err) {
+          console.warn('Silent failure updating user email in DB:', err);
+        }
       } else {
         console.log('No user found, cleaning up');
         setUser(null);
