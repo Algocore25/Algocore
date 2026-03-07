@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { BookOpen, ArrowRight, Star, Users, Clock, TrendingUp } from 'lucide-react';
 import { courseContent } from '../utils/courseContent';
+import FloatingChatbot from '../components/FloatingChatbot';
 
 const LearnPage = () => {
     const { theme } = useTheme();
@@ -70,14 +71,16 @@ const LearnPage = () => {
                             <div className="mt-auto z-10 pt-4 border-t" style={{
                                 borderColor: theme === 'dark' ? 'rgb(55, 65, 81)' : 'rgb(229, 231, 235)'
                             }}>
-                      
+
                             </div>
                         </div>
                     ))}
                 </div>
 
-               
+
             </div>
+            {/* Include floating chatbot */}
+            <FloatingChatbot />
         </div>
     );
 };

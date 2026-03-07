@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ref, get, set, remove } from "firebase/database";
 import { database } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { sendEmailService } from "../utils/emailService";
 import AnimatedBackground from "../components/AnimatedBackground";
 
 const GRADIENTS = [
@@ -99,6 +100,32 @@ export default function SearchUsersPage() {
                     set(ref(database, `follows/${user.uid}/following/${targetUid}`), true),
                     set(ref(database, `follows/${targetUid}/followers/${user.uid}`), true),
                 ]);
+
+                // Send email notification to user being followed
+                try {
+                    const targetEmailSnap = await get(ref(database, `users/${targetUid}/email`));
+                    if (targetEmailSnap.exists()) {
+                        const targetEmail = targetEmailSnap.val();
+                        const followerName = user.displayName || user.email?.split('@')[0] || "Someone";
+                        await sendEmailService({
+                            to: targetEmail,
+                            subject: "New Follower on AlgoCore! 🎉",
+                            text: `Hi! ${followerName} just started following you on AlgoCore.`,
+                            html: `
+                                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; text-align: center;">
+                                    <h2 style="color: #1a56db;">You have a new follower! 🎉</h2>
+                                    <p style="font-size: 16px; color: #4b5563;">
+                                        <strong>${followerName}</strong> just started following you on AlgoCore.
+                                    </p>
+                                    <br />
+                                </div>
+                            `
+                        });
+                    }
+                } catch (emailErr) {
+                    console.error("Failed to send follow email", emailErr);
+                }
+
                 setFollowingSet(prev => new Set(prev).add(targetUid));
                 setAllUsers(prev => prev.map(u => u.uid === targetUid ? { ...u, followers: u.followers + 1 } : u));
             }

@@ -50,7 +50,7 @@ const CopyPasteGuard = () => {
   useEffect(() => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     // determine whether current route is one that should allow admin-only features
-    const requiresAdmin = /^\/(admin(|monitor|results)|testedit|exammonitor|adminresults)(\/|$)/i.test(pathname);
+    const requiresAdmin = /^\/(admin(|monitor|results)|testedit|exammonitor|adminresults|compiler)(\/|$)/i.test(pathname);
     if (requiresAdmin || isLocalhost) {
       return;
     }

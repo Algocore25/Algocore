@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ref, get, set, remove } from "firebase/database";
 import { database } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { sendEmailService } from "../utils/emailService";
 import ActivityCalendar from "./ActivityCalendar";
 import LoadingPage from "./LoadingPage";
 import AnimatedBackground from "../components/AnimatedBackground";
@@ -54,6 +55,39 @@ const GitHubIcon = () => (
     </svg>
 );
 
+// Streak calculation
+const calculateStreak = (submissions) => {
+    if (!submissions || submissions.length === 0) return 0;
+    const getLocalDateStr = (date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+    const submissionDates = new Set();
+    submissions.forEach(s => {
+        const date = new Date(s.timestamp);
+        submissionDates.add(getLocalDateStr(date));
+    });
+    let streak = 0;
+    const today = new Date();
+    const todayStr = getLocalDateStr(today);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = getLocalDateStr(yesterday);
+    if (!submissionDates.has(todayStr) && !submissionDates.has(yesterdayStr)) return 0;
+    let currentDate = new Date(today);
+    if (!submissionDates.has(todayStr) && submissionDates.has(yesterdayStr)) currentDate = yesterday;
+    while (true) {
+        const dateStr = getLocalDateStr(currentDate);
+        if (submissionDates.has(dateStr)) {
+            streak++;
+            currentDate.setDate(currentDate.getDate() - 1);
+        } else break;
+    }
+    return streak;
+};
+
 // ─── Error screen ──────────────────────────────────────────────────────────
 function ErrorScreen({ emoji, title, desc, username, onHome }) {
     return (
@@ -91,6 +125,7 @@ export default function PublicProfilePage() {
     const [followLoading, setFollowLoading] = useState(false);
     const [followerCount, setFollowerCount] = useState(0);
     const [followingCount, setFollowingCount] = useState(0);
+    const [streak, setStreak] = useState(0);
     const PAGE_SIZE = 10;
 
     const calculateCourseProgress = (lessons, userProgress) => {
@@ -206,6 +241,7 @@ export default function PublicProfilePage() {
                     totalSubmissions: total, acceptedSubmissions: accepted, acceptRate, initials
                 });
                 setSubmissions(subList);
+                setStreak(calculateStreak(subList));
 
                 // Check if current viewer is following this profile
                 if (user && user.uid !== foundUid) {
@@ -244,6 +280,32 @@ export default function PublicProfilePage() {
                     set(ref(database, `follows/${user.uid}/following/${profileUid}`), true),
                     set(ref(database, `follows/${profileUid}/followers/${user.uid}`), true),
                 ]);
+
+                // Send email notification
+                try {
+                    const targetEmailSnap = await get(ref(database, `users/${profileUid}/email`));
+                    if (targetEmailSnap.exists()) {
+                        const targetEmail = targetEmailSnap.val();
+                        const followerName = user.displayName || user.email?.split('@')[0] || "Someone";
+                        await sendEmailService({
+                            to: targetEmail,
+                            subject: "New Follower on AlgoCore! 🎉",
+                            text: `Hi! ${followerName} just started following you on AlgoCore.`,
+                            html: `
+                                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; text-align: center;">
+                                    <h2 style="color: #1a56db;">You have a new follower! 🎉</h2>
+                                    <p style="font-size: 16px; color: #4b5563;">
+                                        <strong>${followerName}</strong> just started following you on AlgoCore.
+                                    </p>
+                                    <br />
+                                </div>
+                            `
+                        });
+                    }
+                } catch (emailErr) {
+                    console.error("Failed to send follow email", emailErr);
+                }
+
                 setIsFollowing(true);
                 setFollowerCount(c => c + 1);
             }
@@ -336,8 +398,9 @@ export default function PublicProfilePage() {
                         </div>
 
                         {/* Stats strip */}
-                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                             {[
+                                { label: '🔥 Streak', value: `${streak} days` },
                                 { label: 'Submissions', value: profile.totalSubmissions },
                                 { label: 'Accepted', value: profile.acceptedSubmissions },
                                 { label: 'Acceptance %', value: `${profile.acceptRate}%` },

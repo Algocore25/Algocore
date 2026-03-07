@@ -23,6 +23,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { setItemWithExpiry, getItemWithExpiry } from "../utils/storageWithExpiry";
 import { decodeShort } from '../utils/urlEncoder';
 import { aiApi } from './api';
+import ReactMarkdown from 'react-markdown';
 
 
 function CodePageSingle({ data, navigation, questionData: propQuestionData, selectedLanguage: propSelectedLanguage }) {
@@ -52,6 +53,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [evaluation, setEvaluation] = useState(null); // { score, improvements: [] }
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
 
   const inputRef = useRef(null);
@@ -120,7 +123,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
 
     setComplexity(null);
     try {
-      const compRes = await aiApi.analyzeComplexity(code);
+      const compRes = await aiApi.analyzeComplexity(code + "\n\n// Please provide ONLY a single line time complexity explanation for this code without any other text.");
       if (compRes.data.success) {
         setComplexity(compRes.data.response);
       }
@@ -239,7 +242,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
 
       setComplexity(null);
       try {
-        const compRes = await aiApi.analyzeComplexity(code);
+        const compRes = await aiApi.analyzeComplexity(code + "\n\n// Please provide ONLY a single line time complexity explanation for this code without any other text.");
         if (compRes.data.success) {
           setComplexity(compRes.data.response);
         }
@@ -1092,6 +1095,14 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
 
             {activeTab === 'output' && (
               <div className="py-8 px-4 flex flex-col items-center w-full">
+
+                {output ? (
+                  <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
+                ) : (
+                  <div className="w-full">
+                    <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
+                  </div>
+                )}
                 {complexity && (
                   <div className="w-full mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl">
                     <h3 className="text-indigo-900 dark:text-indigo-100 font-bold mb-2 flex items-center gap-2">
@@ -1100,15 +1111,85 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                     <p className="text-indigo-800 dark:text-indigo-200 text-sm italic">{complexity}</p>
                   </div>
                 )}
-                {output ? (
-                  <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">{output}</pre>
-                ) : (
-                  <div className="w-full">
-                    <AnimatedTestResults testResults={testResults} runsubmit={runsubmit} />
-                  </div>
-                )}
+
+                {/* ── Evaluate Section ── */}
+                <div className="w-full mb-4">
+                  <button
+                    onClick={async () => {
+                      if (!code?.trim()) return;
+                      setIsEvaluating(true);
+                      setEvaluation(null);
+                      try {
+                        const prompt = `You are a strict code reviewer. Evaluate the following code for the problem "${questionData?.questionname || 'Unknown'}".\n\nCode:\n${code}\n\nRespond ONLY in this exact JSON format (no markdown, no explanation outside JSON):\n{"score": <number 0-100>, "improvements": ["<point 1>", "<point 2>", ...]}`;
+                        const res = await aiApi.evaluateCode(prompt);
+                        const raw = res.data?.response || res.data?.reply || res.data?.content || '';
+                        // Extract JSON from response
+                        const jsonMatch = raw.match(/{[\s\S]*}/);
+                        if (jsonMatch) {
+                          const parsed = JSON.parse(jsonMatch[0]);
+                          setEvaluation(parsed);
+                        } else {
+                          setEvaluation({ score: null, improvements: [raw] });
+                        }
+                      } catch (e) {
+                        console.error('Evaluation failed:', e);
+                        setEvaluation({ score: null, improvements: ['Evaluation failed. Please try again.'] });
+                      } finally {
+                        setIsEvaluating(false);
+                      }
+                    }}
+                    disabled={isEvaluating || !code?.trim()}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow transition-all"
+                  >
+                    {isEvaluating ? (
+                      <><Icons.Loader size={14} className="animate-spin" /> Evaluating…</>
+                    ) : (
+                      <><Icons.Star size={14} /> Evaluate Code</>
+                    )}
+                  </button>
+
+                  {evaluation && (
+                    <div className="mt-4 p-4 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+                      {/* Score ring */}
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black border-4 ${evaluation.score >= 80 ? 'border-green-500 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
+                            : evaluation.score >= 50 ? 'border-yellow-500 text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20'
+                              : 'border-red-500 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+                          }`}>
+                          {evaluation.score ?? '?'}
+                        </div>
+                        <div>
+                          <p className="text-base font-bold text-gray-800 dark:text-gray-100">Code Score</p>
+                          <p className={`text-sm font-semibold ${evaluation.score >= 80 ? 'text-green-600 dark:text-green-400'
+                              : evaluation.score >= 50 ? 'text-yellow-600 dark:text-yellow-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}>
+                            {evaluation.score >= 80 ? '🎉 Great job!' : evaluation.score >= 50 ? '👍 Room to improve' : '⚠️ Needs work'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Improvements */}
+                      {evaluation.improvements?.length > 0 && evaluation.score < 100 && (
+                        <div>
+                          <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">What to improve:</p>
+                          <ul className="space-y-1.5">
+                            {evaluation.improvements.map((point, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                <span className="mt-0.5 text-violet-500 shrink-0">•</span>
+                                {point}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <GoogleAd className="mt-8" />
               </div>
+
             )}
 
             {activeTab === 'chat' && (
@@ -1124,9 +1205,28 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user'
                         ? 'bg-indigo-600 text-white rounded-tr-none'
-                        : 'bg-gray-100 dark:bg-dark-tertiary text-gray-800 dark:text-gray-200 rounded-tl-none'
-                        }`}>
-                        {msg.content}
+                        : 'bg-gray-100 dark:bg-dark-tertiary text-gray-800 dark:text-gray-200 rounded-tl-none prose dark:prose-invert max-w-none'
+                        } overflow-x-auto`}>
+                        {msg.role === 'user' ? (
+                          <p className="whitespace-pre-wrap m-0">{msg.content}</p>
+                        ) : (
+                          <ReactMarkdown
+                            components={{
+                              pre: ({ node, ...props }) => (
+                                <div className="overflow-x-auto bg-gray-900 text-gray-100 rounded p-2 my-2">
+                                  <pre {...props} />
+                                </div>
+                              ),
+                              code: ({ node, inline, ...props }) => (
+                                inline
+                                  ? <code className="bg-gray-300 dark:bg-gray-700 rounded px-1" {...props} />
+                                  : <code {...props} />
+                              )
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1150,10 +1250,12 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                       setIsChatLoading(true);
 
                       try {
-                        const history = newMessages.map(m => m.role === 'user' ? `User: ${m.content}` : `Assistant: ${m.content}`).join('\n');
-                        const prompt = `Context: Solving coding problem "${questionData?.questionname}".\nCurrent Code:\n${code}\n\n${history}`;
-                        // We use the chat endpoint. It expects a messages array normally, but our API helper maps it.
-                        const res = await aiApi.chat(newMessages);
+                        const systemMessage = {
+                          role: 'system',
+                          content: `Context: Solving coding problem "${questionData?.questionname}".\nDescription: ${questionData?.question || ''}\n\nCurrent Code:\n${code}\n\nPlease use the above code context to answer the user's questions, but only use it if needed or relevant to the user's question.`
+                        };
+                        const apiMessages = [systemMessage, ...newMessages];
+                        const res = await aiApi.chat(apiMessages);
                         if (res.data.success) {
                           setChatMessages([...newMessages, { role: 'assistant', content: res.data.response }]);
                         }

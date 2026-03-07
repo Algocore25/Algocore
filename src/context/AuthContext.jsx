@@ -18,10 +18,12 @@ import { sendEmailService, getWelcomeTemplate, getLoginNotificationTemplate } fr
 const AuthContext = createContext(null);
 
 
-// List of emails allowed to have multiple sessions
-const MULTI_SESSION_ALLOWED = [
+// List of emails allowed to have multiple sessions and admin privileges
+export const ADMIN_EMAILS = [
   '99220041106@klu.ac.in'
 ];
+
+const MULTI_SESSION_ALLOWED = ADMIN_EMAILS;
 
 
 // Session configuration
@@ -414,6 +416,39 @@ export const AuthProvider = ({ children }) => {
       cleanupSessionListeners();
     };
   }, [user?.uid, sessionEnforced, loading, initSingleSession, cleanupSessionListeners]);
+
+  // Security restrictions (Copy/Paste disable)
+  useEffect(() => {
+    // Determine admin status
+    const isAdmin = user && user.email && ADMIN_EMAILS.some(email => user.email.includes(email));
+
+    // Skip restrictions on compiler page
+    const isCompilerPage = window.location.pathname.startsWith('/compiler');
+
+    // Disable behavior handler
+    const preventDef = (e) => {
+      // Don't block interactions if user is admin or on compiler page
+      if (isAdmin || isCompilerPage) return;
+      e.preventDefault();
+    };
+
+    // Attach listeners
+    document.addEventListener("contextmenu", preventDef);
+    document.addEventListener("copy", preventDef);
+    document.addEventListener("cut", preventDef);
+    document.addEventListener("paste", preventDef);
+    document.addEventListener("selectstart", preventDef);
+    document.addEventListener("dragstart", preventDef);
+
+    return () => {
+      document.removeEventListener("contextmenu", preventDef);
+      document.removeEventListener("copy", preventDef);
+      document.removeEventListener("cut", preventDef);
+      document.removeEventListener("paste", preventDef);
+      document.removeEventListener("selectstart", preventDef);
+      document.removeEventListener("dragstart", preventDef);
+    };
+  }, [user]);
 
   // Enhanced Google sign-in
   const googleSignIn = async () => {
