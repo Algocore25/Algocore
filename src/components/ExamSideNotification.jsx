@@ -20,12 +20,12 @@ const ExamSideNotification = () => {
     // Don't show on admin pages
     const isAdminPage = /^\/(admin|testedit|exammonitor|adminresults|monitor)/i.test(window.location.pathname);
 
-    // Helper function to check if enough time has passed (10 minutes = 600000 ms)
+    // Helper function to check if enough time has passed (30 minutes = 1800000 ms)
     const shouldShowNotification = (notificationId) => {
         const lastNotified = notifiedExams.get(notificationId);
         if (!lastNotified) return true; // Never notified before
         const now = Date.now();
-        return (now - lastNotified) > 600000; // 10 minutes in milliseconds
+        return (now - lastNotified) > 1800000; // 30 minutes in milliseconds
     };
 
     // Helper function to mark exam as notified and persist to localStorage
@@ -119,7 +119,7 @@ const ExamSideNotification = () => {
                     <SideToastNotification
                         type={notification.type}
                         message={notification.message}
-                        duration={10000}
+                        duration={1500}
                         onClose={() => removeNotification(notification.id)}
                     />
                 </div>

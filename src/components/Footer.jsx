@@ -9,7 +9,7 @@ const Footer = () => {
           <Link to="/about" className="text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">About</Link>
           <Link to="/contact" className="text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Contact</Link>
         </div>
-        <p>&copy; 2025 AlgoCore. All rights reserved.</p>
+        <p>&copy; 2026 AlgoCore. All rights reserved.</p>
       </div>
     </footer>
   );

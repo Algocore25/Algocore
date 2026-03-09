@@ -4,11 +4,12 @@ import { useTheme } from '../context/ThemeContext';
 import { ChevronLeft, BookMarked, Code, AlertCircle } from 'lucide-react';
 
 import { courseContent } from '../utils/courseContent';
+import FloatingChatbot from '../components/FloatingChatbot';
 
 
 const parseInlineMarkdown = (text) => {
     if (typeof text !== 'string') return text;
-    const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+    const parts = text.split(/(\*\*.*?\*\*|`.*? `)/g);
     return parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**')) {
             return <strong key={i} className="font-semibold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>;
@@ -22,7 +23,7 @@ const parseInlineMarkdown = (text) => {
 
 const renderContent = (content, theme) => {
     // Split by both code blocks and compiler blocks
-    const parts = content.split(/(```[\s\S]*?```|<COMPILER>[\s\S]*?<\/COMPILER>)/g);
+    const parts = content.split(/(```[\s\S]*? ```|<COMPILER>[\s\S]*?<\/COMPILER>)/g);
 
     return <>{parts.map((part, idx) => {
         // Handle compiler blocks
@@ -30,14 +31,14 @@ const renderContent = (content, theme) => {
             const code = part.replace(/<COMPILER>|<\/COMPILER>/g, '').trim();
 
             return (
-                <div key={idx} className={`rounded overflow-hidden my-6 border-2 ${theme === 'dark'
+                <div key={idx} className={`rounded overflow - hidden my - 6 border - 2 ${theme === 'dark'
                     ? 'border-blue-600 bg-[#0d1424]'
                     : 'border-blue-400 bg-[#f8f9fa]'
-                    }`}>
-                    <div className={`px-4 py-3 text-sm font-bold flex justify-between items-center ${theme === 'dark'
+                    } `}>
+                    <div className={`px - 4 py - 3 text - sm font - bold flex justify - between items - center ${theme === 'dark'
                         ? 'bg-gradient-to-r from-blue-900 to-indigo-900 text-blue-200 border-b border-blue-700'
                         : 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border-b border-blue-300'
-                        }`}>
+                        } `}>
                         <span className="flex items-center gap-2">
                             <Code size={16} />
                             <span>Try it Yourself - Run Code</span>
@@ -47,19 +48,19 @@ const renderContent = (content, theme) => {
                                 navigator.clipboard.writeText(code);
                                 alert('Code copied!');
                             }}
-                            className={`text-xs px-2 py-1 rounded transition-colors ${theme === 'dark' ? 'hover:bg-blue-800' : 'hover:bg-blue-200'}`}
+                            className={`text - xs px - 2 py - 1 rounded transition - colors ${theme === 'dark' ? 'hover:bg-blue-800' : 'hover:bg-blue-200'} `}
                         >
                             Copy
                         </button>
                     </div>
-                    <div className={`p-4 overflow-x-auto font-mono text-sm leading-relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-800'
-                        }`}>
+                    <div className={`p - 4 overflow - x - auto font - mono text - sm leading - relaxed ${theme === 'dark' ? 'text-gray-300' : 'text-gray-800'
+                        } `}>
                         <pre className="whitespace-pre-wrap break-words">{code}</pre>
                     </div>
-                    <div className={`px-4 py-3 text-xs italic flex items-center gap-2 ${theme === 'dark'
+                    <div className={`px - 4 py - 3 text - xs italic flex items - center gap - 2 ${theme === 'dark'
                         ? 'bg-blue-900/20 text-blue-300 border-t border-blue-700'
                         : 'bg-blue-50 text-blue-700 border-t border-blue-200'
-                        }`}>
+                        } `}>
                         <AlertCircle size={14} />
                         <span>💡 Click the Copy button to copy this code and run it in your Java IDE</span>
                     </div>
@@ -470,6 +471,7 @@ const CourseDetailsPage = () => {
                     </div>
                 )}
             </div>
+            <FloatingChatbot />
         </div>
     );
 };

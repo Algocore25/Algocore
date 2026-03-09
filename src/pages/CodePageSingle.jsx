@@ -200,6 +200,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     }));
 
     setComplexity(null);
+    setEvaluation(null);
     try {
       const compRes = await aiApi.analyzeComplexity(code + "\n\n// Please provide ONLY a single line time complexity explanation for this code without any other text.");
       if (compRes.data.success) {
@@ -326,6 +327,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       }));
 
       setComplexity(null);
+      setEvaluation(null);
       try {
         const compRes = await aiApi.analyzeComplexity(code + "\n\n// Please provide ONLY a single line time complexity explanation for this code without any other text.");
         if (compRes.data.success) {
@@ -504,6 +506,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     }
 
     setCode(newValue);
+    setEvaluation(null);
+    setComplexity(null);
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -607,6 +611,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
 
   useEffect(() => {
     setActiveTab('description');
+    setEvaluation(null);
+    setComplexity(null);
   }, [questionId]);
 
   useEffect(() => {

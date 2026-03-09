@@ -9,6 +9,7 @@ import LoadingPage from './LoadingPage';
 import { ref, get, child } from 'firebase/database';
 import { database } from '../firebase';
 import AnimatedBackground from '../components/AnimatedBackground';
+import FloatingChatbot from '../components/FloatingChatbot';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -170,6 +171,8 @@ function HomePage() {
       <div className="w-full">
         <Footer />
       </div>
+
+      <FloatingChatbot />
     </div>
   );
 }

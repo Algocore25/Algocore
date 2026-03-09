@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { ChevronDown, ChevronRight, Lock, PlayCircle, StopCircle, RefreshCw, XCircle, Code, Database, CheckCircle, FileText } from 'lucide-react';
 import LoadingPage from './LoadingPage';
 import { encodeShort, decodeShort } from '../utils/urlEncoder';
+import FloatingChatbot from '../components/FloatingChatbot';
 
 // ─── Difficulty badge colour ───────────────────────────────────────────────────
 const diffColor = (d = '') => {
@@ -358,107 +359,108 @@ const CoursePage = () => {
                     const { total, completed, percent } = calcTopicProgress(topic);
                     const isOpen = openTopic === index;
                     return (
-                    <div key={index} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
-                      {/* Topic header */}
-                      <div
-                        className="p-4 flex justify-between items-center cursor-pointer"
-                        onClick={() => setOpenTopic(isOpen ? null : index)}
-                      >
-                        <div className="flex items-center">
-                          <div className="bg-gray-100 dark:bg-dark-tertiary rounded-full w-10 h-10 flex items-center justify-center mr-4 font-bold text-lg shrink-0">
-                            {index + 1}
+                      <div key={index} className="bg-white dark:bg-dark-tertiary rounded-lg shadow-sm border border-gray-200 dark:border-dark-tertiary">
+                        {/* Topic header */}
+                        <div
+                          className="p-4 flex justify-between items-center cursor-pointer"
+                          onClick={() => setOpenTopic(isOpen ? null : index)}
+                        >
+                          <div className="flex items-center">
+                            <div className="bg-gray-100 dark:bg-dark-tertiary rounded-full w-10 h-10 flex items-center justify-center mr-4 font-bold text-lg shrink-0">
+                              {index + 1}
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-lg">
+                                {topic.title.replace(/^[^a-zA-Z]*([a-zA-Z].*)$/, '$1')}
+                              </h3>
+                              <p className="text-sm text-gray-600 dark:text-gray-300">{topic.description}</p>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-lg">
-                              {topic.title.replace(/^[^a-zA-Z]*([a-zA-Z].*)$/, '$1')}
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-300">{topic.description}</p>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-right">{completed}/{total}</div>
+                            </div>
+                            <span className="text-sm text-gray-600 dark:text-gray-300 sm:hidden">{percent}%</span>
+                            <FaChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                           </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-right">{completed}/{total}</div>
-                          </div>
-                          <span className="text-sm text-gray-600 dark:text-gray-300 sm:hidden">{percent}%</span>
-                          <FaChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-                        </div>
-                      </div>
 
-                      {/* Problem list */}
-                      {isOpen && topic.problems.length > 0 && (
-                        <div className="border-t border-gray-200 dark:border-dark-tertiary">
-                          <table className="w-full text-left text-sm">
-                            <thead className="text-gray-500 dark:text-gray-400">
-                              <tr>
-                                <th className="p-4 font-medium">Problem Name</th>
-                                <th className="p-4 font-medium">Type</th>
-                                <th className="p-4 font-medium">Status</th>
-                                <th className="p-4 font-medium">Difficulty</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {topic.problems.map((problem, pIndex) => (
-                                <tr
-                                  key={pIndex}
-                                  className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked'
-                                    ? 'opacity-60 cursor-not-allowed'
-                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer'
-                                    }`}
-                                  onClick={() => {
-                                    if (topic.status !== 'blocked') {
-                                      const encSub = encodeShort(topic.title);
-                                      const encQ = encodeShort(problem.name);
-                                      navigate(`/problem/${encodedCourse}/${encSub}/${encQ}`);
-                                    }
-                                  }}
-                                >
-                                  <td className={`p-4 flex items-center ${topic.status === 'blocked'
-                                    ? 'text-gray-400 dark:text-gray-500'
-                                    : 'text-blue-600 dark:text-blue-400'
-                                    }`}>
-                                    {problem.status === 'Completed' && <FaCheck className="text-green-500 mr-2 shrink-0" />}
-                                    {problem.name}
-                                    {topic.status === 'blocked' && (
-                                      <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded">
-                                        Locked
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="p-4">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm text-gray-900 dark:text-gray-100">
-                                        {problem.type || 'Programming'}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="p-4">
-                                    <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'
-                                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                      : problem.status === 'Not Completed'
-                                        ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
-                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                      }`}>
-                                      {problem.status}
-                                    </span>
-                                  </td>
-                                  <td className={`p-4 font-medium ${diffColor(problem.difficulty)}`}>
-                                    {problem.difficulty}
-                                  </td>
+                        {/* Problem list */}
+                        {isOpen && topic.problems.length > 0 && (
+                          <div className="border-t border-gray-200 dark:border-dark-tertiary">
+                            <table className="w-full text-left text-sm">
+                              <thead className="text-gray-500 dark:text-gray-400">
+                                <tr>
+                                  <th className="p-4 font-medium">Problem Name</th>
+                                  <th className="p-4 font-medium">Type</th>
+                                  <th className="p-4 font-medium">Status</th>
+                                  <th className="p-4 font-medium">Difficulty</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                              </thead>
+                              <tbody>
+                                {topic.problems.map((problem, pIndex) => (
+                                  <tr
+                                    key={pIndex}
+                                    className={`border-t border-gray-200 dark:border-dark-tertiary ${topic.status === 'blocked'
+                                      ? 'opacity-60 cursor-not-allowed'
+                                      : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer'
+                                      }`}
+                                    onClick={() => {
+                                      if (topic.status !== 'blocked') {
+                                        const encSub = encodeShort(topic.title);
+                                        const encQ = encodeShort(problem.name);
+                                        navigate(`/problem/${encodedCourse}/${encSub}/${encQ}`);
+                                      }
+                                    }}
+                                  >
+                                    <td className={`p-4 flex items-center ${topic.status === 'blocked'
+                                      ? 'text-gray-400 dark:text-gray-500'
+                                      : 'text-blue-600 dark:text-blue-400'
+                                      }`}>
+                                      {problem.status === 'Completed' && <FaCheck className="text-green-500 mr-2 shrink-0" />}
+                                      {problem.name}
+                                      {topic.status === 'blocked' && (
+                                        <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded">
+                                          Locked
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-4">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                                          {problem.type || 'Programming'}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="p-4">
+                                      <span className={`px-2 py-1 rounded-full text-xs ${problem.status === 'Completed'
+                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                        : problem.status === 'Not Completed'
+                                          ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400'
+                                          : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                        }`}>
+                                        {problem.status}
+                                      </span>
+                                    </td>
+                                    <td className={`p-4 font-medium ${diffColor(problem.difficulty)}`}>
+                                      {problem.difficulty}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+      <FloatingChatbot />
     </div>
   );
 };

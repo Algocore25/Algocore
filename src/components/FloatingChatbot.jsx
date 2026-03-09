@@ -1,18 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { database } from '../firebase';
+import { ref, get } from 'firebase/database';
 import { MessageSquare, X, Send, Bot, User } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
-const FloatingChatbot = () => {
+const FloatingChatbot = ({ contextCode, isCompiler }) => {
     const { theme } = useTheme();
+    const { user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([
         { role: 'assistant', content: 'Hi there! I am your learning assistant. How can I help you today?' }
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isEnabled, setIsEnabled] = useState(true);
     const messagesEndRef = useRef(null);
+    const [isIdle, setIsIdle] = useState(false);
+    const idleTimer = useRef(null);
+
+    const handleMouseEnter = () => {
+        setIsIdle(false);
+        if (idleTimer.current) clearTimeout(idleTimer.current);
+    };
+
+    const handleMouseLeave = () => {
+        if (isCompiler && !isOpen) {
+            idleTimer.current = setTimeout(() => setIsIdle(true), 5000);
+        }
+    };
+
+    useEffect(() => {
+        if (isCompiler && !isOpen) {
+            idleTimer.current = setTimeout(() => setIsIdle(true), 5000);
+        } else {
+            setIsIdle(false);
+            if (idleTimer.current) clearTimeout(idleTimer.current);
+        }
+        return () => {
+            if (idleTimer.current) clearTimeout(idleTimer.current);
+        };
+    }, [isCompiler, isOpen]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -24,6 +54,26 @@ const FloatingChatbot = () => {
         }
     }, [messages, isOpen]);
 
+    useEffect(() => {
+        const fetchSettings = async () => {
+            if (user?.uid) {
+                try {
+                    const snap = await get(ref(database, `users/${user.uid}/profile/settings/chatbotEnabled`));
+                    if (snap.exists()) {
+                        setIsEnabled(snap.val() !== false);
+                    }
+                } catch (e) {
+                    console.error("Failed to load chatbot setting", e);
+                }
+            } else {
+                setIsEnabled(true);
+            }
+        };
+        fetchSettings();
+    }, [user]);
+
+    if (!isEnabled) return null;
+
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 
@@ -34,9 +84,19 @@ const FloatingChatbot = () => {
         setInput('');
         setIsLoading(true);
 
+        // Augment API payload with context code if available
+        let apiMessages = [...newMessages];
+        if (contextCode && typeof contextCode === 'string' && contextCode.trim().length > 0) {
+            const augmentedLastMessage = {
+                role: 'user',
+                content: `${input.trim()}\n\n[System Context: The user's current editor code is:\n\`\`\`\n${contextCode}\n\`\`\`]`
+            };
+            apiMessages = [...messages, augmentedLastMessage];
+        }
+
         try {
             const response = await axios.post("https://algocorefunctions.netlify.app/.netlify/functions/chat", {
-                messages: newMessages
+                messages: apiMessages
             });
 
             setMessages([...newMessages, {
@@ -58,7 +118,11 @@ const FloatingChatbot = () => {
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-50">
+        <div
+            className={`fixed bottom-6 right-6 z-50 transition-opacity duration-500 hover:opacity-100 ${isIdle ? 'opacity-10' : 'opacity-100'}`}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+        >
             {/* Chatbot Window */}
             {isOpen && (
                 <div className={`absolute bottom-20 right-0 w-80 sm:w-96 h-[500px] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${theme === 'dark'

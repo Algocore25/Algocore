@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { useTheme } from '../context/ThemeContext';
-import { executeCode } from './api';
+import { executeCode, aiApi } from './api';
 import { languageTemplates } from './constants';
+import { useAuth } from '../context/AuthContext';
+import { database } from '../firebase';
+import { ref, get } from 'firebase/database';
+import FloatingChatbot from '../components/FloatingChatbot';
 
 // ─── Snippet storage helpers ──────────────────────────────────────────────────
 const STORAGE_KEY = 'compiler-snippets';
@@ -29,6 +33,35 @@ const CompilerPage = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [intelliSenseActive, setIntelliSenseActive] = useState(false);
+
+  // ── AI features state ──────────────────────────────────────────────────────
+  const { user } = useAuth();
+  const [globalCodeEvaluateEnabled, setGlobalCodeEvaluateEnabled] = useState(true);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evaluation, setEvaluation] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [complexity, setComplexity] = useState(null);
+  const [showAiResults, setShowAiResults] = useState(true);
+  const [localAiEnabled, setLocalAiEnabled] = useState(false);
+
+  // Fetch AI settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (user?.uid) {
+        try {
+          const snap = await get(ref(database, `users/${user.uid}/profile/settings/codeEvaluateEnabled`));
+          if (snap.exists()) {
+            setGlobalCodeEvaluateEnabled(snap.val() !== false);
+          }
+        } catch (e) {
+          console.error("Failed to load evaluation setting", e);
+        }
+      } else {
+        setGlobalCodeEvaluateEnabled(true);
+      }
+    };
+    fetchSettings();
+  }, [user]);
 
   // ── Snippet state ──────────────────────────────────────────────────────────
   const [snippets, setSnippets] = useState(loadSnippets);
@@ -373,6 +406,8 @@ const CompilerPage = () => {
 
   const handleRunCode = async () => {
     setIsLoading(true);
+    setEvaluation(null);
+    setComplexity(null);
     setOutput({ stdout: 'Executing...', stderr: null, time: null, memory: null, timeout: false, statusId: null });
     try {
       const result = await executeCode(language, code, input);
@@ -405,6 +440,46 @@ const CompilerPage = () => {
   };
 
   const resetToTemplate = () => setCode(languageTemplates[language]);
+
+  // ── AI Functions ────────────────────────────────────────────────────────────
+  const handleEvaluateCode = async () => {
+    if (!code?.trim()) return;
+    setIsEvaluating(true);
+    setEvaluation(null);
+    try {
+      const prompt = `You are a strict code reviewer. Evaluate the following code. Respond ONLY in this exact JSON format (no markdown, no explanation outside JSON):\n{"score": <number 0-100>, "improvements": ["<point 1>", "<point 2>", ...]}`;
+      const res = await aiApi.evaluateCode(prompt + "\n\nCode:\n" + code);
+      const raw = res.data?.response || res.data?.reply || res.data?.content || '';
+      const jsonMatch = raw.match(/{[\s\S]*}/);
+      if (jsonMatch) {
+        setEvaluation(JSON.parse(jsonMatch[0]));
+      } else {
+        setEvaluation({ score: null, improvements: [raw] });
+      }
+    } catch (e) {
+      console.error('Evaluation failed:', e);
+      setEvaluation({ score: null, improvements: ['Evaluation failed. Please try again.'] });
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleAnalyzeComplexity = async () => {
+    if (!code?.trim()) return;
+    setIsAnalyzing(true);
+    setComplexity(null);
+    try {
+      const prompt = `Analyze the time and space complexity of the following code. Provide a short, concise analysis (max 2 sentences).\n\nCode:\n${code}`;
+      const res = await aiApi.analyzeComplexity(prompt);
+      const raw = res.data?.response || res.data?.reply || res.data?.content || '';
+      setComplexity(raw);
+    } catch (e) {
+      console.error('Analysis failed:', e);
+      setComplexity('Analysis failed. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   // ── Save current code as named snippet ─────────────────────────────────────
   const handleSaveSnippet = () => {
@@ -572,7 +647,11 @@ const CompilerPage = () => {
             language={language}
             theme={theme === 'dark' ? 'vs-dark' : 'light'}
             value={code}
-            onChange={(value) => setCode(value || '')}
+            onChange={(value) => {
+              setCode(value || '');
+              setEvaluation(null);
+              setComplexity(null);
+            }}
             onMount={handleEditorDidMount}
             options={{
               fontSize: 14,
@@ -643,32 +722,75 @@ const CompilerPage = () => {
         </div>
 
         {/* Run Button removed from left panel to go to header or left as is */}
-        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-          <button
-            onClick={resetToTemplate}
-            className="text-xs font-semibold bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-2 rounded transition flex items-center gap-1"
-            title="Reset code to language default template"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            Reset
-          </button>
-          <button
-            onClick={handleRunCode}
-            className="bg-[#4285F4] hover:bg-[#357ae8] text-white px-6 py-2 rounded-md font-medium transition disabled:bg-gray-400 flex items-center gap-2 shadow-sm shadow-blue-500/30"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <span className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                Running...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                Run Code
-              </span>
+        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex-wrap gap-3">
+          <div className="flex gap-3 items-center">
+            <button
+              onClick={resetToTemplate}
+              className="text-xs font-semibold bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-2 rounded transition flex items-center gap-1"
+              title="Reset code to language default template"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Reset
+            </button>
+            {globalCodeEvaluateEnabled && (
+              <button
+                onClick={() => setLocalAiEnabled(p => !p)}
+                title="Toggle AI Features on this page"
+                className={`text-xs font-semibold px-3 py-2 rounded transition flex items-center gap-1.5 border shadow-sm ${localAiEnabled
+                  ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/60'
+                  : 'bg-white text-gray-600 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+              >
+                <svg className={`w-4 h-4 ${localAiEnabled ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                {localAiEnabled ? 'AI Tools: ON' : 'AI Tools: OFF'}
+              </button>
             )}
-          </button>
+          </div>
+          <div className="flex gap-3 items-center">
+            {globalCodeEvaluateEnabled && localAiEnabled && (
+              <>
+                <button
+                  onClick={handleAnalyzeComplexity}
+                  className="bg-indigo-100/80 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60 px-4 py-2 text-sm rounded-md font-medium transition disabled:bg-gray-400/50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
+                  disabled={isAnalyzing || !code?.trim()}
+                >
+                  {isAnalyzing ? (
+                    <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75"></path></svg> Analyzing...</>
+                  ) : (
+                    <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> Complexity</>
+                  )}
+                </button>
+                <button
+                  onClick={handleEvaluateCode}
+                  className="bg-purple-100/80 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:hover:bg-purple-900/60 px-4 py-2 text-sm rounded-md font-medium transition disabled:bg-gray-400/50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
+                  disabled={isEvaluating || !code?.trim()}
+                >
+                  {isEvaluating ? (
+                    <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75"></path></svg> Evaluating...</>
+                  ) : (
+                    <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg> AI Evaluate</>
+                  )}
+                </button>
+              </>
+            )}
+            <button
+              onClick={handleRunCode}
+              className="bg-[#4285F4] hover:bg-[#357ae8] text-white px-6 py-2 rounded-md font-medium transition disabled:bg-gray-400 flex items-center gap-2 shadow-sm shadow-blue-500/30"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  Running...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Run Code
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -725,6 +847,20 @@ const CompilerPage = () => {
                 </span>
               </div>
 
+              {/* AI Features Enabled indicator */}
+              {localAiEnabled && (
+                <button
+                  onClick={() => globalCodeEvaluateEnabled && setShowAiResults(!showAiResults)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border transition-colors ${globalCodeEvaluateEnabled ? (showAiResults ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 cursor-pointer' : 'bg-gray-100 dark:bg-gray-800/80 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer') : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 cursor-not-allowed opacity-70'}`}
+                  title={globalCodeEvaluateEnabled ? `Click to toggle AI Evaluation Results. Currently: ${showAiResults ? 'Visible' : 'Hidden'}` : 'AI features are disabled in your settings.'}
+                >
+                  <div className={`w-2 h-2 rounded-full shadow-sm ${globalCodeEvaluateEnabled ? (showAiResults ? 'bg-green-500 animate-pulse' : 'bg-yellow-500') : 'bg-gray-400 dark:bg-gray-600'}`}></div>
+                  <span className={`font-semibold ${globalCodeEvaluateEnabled ? (showAiResults ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300') : 'text-gray-500 dark:text-gray-400'}`}>
+                    AI Evaluate: {showAiResults ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+              )}
+
               {/* Timeout Status */}
               {output.timeout && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 dark:bg-red-900/30 rounded border border-red-200 dark:border-red-800 animate-pulse">
@@ -756,6 +892,54 @@ const CompilerPage = () => {
             </div>
           </div>
           <div className="flex-grow overflow-auto p-4 bg-[#f8f9fa] dark:bg-[#1e1e1e]">
+            {/* AI Results */}
+            {localAiEnabled && showAiResults && complexity && (
+              <div className="w-full mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl">
+                <h3 className="text-indigo-900 dark:text-indigo-100 font-bold mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  Complexity Analysis
+                </h3>
+                <p className="text-indigo-800 dark:text-indigo-200 text-sm italic">{complexity}</p>
+              </div>
+            )}
+
+            {localAiEnabled && showAiResults && evaluation && (
+              <div className="mb-6 p-4 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-black border-4 ${evaluation.score >= 80 ? 'border-green-500 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
+                    : evaluation.score >= 50 ? 'border-yellow-500 text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20'
+                      : 'border-red-500 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+                    }`}>
+                    {evaluation.score ?? '?'}
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-gray-800 dark:text-gray-100">Code Score</p>
+                    <p className={`text-sm font-semibold ${evaluation.score >= 80 ? 'text-green-600 dark:text-green-400'
+                      : evaluation.score >= 50 ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-red-600 dark:text-red-400'
+                      }`}>
+                      {evaluation.score >= 80 ? '🎉 Great job!' : evaluation.score >= 50 ? '👍 Room to improve' : '⚠️ Needs work'}
+                    </p>
+                  </div>
+                </div>
+
+                {evaluation.improvements?.length > 0 && evaluation.score < 100 && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">What to improve:</p>
+                    <ul className="space-y-1.5">
+                      {evaluation.improvements.map((point, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                          <span className="mt-0.5 text-violet-500 shrink-0">•</span>
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Standard Outputs */}
             {output.timeout ? (
               <div className="text-center py-8">
                 <svg className="w-12 h-12 text-red-400 mx-auto mb-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -784,6 +968,7 @@ const CompilerPage = () => {
           </div>
         </div>
       </div>
+      {localAiEnabled && <FloatingChatbot contextCode={code} isCompiler={true} />}
     </div>
   );
 };
