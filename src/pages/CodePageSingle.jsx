@@ -1075,14 +1075,23 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                 </div>
 
                 <div className="space-y-4">
-                  <p className="break-words">
-                    {questionData?.question}
-                  </p>
+                  <div className="break-words text-[15px] leading-relaxed">
+                    {questionData?.question && typeof questionData.question === 'string'
+                      ? questionData.question.split(/\\n|\n/).map((line, i, arr) => (
+                        <React.Fragment key={i}>
+                          {line}
+                          {i !== arr.length - 1 && <br />}
+                        </React.Fragment>
+                      ))
+                      : questionData?.question}
+                  </div>
 
                   <div className="mt-6">
                     <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 1:</h2>
                     <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                      {questionData?.Example?.[0] || 'No example provided'}
+                      {questionData?.Example?.[0] && typeof questionData.Example[0] === 'string'
+                        ? questionData.Example[0].replace(/\\n/g, '\n')
+                        : questionData?.Example?.[0] || 'No example provided'}
                     </pre>
                   </div>
 
@@ -1090,7 +1099,9 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                     <div className="mt-6">
                       <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
                       <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-                        {questionData?.Example?.[1]}
+                        {typeof questionData.Example[1] === 'string'
+                          ? questionData.Example[1].replace(/\\n/g, '\n')
+                          : questionData.Example[1]}
                       </pre>
                     </div>
                   )}
@@ -1098,8 +1109,13 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                   <div className="mt-6">
                     <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Constraints:</h2>
                     <ul className="list-disc pl-6 space-y-1 text-gray-700 dark:text-gray-400">
-                      <li>{questionData?.constraints?.[0] || 'No constraints provided'}</li>
-                      <li>{questionData?.constraints?.[1]}</li>
+                      {questionData?.constraints && questionData.constraints.length > 0 ? (
+                        questionData.constraints.map((constraint, index) => (
+                          <li key={index}>{constraint}</li>
+                        ))
+                      ) : (
+                        <li>No constraints provided</li>
+                      )}
                     </ul>
                   </div>
 
