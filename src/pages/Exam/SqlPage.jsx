@@ -1320,6 +1320,13 @@ function SqlPage({ question }) {
                   {questionData?.question}
                 </p>
 
+                {questionData?.svgContent && (
+                  <div
+                    className="my-4 flex justify-center w-full dark:[&>svg]:invert dark:[&>svg]:hue-rotate-180 [&>svg]:max-w-full [&>svg]:h-auto"
+                    dangerouslySetInnerHTML={{ __html: questionData.svgContent }}
+                  />
+                )}
+
                 {/* Schema Section */}
                 {questionData?.schema && (
                   <div className="mt-6">

@@ -138,6 +138,12 @@ function MCQPage({ data }) {
                   <div>
                     <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">Statement</h2>
                     <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{data?.question}</p>
+                    {data?.svgContent && (
+                      <div
+                        className="my-4 flex justify-center w-full dark:[&>svg]:invert dark:[&>svg]:hue-rotate-180 [&>svg]:max-w-full [&>svg]:h-auto"
+                        dangerouslySetInnerHTML={{ __html: data.svgContent }}
+                      />
+                    )}
                   </div>
                 </div>
               </div>

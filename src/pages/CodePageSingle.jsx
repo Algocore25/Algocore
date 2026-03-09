@@ -1092,6 +1092,13 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                       : questionData?.question}
                   </div>
 
+                  {questionData?.svgContent && (
+                    <div
+                      className="my-4 flex justify-center w-full dark:[&>svg]:invert dark:[&>svg]:hue-rotate-180 [&>svg]:max-w-full [&>svg]:h-auto"
+                      dangerouslySetInnerHTML={{ __html: questionData.svgContent }}
+                    />
+                  )}
+
                   <div className="mt-6">
                     <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 1:</h2>
                     <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">

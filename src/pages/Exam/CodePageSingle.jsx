@@ -605,6 +605,12 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
                 </div>
               </div>
               <p className="mb-6 whitespace-pre-wrap">{questionData?.question}</p>
+              {questionData?.svgContent && (
+                <div
+                  className="my-4 flex justify-center w-full dark:[&>svg]:invert dark:[&>svg]:hue-rotate-180 [&>svg]:max-w-full [&>svg]:h-auto"
+                  dangerouslySetInnerHTML={{ __html: questionData.svgContent }}
+                />
+              )}
               <div className="space-y-6">
                 {questionData?.Example?.map((ex, i) => (
                   <div key={i}>

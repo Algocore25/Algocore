@@ -200,6 +200,12 @@ function MCQPage({ data }) {
                         />
                       </div>
                     )}
+                    {data?.svgContent && (
+                      <div
+                        className="my-4 flex justify-center w-full dark:[&>svg]:invert dark:[&>svg]:hue-rotate-180 [&>svg]:max-w-full [&>svg]:h-auto"
+                        dangerouslySetInnerHTML={{ __html: data.svgContent }}
+                      />
+                    )}
                   </div>
 
                   {isSubmitted && (

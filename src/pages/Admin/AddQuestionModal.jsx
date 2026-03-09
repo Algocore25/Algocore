@@ -3,6 +3,8 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import { ref, get, set, push, update } from 'firebase/database';
 import { database } from '../../firebase';
 import toast from 'react-hot-toast';
+import { aiApi } from '../api';
+import { SparklesIcon } from '@heroicons/react/24/outline';
 
 const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
   const [activeTab, setActiveTab] = useState('create');
@@ -14,10 +16,13 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
   const [filterType, setFilterType] = useState('All');
   const [filterDiff, setFilterDiff] = useState('All');
   const [isLoading, setIsLoading] = useState(true);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [isAiGeneratingExplanation, setIsAiGeneratingExplanation] = useState(false);
 
   const [formData, setFormData] = useState({
     questionname: '',
     question: '',
+    svgContent: '',
     difficulty: 'Easy',
     type: 'MCQ',
     // MCQ/MSQ specific fields
@@ -47,6 +52,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
       setFormData({
         questionname: question.questionname || '',
         question: question.question || '',
+        svgContent: question.svgContent || '',
         difficulty: question.difficulty || 'Easy',
         type: questionType,
         // MCQ/MSQ specific fields
@@ -72,6 +78,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
       setFormData({
         questionname: '',
         question: '',
+        svgContent: '',
         difficulty: 'Easy',
         type: 'MCQ',
         // MCQ/MSQ specific fields
@@ -168,6 +175,130 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleSvgFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === 'image/svg+xml') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFormData(prev => ({ ...prev, svgContent: e.target.result }));
+      };
+      reader.readAsText(file);
+    } else if (file) {
+      toast.error('Please upload a valid SVG file.');
+    }
+  };
+
+  const handleAiGenerateSvg = async () => {
+    if (!formData.question && !formData.questionname) {
+      toast.error('Please enter a question title or description first to give context to the AI.');
+      return;
+    }
+
+    setIsAiGenerating(true);
+    const toastId = toast.loading('AI is generating your SVG...');
+
+    try {
+      const prompt = `Generate a clean, professional SVG code diagram or illustration for a computer science / math question. 
+Context - Question Title: ${formData.questionname}
+Question Description: ${formData.question}
+
+Requirements:
+1. Return ONLY the raw <svg>...</svg> code.
+2. Ensure it works well in both light and dark backgrounds (use currentColor where applicable for text/strokes).
+3. Do not include markdown code blocks, explanations, or any text other than the SVG code.
+4. Keep the SVG responsive (use viewBox, avoid fixed width/height if possible).`;
+
+      const response = await aiApi.chat([{ role: 'user', content: prompt }]);
+      let svgCode = response.data?.choices?.[0]?.message?.content || response.data?.content || response.data?.response || response.data;
+
+      console.log('Raw AI Response:', response.data);
+      console.log('Parsed SVG Code:', svgCode);
+
+      // Handle potentially wrapped code in markdown blocks
+      if (typeof svgCode === 'object' && svgCode !== null && svgCode.response) {
+        svgCode = svgCode.response;
+      }
+
+      if (typeof svgCode === 'string') {
+        svgCode = svgCode.replace(/```svg\n?|```xml\n?|```\n?/g, '').replace(/```$/g, '').trim();
+
+        if (svgCode.startsWith('<svg') || svgCode.includes('<svg')) {
+          setFormData(prev => ({ ...prev, svgContent: svgCode }));
+          toast.success('SVG generated successfully!', { id: toastId });
+        } else {
+          console.error('Invalid SVG response:', svgCode);
+          toast.error('AI generated an invalid response. Please try again.', { id: toastId });
+        }
+      } else {
+        toast.error('Failed to generate SVG. Please try again.', { id: toastId });
+      }
+    } catch (error) {
+      console.error('Error generating SVG:', error);
+      toast.error('Error generating SVG with AI.', { id: toastId });
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
+  const handleAiGenerateExplanation = async () => {
+    if (!formData.question || !formData.questionname) {
+      toast.error('Please enter a question title or description first.');
+      return;
+    }
+
+    setIsAiGeneratingExplanation(true);
+    const toastId = toast.loading('AI is generating your explanation...');
+
+    try {
+      let prompt = `Generate a clear, detailed, and professional explanation for the following question.
+Context - Question Title: ${formData.questionname}
+Question Description: ${formData.question}
+Question Type: ${formData.type}
+`;
+
+      if (formData.type === 'MCQ' || formData.type === 'MSQ') {
+        const correctOptions = formData.type === 'MCQ'
+          ? [formData.correctAnswer]
+          : formData.correctAnswers;
+
+        prompt += `Options:
+${formData.options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
+Correct Option(s): ${correctOptions.join(', ')}
+`;
+      } else if (formData.type === 'Numeric') {
+        prompt += `Correct Numeric Answer: ${formData.numericAnswer}\n`;
+      }
+
+      prompt += `
+Requirements:
+1. Explain STEP-BY-STEP why the answer is correct.
+2. For multiple choice, briefly explain why other options are incorrect if relevant.
+3. Keep the tone professional and educational.
+4. Return ONLY the explanation text. Do not include markdown headers like "Explanation:".
+`;
+
+      const response = await aiApi.chat([{ role: 'user', content: prompt }]);
+      let explanation = response.data?.choices?.[0]?.message?.content || response.data?.content || response.data?.response || response.data;
+
+      if (typeof explanation === 'object' && explanation !== null && explanation.response) {
+        explanation = explanation.response;
+      }
+
+      if (typeof explanation === 'string') {
+        explanation = explanation.replace(/```\n?|```$/g, '').trim();
+        setFormData(prev => ({ ...prev, explanation: explanation }));
+        toast.success('Explanation generated successfully!', { id: toastId });
+      } else {
+        toast.error('Failed to generate explanation. Please try again.', { id: toastId });
+      }
+    } catch (error) {
+      console.error('Error generating explanation:', error);
+      toast.error('Error generating explanation with AI.', { id: toastId });
+    } finally {
+      setIsAiGeneratingExplanation(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.questionname || !formData.question) {
@@ -224,6 +355,7 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
     let questionData = {
       questionname: formData.questionname,
       question: formData.question,
+      svgContent: formData.svgContent || '',
       difficulty: formData.difficulty,
       type: formData.type
     };
@@ -357,6 +489,52 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                   placeholder="Enter question description"
                 />
               </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium">SVG Content (Optional)</label>
+                  <button
+                    type="button"
+                    onClick={handleAiGenerateSvg}
+                    disabled={isAiGenerating}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:opacity-50 transition-all px-2 py-1 rounded-md border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                  >
+                    <SparklesIcon className={`w-3.5 h-3.5 ${isAiGenerating ? 'animate-pulse' : ''}`} />
+                    {isAiGenerating ? 'Generating...' : 'Generate with AI'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="file"
+                    accept=".svg"
+                    onChange={handleSvgFileUpload}
+                    className="block w-full text-sm text-gray-500 dark:text-gray-300
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100
+                      dark:file:bg-gray-700 dark:file:text-gray-300
+                      dark:hover:file:bg-gray-600"
+                  />
+                </div>
+                <textarea
+                  name="svgContent"
+                  value={formData.svgContent}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded-md mt-2 font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
+                  rows="4"
+                  placeholder="Or paste your <svg> code here..."
+                />
+                {(isEditMode && formData.svgContent) && (
+                  <div className="mt-4 p-4 border rounded-md bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                    <h4 className="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">SVG Preview:</h4>
+                    <div
+                      className="flex justify-center w-full dark:[&>svg]:invert dark:[&>svg]:hue-rotate-180 [&>svg]:max-w-full [&>svg]:h-auto"
+                      dangerouslySetInnerHTML={{ __html: formData.svgContent }}
+                    />
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium">Difficulty</label>
@@ -449,11 +627,22 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium">Explanation</label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium">Explanation</label>
+                      <button
+                        type="button"
+                        onClick={handleAiGenerateExplanation}
+                        disabled={isAiGeneratingExplanation}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:opacity-50 transition-all px-2 py-1 rounded-md border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                      >
+                        <SparklesIcon className={`w-3.5 h-3.5 ${isAiGeneratingExplanation ? 'animate-pulse' : ''}`} />
+                        {isAiGeneratingExplanation ? 'Generating...' : 'Generate with AI'}
+                      </button>
+                    </div>
                     <textarea
                       value={formData.explanation}
                       onChange={(e) => setFormData(prev => ({ ...prev, explanation: e.target.value }))}
-                      className="w-full p-2 border rounded-md mt-1"
+                      className="w-full p-2 border rounded-md mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
                       rows="3"
                       placeholder="Explain why this is the correct answer"
                     />
@@ -476,13 +665,24 @@ const AddQuestionModal = ({ isOpen, onClose, question, onAddQuestions }) => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium">Explanation</label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium">Explanation</label>
+                      <button
+                        type="button"
+                        onClick={handleAiGenerateExplanation}
+                        disabled={isAiGeneratingExplanation}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:opacity-50 transition-all px-2 py-1 rounded-md border border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                      >
+                        <SparklesIcon className={`w-3.5 h-3.5 ${isAiGeneratingExplanation ? 'animate-pulse' : ''}`} />
+                        {isAiGeneratingExplanation ? 'Generating...' : 'Generate with AI'}
+                      </button>
+                    </div>
                     <textarea
                       value={formData.explanation}
                       onChange={(e) => setFormData(prev => ({ ...prev, explanation: e.target.value }))}
-                      className="w-full p-2 border rounded-md mt-1"
+                      className="w-full p-2 border rounded-md mt-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600"
                       rows="3"
-                      placeholder="Explain the solution"
+                      placeholder="Explain how to arrive at this numeric answer"
                     />
                   </div>
                 </>
