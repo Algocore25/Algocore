@@ -386,10 +386,9 @@ const SqlResultTable = ({ text, className = '', columns = null, tableName = null
 
     const firstRow = rows[0];
 
+    // Matches simple column names OR SQL function expressions like AVG(amount), MAX(price), COUNT(*)
     const looksLikeHeader = firstRow && firstRow.every(cell =>
-
-      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
-
+      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
     );
 
 
@@ -416,10 +415,9 @@ const SqlResultTable = ({ text, className = '', columns = null, tableName = null
 
     // Check if first row looks like headers (column names)
 
+    // Matches simple column names OR SQL function expressions like AVG(amount), MAX(price), COUNT(*)
     const looksLikeHeader = firstRow.every(cell =>
-
-      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
-
+      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
     );
 
 
@@ -1410,11 +1408,11 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null, qu
 
                     const expectedSchema = questionData?.testcases[0]?.expectedColumns || firstTableColumns;
 
-                    const hasTableFormat = test.expected && test.expected.includes('|');
+                    if (!test.expected || test.expected === 'No output') {
 
 
 
-                    if (!hasTableFormat) {
+
 
                       // Non-table format (plain description/text)
 
@@ -1462,11 +1460,11 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null, qu
 
                   {(() => {
 
-                    const hasTableFormat = test.output && test.output.includes('\n');
+                    if (!test.output || test.output === 'No output' || test.output.startsWith('Error:')) {
 
 
 
-                    if (!hasTableFormat) {
+
 
                       // Non-table format (plain description/text)
 
@@ -1870,16 +1868,22 @@ function SqlPage({ data, navigation }) {
 
     const expectedColumns = questionData?.testcases[0]?.expectedColumns || null;
 
-    const rowexpectedLines = expectedOutput ? expectedOutput.split("\n").filter(l => l.trim() !== '') : [];
+    const normalize = (text) => {
+      if (!text && text !== "") return [];
+      const lines = String(text).split('\n');
+      const processed = [...lines];
+      while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+        processed.pop();
+      }
+      return processed;
+    };
 
-    const actualLines = actualOutput ? actualOutput.split("\n").filter(l => l.trim() !== '') : [];
+    const rowexpectedLines = normalize(expectedOutput);
 
-
+    const actualLines = normalize(actualOutput);
 
     const expectedLines = expectedColumns && rowexpectedLines.length > 0
-
       ? [expectedColumns.join('|'), ...rowexpectedLines]
-
       : rowexpectedLines;
 
 
@@ -2465,133 +2469,75 @@ function SqlPage({ data, navigation }) {
 
 
       const promises = testCases.map(async (tc, i) => {
-
         const { input: testInput, expectedOutput } = tc;
-
         try {
-
           const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-
           const { run: result } = await executeCode('sql', sqlSourceCode, testInput);
 
-
-
           let currentResult;
-
-
-
           if (questionData.testcases[2]?.input === "regex2") {
-
             const regex = new RegExp(/^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
-
             currentResult = {
-
               input: testInput,
-
               expected: expectedOutput,
-
               output: result.output,
-
               passed: regex.test(result.output),
-
               status: 'done',
-
               isFirstFailure: false
-
             };
-
-          }
-
-          else if (questionData.testcases[2]?.input === "regex") {
-
+          } else if (questionData.testcases[2]?.input === "regex") {
             const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
-
             currentResult = {
-
               input: testInput,
-
               expected: expectedOutput,
-
               output: result.output,
-
               passed: regex.test(result.output),
-
               status: 'done',
-
               isFirstFailure: false
-
+            };
+          } else {
+            const resultOutput = result.output || '';
+            const normalize = (text) => {
+              if (!text && text !== "") return [];
+              const lines = String(text).split('\n');
+              const processed = [...lines];
+              while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+                processed.pop();
+              }
+              return processed;
             };
 
-          }
-
-          else {
-
-            const resultOutput = result.output || '';
-
-            const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
-
-            const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
-
-
-
+            const resultLines = normalize(resultOutput);
+            const expectedLines = normalize(expectedOutput);
             const passed = compareTableOutput(expectedOutput, resultOutput);
 
-
-
             currentResult = {
-
               input: testInput,
-
               expected: expectedOutput,
-
               output: resultOutput,
-
               passed,
-
               status: 'done',
-
               isFirstFailure: false
-
             };
-
           }
 
-
-
           updatedResults[i] = currentResult;
-
           setTestResults([...updatedResults]);
-
           return currentResult;
-
         } catch (error) {
-
           console.error(`Error executing test case ${i + 1}:`, error);
-
           const errorResult = {
-
             input: testInput,
-
             expected: expectedOutput || '',
-
             output: error.message || 'Error executing code',
-
             passed: false,
-
             status: 'done',
-
             isFirstFailure: false
-
           };
-
           updatedResults[i] = errorResult;
-
           setTestResults([...updatedResults]);
-
           return errorResult;
-
         }
-
       });
 
 

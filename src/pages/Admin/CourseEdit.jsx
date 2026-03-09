@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { getDatabase, ref, get, set, update, child } from 'firebase/database';
 import { database } from '../../firebase';
-import { FiSave, FiPlus, FiTrash2, FiArrowLeft, FiArrowUp, FiArrowDown, FiX, FiMenu } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiArrowLeft, FiArrowUp, FiArrowDown, FiX, FiMenu, FiEdit2 } from 'react-icons/fi';
 import { FaChevronDown } from "react-icons/fa";
 import { Reorder } from "framer-motion";
 import { COURSE_ICONS, getCourseIcon, getCourseIconDef } from '../../utils/courseIcons';
@@ -34,6 +34,8 @@ const CourseEdit = () => {
     const [allowedLanguages, setAllowedLanguages] = useState(['c', 'python', 'javascript', 'java', 'cpp']); // allowed languages
     const [allStudents, setAllStudents] = useState([]);
     const [userSearchText, setUserSearchText] = useState('');
+    const [allQuestionsData, setAllQuestionsData] = useState([]);
+    const [editingQuestion, setEditingQuestion] = useState(null);
 
     const availableLanguages = [
         { id: 'c', label: 'C' },
@@ -46,6 +48,19 @@ const CourseEdit = () => {
 
     useEffect(() => {
         let indexToUse = courseIndex;
+
+        const fetchQuestions = async () => {
+            const dbRef = ref(database);
+            const questionsSnap = await get(child(dbRef, 'questions'));
+            if (questionsSnap.exists()) {
+                const qData = questionsSnap.val();
+                const qArray = Object.entries(qData).map(([id, data]) => ({
+                    id,
+                    ...data
+                }));
+                setAllQuestionsData(qArray);
+            }
+        };
 
         const fetchCourseData = async () => {
             try {
@@ -112,6 +127,9 @@ const CourseEdit = () => {
                     setLessons(normalizedLessons);
                 }
 
+                // Fetch all questions for direct editing
+                await fetchQuestions();
+
                 // Fetch possible students for autocomplete
                 const studentsSnap = await get(child(dbRef, 'Students'));
                 if (studentsSnap.exists()) {
@@ -127,6 +145,8 @@ const CourseEdit = () => {
                 setLoading(false);
             }
         };
+
+        window.fetchQuestionsForCourseEdit = fetchQuestions; // Expose for modal onClose
 
         fetchCourseData();
     }, [courseId, courseIndex]);
@@ -222,6 +242,18 @@ const CourseEdit = () => {
                 }
             };
         });
+    };
+
+    const handleEditQuestion = (qIdentifier) => {
+        const qObj = allQuestionsData.find(question =>
+            question.id === qIdentifier || question.questionname === qIdentifier
+        );
+        if (qObj) {
+            setEditingQuestion(qObj);
+            setIsQuestionModalOpen(true);
+        } else {
+            toast.error('Question data not found');
+        }
     };
 
     const moveQuestionUp = (sectionName, qIndex) => {
@@ -706,6 +738,9 @@ const CourseEdit = () => {
                                                                 <FiArrowDown size={16} />
                                                             </button>
                                                             <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                                                            <button onClick={() => handleEditQuestion(q)} className="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-400" title="Edit Question">
+                                                                <FiEdit2 size={16} />
+                                                            </button>
                                                             <button onClick={() => removeQuestion(sectionName, qIndex)} className="p-1 text-red-400 hover:text-red-600 dark:hover:text-red-400">
                                                                 <FiTrash2 size={16} />
                                                             </button>
@@ -727,7 +762,12 @@ const CourseEdit = () => {
                 onClose={() => {
                     setIsQuestionModalOpen(false);
                     setActiveSectionForQuestions(null);
+                    setEditingQuestion(null);
+                    if (window.fetchQuestionsForCourseEdit) {
+                        window.fetchQuestionsForCourseEdit();
+                    }
                 }}
+                question={editingQuestion}
                 onAddQuestions={handleAddQuestionsFromModal}
             />
 

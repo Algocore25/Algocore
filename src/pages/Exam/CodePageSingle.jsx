@@ -152,14 +152,21 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
       try {
         const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
 
-        const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-        while (resultlist[resultlist.length - 1] === "") resultlist.pop();
+        const normalize = (text) => {
+          if (!text && text !== "") return [];
+          const lines = String(text).split('\n');
+          const processed = [...lines];
+          while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+            processed.pop();
+          }
+          return processed;
+        };
 
-        const expectedLines = expectedOutput.split("\n");
-        while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
+        const resultLines = normalize(result.output);
+        const expectedLines = normalize(expectedOutput);
 
-        const passed = resultlist.length === expectedLines.length &&
-          resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+        const passed = resultLines.length === expectedLines.length &&
+          resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
 
         const currentResult = {
           input,
@@ -275,9 +282,19 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
       try {
         const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
 
+        const normalize = (text) => {
+          if (!text && text !== "") return [];
+          const lines = String(text).split('\n');
+          const processed = [...lines];
+          while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+            processed.pop();
+          }
+          return processed;
+        };
+
         const resultOutput = result.output || '';
-        const resultLines = resultOutput.split("\n").filter(l => l.trim() !== "");
-        const expectedLines = expectedOutput.split("\n").filter(l => l.trim() !== "");
+        const resultLines = normalize(resultOutput);
+        const expectedLines = normalize(expectedOutput);
 
         const passed = resultLines.length === expectedLines.length &&
           resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());

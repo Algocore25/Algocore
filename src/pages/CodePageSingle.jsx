@@ -62,6 +62,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
 
   const inputRef = useRef(null);
   const outputRef = useRef(null);
+  const chatEndRef = useRef(null); // Auto-scroll ref for AI chat
 
   const { course: encCourse, subcourse: encSubcourse, questionId: encQuestionId } = useParams();
   const course = decodeShort(encCourse);
@@ -81,6 +82,80 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     if (!key) return '';
     return key.replace(/[.#$/\[\]:]/g, '_');
   };
+
+  // ── Firebase AI Chat backup ──────────────────────────────────────────────────
+  const getChatRef = useCallback(() => {
+    if (!user?.uid || !questionId || !course || !subcourse) return null;
+    const safeCourse = sanitizeKey(course);
+    const safeSubcourse = sanitizeKey(subcourse);
+    const safeQId = sanitizeKey(questionId);
+    return ref(database, `AIChat/${user.uid}/${safeCourse}/${safeSubcourse}/${safeQId}`);
+  }, [user?.uid, course, subcourse, questionId]);
+
+  // Reset chat state and then restore from Firebase on mount / question change
+  useEffect(() => {
+    // 1. Clear previous chat immediately when question changes
+    setChatMessages([]);
+    setIsChatLoading(false);
+
+    // 2. Load new chat
+    const load = async () => {
+      const chatRef = getChatRef();
+      if (!chatRef) return;
+      try {
+        const snap = await get(chatRef);
+        if (snap.exists()) {
+          const saved = snap.val();
+          if (Array.isArray(saved) && saved.length > 0) {
+            setChatMessages(saved);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load chat backup', e);
+      }
+    };
+    load();
+  }, [getChatRef]);
+
+  // Auto-save chat to Firebase whenever messages change (debounced)
+  const chatSaveTimeoutRef = useRef(null);
+  const activeChatIdRef = useRef(questionId);
+
+  useEffect(() => {
+    activeChatIdRef.current = questionId;
+  }, [questionId]);
+
+  useEffect(() => {
+    // If messages are empty, there's nothing to save/backup right now,
+    // (Except when clearing, but clearing is handled directly in the Clear Chat button)
+    if (chatMessages.length === 0) return;
+
+    // Prevent old messages from bleeding into the new question's save file 
+    // by comparing the questionId that triggered this render to the current active one.
+    const savedQid = questionId;
+
+    if (chatSaveTimeoutRef.current) clearTimeout(chatSaveTimeoutRef.current);
+    chatSaveTimeoutRef.current = setTimeout(async () => {
+      if (savedQid !== activeChatIdRef.current) return; // Route changed, don't save
+
+      const chatRef = getChatRef();
+      if (!chatRef) return;
+      try {
+        await set(chatRef, chatMessages);
+      } catch (e) {
+        console.error('Failed to save chat backup', e);
+      }
+    }, 800);
+    return () => clearTimeout(chatSaveTimeoutRef.current);
+  }, [chatMessages, getChatRef, questionId]);
+
+  // Auto-scroll to bottom when new messages arrive or chat tab opens
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isChatLoading, activeTab]);
+
 
   const logSubmission = async (status, submittedCode) => {
     console.log("logging submission");
@@ -149,14 +224,21 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       try {
         const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
 
-        const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-        while (resultlist[resultlist.length - 1] === "") resultlist.pop();
+        const normalize = (text) => {
+          if (!text && text !== "") return [];
+          const lines = String(text).split('\n');
+          const processed = [...lines];
+          while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+            processed.pop();
+          }
+          return processed;
+        };
 
-        const expectedLines = expectedOutput.split("\n");
-        while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
+        const resultLines = normalize(result.output);
+        const expectedLines = normalize(expectedOutput);
 
-        const passed = resultlist.length === expectedLines.length &&
-          resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+        const passed = resultLines.length === expectedLines.length &&
+          resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
 
         const currentResult = {
           input,
@@ -266,8 +348,18 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
         try {
           const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
           const resultOutput = result.output || '';
-          const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
-          const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
+          const normalize = (text) => {
+            if (!text && text !== "") return [];
+            const lines = String(text).split('\n');
+            const processed = [...lines];
+            while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+              processed.pop();
+            }
+            return processed;
+          };
+
+          const resultLines = normalize(resultOutput);
+          const expectedLines = normalize(expectedOutput);
 
           const passed = resultLines.length === expectedLines.length &&
             resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
@@ -1234,6 +1326,9 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
 
             {activeTab === 'chat' && (
               <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-dark-tertiary bg-white dark:bg-dark-secondary">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest">AI Chat</span>
+                </div>
                 <div className="flex-1 overflow-y-auto space-y-4 p-4 min-h-0">
                   {chatMessages.length === 0 && (
                     <div className="text-center text-gray-400 py-10">
@@ -1242,11 +1337,24 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                     </div>
                   )}
                   {chatMessages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div key={i} className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {msg.role === 'assistant' && (
+                        <button
+                          onClick={() => setChatMessages(prev => prev.filter((_, idx) => idx !== i))}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 transition-opacity self-center mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                          title="Delete message"
+                        >
+                          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+
                       <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user'
                         ? 'bg-indigo-600 text-white rounded-tr-none'
                         : 'bg-gray-100 dark:bg-dark-tertiary text-gray-800 dark:text-gray-200 rounded-tl-none prose dark:prose-invert max-w-none'
-                        } overflow-x-auto`}>
+                        } overflow-x-auto relative`}
+                      >
                         {msg.role === 'user' ? (
                           <p className="whitespace-pre-wrap m-0">{msg.content}</p>
                         ) : (
@@ -1268,6 +1376,18 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                           </ReactMarkdown>
                         )}
                       </div>
+
+                      {msg.role === 'user' && (
+                        <button
+                          onClick={() => setChatMessages(prev => prev.filter((_, idx) => idx !== i))}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 transition-opacity self-center ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                          title="Delete message"
+                        >
+                          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   ))}
                   {isChatLoading && (
@@ -1277,6 +1397,8 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                       </div>
                     </div>
                   )}
+                  {/* Auto-scroll anchor */}
+                  <div ref={chatEndRef} />
                 </div>
                 <div className="p-4 border-t border-gray-200 dark:border-dark-tertiary bg-white dark:bg-dark-secondary">
                   <form

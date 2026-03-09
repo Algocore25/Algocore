@@ -32,6 +32,100 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
     return String(text);
   };
 
+  const getFirstMismatch = (expected, output) => {
+    if (!expected && expected !== "" && !output && output !== "") return null;
+
+    const normalize = (text) => {
+      if (!text && text !== "") return [];
+      const lines = String(text).split('\n');
+      // Follow the logic in CodePage: remove trailing empty lines
+      const processed = [...lines];
+      while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+        processed.pop();
+      }
+      return processed;
+    };
+
+    const expLines = normalize(expected);
+    const outLines = normalize(output);
+
+    const maxLines = Math.max(expLines.length, outLines.length);
+    for (let i = 0; i < maxLines; i++) {
+      const exp = expLines[i];
+      const out = outLines[i];
+
+      const expTrim = exp !== undefined ? exp.trimEnd() : undefined;
+      const outTrim = out !== undefined ? out.trimEnd() : undefined;
+
+      if (expTrim !== outTrim) {
+        return {
+          line: i + 1,
+          expected: exp !== undefined ? exp : "(end of output)",
+          actual: out !== undefined ? out : "(end of output)"
+        };
+      }
+    }
+    return null;
+  };
+
+  const HighlightedCode = ({ text, otherText, passed, isExpected }) => {
+    if (!text && text !== 0 && text !== "") return <div className="p-4 text-gray-400 italic">No output</div>;
+
+    const normalizeLines = (val) => {
+      if (!val && val !== "") return [];
+      const lines = String(val).split('\n');
+      const processed = [...lines];
+      while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+        processed.pop();
+      }
+      return processed;
+    };
+
+    const currentLines = normalizeLines(text);
+    const comparisonLines = normalizeLines(otherText);
+    const maxLines = Math.max(currentLines.length, comparisonLines.length);
+
+    return (
+      <div className="font-mono text-xs overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+        <div className="max-h-60 overflow-y-auto">
+          {Array.from({ length: maxLines }).map((_, i) => {
+            const line = currentLines[i];
+            const otherLine = comparisonLines[i];
+            const lineTrim = line !== undefined ? line.trimEnd() : undefined;
+            const otherTrim = otherLine !== undefined ? otherLine.trimEnd() : undefined;
+            const isDifferent = !passed && lineTrim !== otherTrim;
+
+            return (
+              <div
+                key={i}
+                className={`flex gap-3 px-4 py-0.5 min-h-[1.5rem] group ${isDifferent
+                  ? isExpected
+                    ? 'bg-red-50/50 dark:bg-red-900/10'
+                    : 'bg-red-100/50 dark:bg-red-900/20'
+                  : 'hover:bg-gray-100/50 dark:hover:bg-gray-700/30'
+                  }`}
+              >
+                <span className="w-5 text-right opacity-20 select-none font-bold tabular-nums shrink-0">
+                  {i + 1}
+                </span>
+                <span className={`whitespace-pre-wrap break-all ${isDifferent
+                  ? 'text-red-600 dark:text-red-400 font-bold'
+                  : passed ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                  {line !== undefined ? line : <span className="opacity-20 italic">(end of output)</span>}
+                  {line === "" && <span className="opacity-20 italic">(empty line)</span>}
+                </span>
+              </div>
+            );
+          })}
+          {maxLines === 0 && (
+            <div className="p-4 text-gray-400 italic">Empty output</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   if (runsubmit === 'none') {
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -223,6 +317,52 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
           </div>
 
           <div className="p-6 space-y-6">
+            {/* Diff Section if failed and not hidden */}
+            {!currentTest.passed && !isHiddenCase && (
+              <div className="p-4 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/20 space-y-3 shadow-inner">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest">Difference Detected</span>
+                </div>
+
+                {(() => {
+                  const mismatch = getFirstMismatch(currentTest.expected, currentTest.output);
+                  if (mismatch) {
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+                          First mismatch at <span className="text-red-600 dark:text-red-400 font-bold underline decoration-red-500/30 underline-offset-4">Line {mismatch.line}</span>
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter ml-1 flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-gray-300" /> Expected
+                            </span>
+                            <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-100 dark:border-gray-800 font-mono text-[11px] text-gray-900 dark:text-white break-all shadow-sm">
+                              {mismatch.expected === "" ? <span className="italic opacity-30 text-[10px]">(Empty Line)</span> : mismatch.expected}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[9px] font-bold text-red-400 uppercase tracking-tighter ml-1 flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-red-300" /> Actual
+                            </span>
+                            <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-red-100/50 dark:border-red-900/20 font-mono text-[11px] text-red-600 dark:text-red-400 break-all shadow-sm">
+                              {mismatch.actual === "" ? <span className="italic opacity-30 text-[10px]">(Empty Line)</span> : mismatch.actual}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <p className="text-xs text-red-400 italic">
+                      Outputs differ in length or whitespace.
+                    </p>
+                  );
+                })()}
+              </div>
+            )}
+
             <div className="space-y-5">
               {/* Input Section */}
               <div className="space-y-1">
@@ -236,18 +376,21 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
               <div className="space-y-6">
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Expected</span>
-                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300 min-h-[80px] max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
-                    {isHiddenCase ? <span className="italic opacity-30">Restricted</span> : formatText(currentTest.expected)}
-                  </div>
+                  <HighlightedCode
+                    text={isHiddenCase ? null : currentTest.expected}
+                    otherText={currentTest.output}
+                    passed={currentTest.passed}
+                    isExpected={true}
+                  />
                 </div>
                 <div className="space-y-1">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Output</span>
-                  <div className={`p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl font-mono text-xs border min-h-[80px] max-h-60 overflow-y-auto whitespace-pre-wrap break-words ${currentTest.passed
-                    ? 'border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-300'
-                    : 'border-red-100/50 dark:border-red-900/10 text-red-600 dark:text-red-400'
-                    }`}>
-                    {formatText(currentTest.output)}
-                  </div>
+                  <HighlightedCode
+                    text={currentTest.output}
+                    otherText={isHiddenCase ? null : currentTest.expected}
+                    passed={currentTest.passed}
+                    isExpected={false}
+                  />
                 </div>
               </div>
             </div>

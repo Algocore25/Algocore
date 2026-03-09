@@ -78,43 +78,77 @@ const SqlResultTable = ({ text, className = '', columns = null }) => {
   const lines = text.split('\n').filter(l => l.trim() !== '');
   if (lines.length === 0) return <span className="text-gray-400 italic">Empty result</span>;
 
-  const rows = lines.map(line => line.split('|').map(cell => cell.trim()));
+  // Check if output contains pipes (table format)
+  const hasPipes = lines.some(line => line.includes('|'));
 
-  // Determine actual column count from data
-  const dataColCount = Math.max(...rows.map(r => r.length));
+  let rows;
+  let dataColCount;
+
+  if (!hasPipes) {
+    // No pipes - treat each line as a single cell in one column
+    rows = lines.map(line => [line]);
+    dataColCount = 1;
+  } else {
+    // Has pipes - split by pipe
+    rows = lines.map(line => line.split('|').map(cell => cell.trim()));
+    dataColCount = Math.max(...rows.map(r => r.length));
+  }
 
   // Decide which headers to use
   let headers = null;
   let dataRows = rows;
 
-  // If columns provided and match data column count, use them
-  if (columns && columns.length === dataColCount) {
-    headers = columns;
-  } else if (rows.length > 0 && dataColCount > 0) {
-    // Check if first row looks like column names (doesn't look like data)
+  // If columns provided, use them
+  if (columns && columns.length > 0) {
+    // Use provided columns as headers
+    headers = columns.slice(0, dataColCount);
+
+    // Check if first row looks like headers
     const firstRow = rows[0];
-    // Heuristic: if first row has shorter strings and looks like identifiers, treat as header
+    // Matches simple column names OR SQL function expressions like AVG(amount), MAX(price), COUNT(*)
+    const looksLikeHeader = firstRow && firstRow.every(cell =>
+      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
+    );
+
+    // If first row looks like headers, skip it
+    if (looksLikeHeader && rows.length > 1) {
+      dataRows = rows.slice(1);
+    } else {
+      dataRows = rows;
+    }
+  } else if (rows.length > 0 && dataColCount > 0) {
+    // For all tables: check if first row looks like headers
+    const firstRow = rows[0];
+
+    // Check if first row looks like headers (column names)
+    // Matches simple column names OR SQL function expressions like AVG(amount), MAX(price), COUNT(*)
     const looksLikeHeader = firstRow.every(cell =>
-      cell.length < 50 && /^[a-zA-Z_][a-zA-Z0-9_]*$/i.test(cell)
+      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
     );
 
     if (looksLikeHeader && rows.length > 1) {
+      // First row looks like headers - use it
       headers = firstRow;
       dataRows = rows.slice(1);
-    } else if (columns && columns.length > 0) {
-      // Use schema columns even if count doesn't match exactly
-      headers = columns.slice(0, dataColCount);
+    } else if (rows.length === 1 && dataColCount === 1) {
+      // Single scalar result (like SELECT MAX())
+      headers = ['Result'];
+      dataRows = rows;
+    } else {
+      // No headers - generate generic ones
+      headers = Array.from({ length: dataColCount }, (_, i) => `Column ${i + 1}`);
+      dataRows = rows;
     }
   }
 
   return (
-    <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 ${className}`}>
-      <table className="min-w-full text-sm">
+    <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
+      <table className="min-w-full text-sm bg-white dark:bg-gray-900">
         {headers && headers.length > 0 && (
           <thead>
-            <tr className="bg-gray-100 dark:bg-gray-800">
+            <tr className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 border-b-2 border-blue-300 dark:border-blue-700">
               {headers.map((col, j) => (
-                <th key={j} className="px-3 py-2 font-bold text-left text-xs text-gray-700 dark:text-gray-300 uppercase tracking-wider border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 uppercase tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
                   {col}
                 </th>
               ))}
@@ -123,15 +157,15 @@ const SqlResultTable = ({ text, className = '', columns = null }) => {
         )}
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {dataRows.map((row, i) => (
-            <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}>
+            <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors' : 'bg-gray-50 dark:bg-gray-800/30 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors'}>
               {row.map((cell, j) => (
-                <td key={j} className="px-3 py-1.5 font-mono text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                <td key={j} className="px-4 py-2.5 font-mono text-xs text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
                   {cell}
                 </td>
               ))}
               {/* Pad empty cells if needed */}
               {Array.from({ length: dataColCount - row.length }).map((_, k) => (
-                <td key={`pad-${k}`} className="px-3 py-1.5"></td>
+                <td key={`pad-${k}`} className="px-4 py-2.5"></td>
               ))}
             </tr>
           ))}
@@ -355,49 +389,70 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null }) 
                 {/* Expected Output */}
                 <div>
                   <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Expected Output</p>
-                  <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                    {test.expected?.includes('|') ? (
-                      (() => {
-                        const schemaColumns = getColumnsFromSchema(schema);
-                        const firstTableColumns = Object.values(schemaColumns)[0] || null;
-                        return (
-                          <SqlResultTable
-                            text={test.expected}
-                            className="border-0"
-                            columns={firstTableColumns}
-                          />
-                        );
-                      })()
-                    ) : (
-                      <pre className="font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-64 overflow-auto">
-                        {test.expected || 'No output'}
-                      </pre>
-                    )}
-                  </div>
+                  {(() => {
+                    const schemaColumns = getColumnsFromSchema(schema);
+                    const firstTableColumns = Object.values(schemaColumns)[0] || null;
+
+                    if (!test.expected || test.expected === 'No output') {
+                      return (
+                        <pre className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-800">
+                          {test.expected || 'No output'}
+                        </pre>
+                      );
+                    }
+                    return (
+                      <SqlResultTable
+                        text={test.expected}
+                        className=""
+                        columns={firstTableColumns}
+                      />
+                    );
+                  })()}
                 </div>
 
                 {/* Your Output */}
                 <div>
                   <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Your Output</p>
-                  <div className="rounded border border-gray-200 dark:border-gray-700 p-3">
-                    {test.output?.includes('|') ? (
-                      (() => {
-                        const schemaColumns = getColumnsFromSchema(schema);
-                        const firstTableColumns = Object.values(schemaColumns)[0] || null;
-                        return (
-                          <SqlResultTable
-                            text={test.output}
-                            className="border-0"
-                            columns={firstTableColumns}
-                          />
-                        );
-                      })()
-                    ) : (
-                      <pre className={`font-mono text-xs whitespace-pre-wrap break-words max-h-64 overflow-auto ${test.passed ? 'text-gray-700 dark:text-gray-300' : 'text-red-700 dark:text-red-400'}`}>
-                        {test.output || 'No output'}
-                      </pre>
-                    )}
-                  </div>
+                  {(() => {
+                    if (!test.output || test.output === 'No output' || test.output.startsWith('Error:')) {
+                      const bgClass = test.passed
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+                      return (
+                        <pre className={`p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border ${bgClass}`}>
+                          {test.output || 'No output'}
+                        </pre>
+                      );
+                    }
+
+                    // Extract columns from actual output headers
+                    let userColumns = null;
+                    const outputLines = test.output ? test.output.split('\n').filter(l => l.trim() !== '') : [];
+
+                    if (outputLines.length > 0) {
+                      const firstLine = outputLines[0];
+                      const potentialHeaders = firstLine.includes('|')
+                        ? firstLine.split('|').map(cell => cell.trim()).filter(cell => cell !== '')
+                        : [firstLine.trim()];
+
+                      // Matches simple column names OR SQL function expressions like AVG(amount)
+                      const looksLikeHeaders = potentialHeaders.every(cell =>
+                        /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
+                      );
+
+                      if (looksLikeHeaders && outputLines.length > 1) {
+                        userColumns = potentialHeaders;
+                      }
+                    }
+
+                    return (
+                      <SqlResultTable
+                        text={test.output}
+                        className=""
+                        columns={userColumns}
+                      />
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -707,14 +762,21 @@ function SqlPage({ question }) {
           const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
           passed = regex.test(result.output);
         } else {
-          const resultlist = result.output ? result.output.split("\n") : ["No output received."];
-          while (resultlist[resultlist.length - 1] === "") resultlist.pop();
+          const normalize = (text) => {
+            if (!text && text !== "") return [];
+            const lines = String(text).split('\n');
+            const processed = [...lines];
+            while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+              processed.pop();
+            }
+            return processed;
+          };
 
-          const expectedLines = expectedOutput.split("\n");
-          while (expectedLines[expectedLines.length - 1] === "") expectedLines.pop();
+          const resultLines = normalize(result.output);
+          const expectedLines = normalize(expectedOutput);
 
-          passed = resultlist.length === expectedLines.length &&
-            resultlist.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
+          passed = resultLines.length === expectedLines.length &&
+            resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
         }
 
         const currentResult = {
@@ -858,9 +920,18 @@ function SqlPage({ question }) {
             passed = regex.test(result.output);
           }
           else {
-            const resultOutput = result.output || '';
-            const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
-            const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
+            const normalize = (text) => {
+              if (!text && text !== "") return [];
+              const lines = String(text).split('\n');
+              const processed = [...lines];
+              while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
+                processed.pop();
+              }
+              return processed;
+            };
+
+            const resultLines = normalize(result.output);
+            const expectedLines = normalize(expectedOutput);
 
             passed = resultLines.length === expectedLines.length &&
               resultLines.every((val, idx) => val.trimEnd() === expectedLines[idx].trimEnd());
