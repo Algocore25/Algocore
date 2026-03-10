@@ -14,6 +14,7 @@ const ReminderPage = () => {
     const [sending, setSending] = useState(false);
     const [allReports, setAllReports] = useState([]);
     const [selectedReportId, setSelectedReportId] = useState(null);
+    const [selectedDate, setSelectedDate] = useState('');
 
     const today = new Date().toISOString().split('T')[0];
 
@@ -38,41 +39,50 @@ const ReminderPage = () => {
                             const reportObj = reportsForDay[ts];
 
                             if (reportObj && typeof reportObj === 'object') {
-                                // Handle OLD format (has summary and details keys)
-                                if (reportObj.summary) {
-                                    flatReports.push({
-                                        id: ts,
-                                        date: reportObj.date || day,
-                                        timestamp: reportObj.timestamp || ts,
-                                        ...reportObj
-                                    });
+                                let details = [];
+
+                                // Support format with explicit 'details' array or object
+                                if (Array.isArray(reportObj.details)) {
+                                    details = reportObj.details;
+                                } else if (reportObj.details && typeof reportObj.details === 'object') {
+                                    details = Object.entries(reportObj.details).map(([uid, data]) => ({ uid, ...data }));
                                 } else {
-                                    // Handle NEW format (UIDs directly under timestamp)
-                                    // Filter keys to ensure we only get user objects (which should have an email)
-                                    const details = Object.entries(reportObj)
-                                        .filter(([_, val]) => val && typeof val === 'object' && val.email)
+                                    // Handle new format (UIDs directly under timestamp alongside summary)
+                                    details = Object.entries(reportObj)
+                                        .filter(([key, val]) =>
+                                            key !== 'summary' &&
+                                            key !== 'date' &&
+                                            key !== 'timestamp' &&
+                                            val &&
+                                            typeof val === 'object' &&
+                                            (val.email || val.name || val.status)
+                                        )
                                         .map(([uid, data]) => ({
                                             uid,
                                             ...data
                                         }));
+                                }
 
-                                    if (details.length > 0) {
-                                        // Calculate summary on the fly
-                                        const summary = {
-                                            totalUsers: details.length,
-                                            remindersSent: details.filter(d => d.status === 'Success').length,
-                                            successCount: details.filter(d => d.status === 'Success').length,
-                                            failedCount: details.filter(d => d.status === 'Failed').length
-                                        };
+                                let summary = reportObj.summary;
 
-                                        flatReports.push({
-                                            id: ts,
-                                            date: day,
-                                            timestamp: ts, // The HH_MM_SS_MS batch ID
-                                            summary,
-                                            details
-                                        });
-                                    }
+                                // Calculate summary on the fly if missing
+                                if (!summary && details.length > 0) {
+                                    summary = {
+                                        totalUsers: details.length,
+                                        remindersSent: details.filter(d => d.status === 'Success').length,
+                                        successCount: details.filter(d => d.status === 'Success').length,
+                                        failedCount: details.filter(d => d.status === 'Failed').length
+                                    };
+                                }
+
+                                if (summary || details.length > 0) {
+                                    flatReports.push({
+                                        id: ts,
+                                        date: reportObj.date || day,
+                                        timestamp: reportObj.timestamp || ts,
+                                        summary: summary || { totalUsers: 0, remindersSent: 0 },
+                                        details: details
+                                    });
                                 }
                             }
                         });
@@ -88,10 +98,19 @@ const ReminderPage = () => {
                 setAllReports(sorted);
 
                 // Select either the newly created report or the latest one
+                let targetReportId = selectedReportId;
                 if (newReportId) {
-                    setSelectedReportId(newReportId);
+                    targetReportId = newReportId;
                 } else if (sorted.length > 0 && !selectedReportId) {
-                    setSelectedReportId(sorted[0].id);
+                    targetReportId = sorted[0].id;
+                }
+
+                if (targetReportId) {
+                    setSelectedReportId(targetReportId);
+                    const targetReport = sorted.find(r => r.id === targetReportId);
+                    if (targetReport) {
+                        setSelectedDate(targetReport.date);
+                    }
                 }
             } else {
                 setAllReports([]);
@@ -129,6 +148,40 @@ const ReminderPage = () => {
             toast.error(`Error: ${error.message}`, { id: toastId });
         } finally {
             setSending(false);
+        }
+    };
+
+    const formatTimestamp = (ts, includeSeconds = false) => {
+        if (!ts) return 'Unknown Time';
+        try {
+            let isoStr = typeof ts === 'string' ? ts : ts.toString();
+            // Fix "2026-03-10T14_13_22_000Z" -> "2026-03-10T14:13:22.000Z"
+            if (isoStr.includes('T') && isoStr.includes('_')) {
+                const [datePart, timePart] = isoStr.split('T');
+                let fixedTime = timePart.replace(/_([0-9]{3})Z?$/, '.$1Z');
+                fixedTime = fixedTime.replace(/_/g, ':');
+                if (!fixedTime.endsWith('Z') && !fixedTime.includes('+') && !fixedTime.includes('-')) {
+                    fixedTime += 'Z';
+                }
+                isoStr = `${datePart}T${fixedTime}`;
+            }
+
+            if (isoStr.includes('T')) {
+                const d = new Date(isoStr);
+                if (!isNaN(d)) {
+                    const opts = { hour: '2-digit', minute: '2-digit' };
+                    if (includeSeconds) opts.second = '2-digit';
+                    return d.toLocaleTimeString([], opts);
+                }
+            } else if (isoStr.includes('_')) {
+                const parts = isoStr.split('_');
+                if (parts.length >= 2) {
+                    return `${parts[0]}:${parts[1]}` + (includeSeconds && parts[2] ? `:${parts[2]}` : '');
+                }
+            }
+            return ts.toString();
+        } catch {
+            return ts.toString();
         }
     };
 
@@ -204,40 +257,63 @@ const ReminderPage = () => {
                                 Execution History
                             </h3>
 
-                            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="space-y-5">
                                 {allReports.length === 0 && !loading && (
                                     <div className="text-center py-10 text-slate-400 text-sm italic">
                                         No reports found
                                     </div>
                                 )}
 
-                                {allReports.map((r) => (
-                                    <button
-                                        key={r.id}
-                                        onClick={() => setSelectedReportId(r.id)}
-                                        className={`w-full text-left p-4 rounded-2xl transition-all border ${selectedReportId === r.id
-                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 shadow-sm'
-                                            : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-700/50'
-                                            }`}
-                                    >
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${selectedReportId === r.id ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
-                                                }`}>
-                                                {r.date}
-                                            </span>
-                                            <FiArrowRight size={14} className={selectedReportId === r.id ? 'text-blue-500' : 'text-slate-300'} />
+                                {allReports.length > 0 && (
+                                    <>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 ml-1 flex items-center gap-2">
+                                                <FiCalendar size={14} /> Date
+                                            </label>
+                                            <div className="relative">
+                                                <select
+                                                    className="w-full p-3 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                                                    value={selectedDate}
+                                                    onChange={(e) => {
+                                                        const newDate = e.target.value;
+                                                        setSelectedDate(newDate);
+                                                        const firstForDate = allReports.find(r => r.date === newDate);
+                                                        if (firstForDate) setSelectedReportId(firstForDate.id);
+                                                    }}
+                                                >
+                                                    {[...new Set(allReports.map(r => r.date))].map(d => (
+                                                        <option key={d} value={d}>{d}</option>
+                                                    ))}
+                                                </select>
+                                                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className={`text-sm font-semibold ${selectedReportId === r.id ? 'text-blue-700 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                                            {r.timestamp ? (
-                                                r.timestamp.includes('T')
-                                                    ? new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                    : r.timestamp.includes('_')
-                                                        ? r.timestamp.split('_').slice(0, 3).join(':')
-                                                        : r.timestamp
-                                            ) : 'Unknown Time'}
+
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 ml-1 flex items-center gap-2">
+                                                <FiClock size={14} /> Time
+                                            </label>
+                                            <div className="relative">
+                                                <select
+                                                    className="w-full p-3 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                                                    value={selectedReportId || ''}
+                                                    onChange={(e) => setSelectedReportId(e.target.value)}
+                                                >
+                                                    {allReports.filter(r => r.date === selectedDate).map(r => (
+                                                        <option key={r.id} value={r.id}>
+                                                            {formatTimestamp(r.timestamp, false)}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </button>
-                                ))}
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -258,7 +334,7 @@ const ReminderPage = () => {
                                         <FiMail size={20} className="opacity-80" />
                                         <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-lg uppercase">Sent</span>
                                     </div>
-                                    <div className="text-3xl font-black">{report.summary.remindersSent}</div>
+                                    <div className="text-3xl font-black">{report.summary.remindersSent !== undefined ? report.summary.remindersSent : (report.summary.remaindersSent || 0)}</div>
                                     <div className="text-xs font-medium opacity-80 mt-1 uppercase tracking-tight">Emails Delivered</div>
                                 </div>
                             </div>
@@ -340,7 +416,7 @@ const ReminderPage = () => {
                                                     </td>
                                                     <td className="px-8 py-5 text-right">
                                                         <div className="text-xs font-mono font-bold text-slate-400 dark:text-slate-500">
-                                                            {row.timestamp ? new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
+                                                            {formatTimestamp(row.timestamp, true)}
                                                         </div>
                                                     </td>
                                                 </tr>
