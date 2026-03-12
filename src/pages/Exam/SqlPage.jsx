@@ -103,16 +103,20 @@ const SqlResultTable = ({ text, className = '', columns = null }) => {
     // Use provided columns as headers
     headers = columns.slice(0, dataColCount);
 
-    // Check if first row looks like headers
+    // Check if first row is explicitly the header (matches expected columns exactly)
     const firstRow = rows[0];
-    // Matches simple column names OR SQL function expressions like AVG(amount), MAX(price), COUNT(*)
-    const looksLikeHeader = firstRow && firstRow.every(cell =>
-      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
-    );
+    
+    // Check if the first row exactly matches the provided columns
+    const isActuallyHeader = firstRow && firstRow.length <= headers.length && firstRow.every((cell, idx) => {
+      const header = headers[idx];
+      return header && cell.trim().toLowerCase() === header.toLowerCase();
+    });
 
-    // If first row looks like headers, skip it
-    if (looksLikeHeader && rows.length > 1) {
+    // If first row explicitly matches columns, skip it
+    if (isActuallyHeader && rows.length > 1) {
       dataRows = rows.slice(1);
+    } else if (isActuallyHeader && rows.length === 1) {
+      dataRows = [];
     } else {
       dataRows = rows;
     }

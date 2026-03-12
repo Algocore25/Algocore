@@ -9,11 +9,75 @@ import {
     FiCheck, FiX, FiActivity
 } from 'react-icons/fi';
 
+const formatTimestamp = (ts, includeSeconds = false) => {
+    if (!ts) return 'Unknown Time';
+    try {
+        let isoStr = typeof ts === 'string' ? ts : ts.toString();
+        if (isoStr.includes('T') && isoStr.includes('_')) {
+            const [datePart, timePart] = isoStr.split('T');
+            let fixedTime = timePart.replace(/_([0-9]{3})Z?$/, '.$1Z');
+            fixedTime = fixedTime.replace(/_/g, ':');
+            if (!fixedTime.endsWith('Z') && !fixedTime.includes('+') && !fixedTime.includes('-')) {
+                fixedTime += 'Z';
+            }
+            isoStr = `${datePart}T${fixedTime}`;
+        }
+
+        if (isoStr.includes('T')) {
+            const d = new Date(isoStr);
+            if (!isNaN(d)) {
+                const opts = { hour: '2-digit', minute: '2-digit' };
+                if (includeSeconds) opts.second = '2-digit';
+                return d.toLocaleTimeString([], opts);
+            }
+        } else if (isoStr.includes('_')) {
+            const parts = isoStr.split('_');
+            if (parts.length >= 2) {
+                return `${parts[0]}:${parts[1]}` + (includeSeconds && parts[2] ? `:${parts[2]}` : '');
+            }
+        }
+        return ts.toString();
+    } catch {
+        return ts.toString();
+    }
+};
+
+const getSlotFromTimestamp = (ts) => {
+    if (!ts) return 'Unknown Slot';
+    try {
+        let isoStr = typeof ts === 'string' ? ts : ts.toString();
+        if (isoStr.includes('T') && isoStr.includes('_')) {
+            const [datePart, timePart] = isoStr.split('T');
+            let fixedTime = timePart.replace(/_([0-9]{3})Z?$/, '.$1Z');
+            fixedTime = fixedTime.replace(/_/g, ':');
+            if (!fixedTime.endsWith('Z') && !fixedTime.includes('+') && !fixedTime.includes('-')) {
+                fixedTime += 'Z';
+            }
+            isoStr = `${datePart}T${fixedTime}`;
+        }
+
+        if (isoStr.includes('T')) {
+            const d = new Date(isoStr);
+            if (!isNaN(d)) {
+                return d.getUTCHours() < 12 ? 'Slot 1' : 'Slot 2';
+            }
+        } else if (isoStr.includes('_')) {
+            const parts = isoStr.split('_');
+            if (parts.length >= 1) {
+                return parseInt(parts[0], 10) < 12 ? 'Slot 1' : 'Slot 2';
+            }
+        }
+        return 'Unknown Slot';
+    } catch {
+        return 'Unknown Slot';
+    }
+};
+
 const ReminderPage = () => {
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
     const [allReports, setAllReports] = useState([]);
-    const [selectedReportId, setSelectedReportId] = useState(null);
+    const [selectedSlot, setSelectedSlot] = useState('');
     const [selectedDate, setSelectedDate] = useState('');
 
     const today = new Date().toISOString().split('T')[0];
@@ -98,19 +162,20 @@ const ReminderPage = () => {
                 setAllReports(sorted);
 
                 // Select either the newly created report or the latest one
-                let targetReportId = selectedReportId;
+                let targetSlot = selectedSlot;
                 if (newReportId) {
-                    targetReportId = newReportId;
-                } else if (sorted.length > 0 && !selectedReportId) {
-                    targetReportId = sorted[0].id;
+                    const newRep = sorted.find(r => r.id === newReportId);
+                    if (newRep) {
+                        targetSlot = getSlotFromTimestamp(newRep.timestamp);
+                        setSelectedDate(newRep.date);
+                    }
+                } else if (sorted.length > 0 && !selectedSlot) {
+                    targetSlot = getSlotFromTimestamp(sorted[0].timestamp);
+                    setSelectedDate(sorted[0].date);
                 }
 
-                if (targetReportId) {
-                    setSelectedReportId(targetReportId);
-                    const targetReport = sorted.find(r => r.id === targetReportId);
-                    if (targetReport) {
-                        setSelectedDate(targetReport.date);
-                    }
+                if (targetSlot) {
+                    setSelectedSlot(targetSlot);
                 }
             } else {
                 setAllReports([]);
@@ -151,63 +216,84 @@ const ReminderPage = () => {
         }
     };
 
-    const formatTimestamp = (ts, includeSeconds = false) => {
-        if (!ts) return 'Unknown Time';
-        try {
-            let isoStr = typeof ts === 'string' ? ts : ts.toString();
-            // Fix "2026-03-10T14_13_22_000Z" -> "2026-03-10T14:13:22.000Z"
-            if (isoStr.includes('T') && isoStr.includes('_')) {
-                const [datePart, timePart] = isoStr.split('T');
-                let fixedTime = timePart.replace(/_([0-9]{3})Z?$/, '.$1Z');
-                fixedTime = fixedTime.replace(/_/g, ':');
-                if (!fixedTime.endsWith('Z') && !fixedTime.includes('+') && !fixedTime.includes('-')) {
-                    fixedTime += 'Z';
-                }
-                isoStr = `${datePart}T${fixedTime}`;
-            }
-
-            if (isoStr.includes('T')) {
-                const d = new Date(isoStr);
-                if (!isNaN(d)) {
-                    const opts = { hour: '2-digit', minute: '2-digit' };
-                    if (includeSeconds) opts.second = '2-digit';
-                    return d.toLocaleTimeString([], opts);
-                }
-            } else if (isoStr.includes('_')) {
-                const parts = isoStr.split('_');
-                if (parts.length >= 2) {
-                    return `${parts[0]}:${parts[1]}` + (includeSeconds && parts[2] ? `:${parts[2]}` : '');
-                }
-            }
-            return ts.toString();
-        } catch {
-            return ts.toString();
-        }
-    };
-
     const StatusBadge = ({ status }) => {
         const styles = {
             "Success": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800",
             "Failed": "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800",
             "Submitted": "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 border border-sky-200 dark:border-sky-800",
-            "Skipped (No Email)": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+            "Skipped (No Email)": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700",
+            "Skipped (Already Reminded in Slot)": "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800"
         };
 
         const icons = {
             "Success": <FiCheck className="mr-1" />,
             "Failed": <FiX className="mr-1" />,
             "Submitted": <FiActivity className="mr-1" />,
-            "Skipped (No Email)": <FiAlertCircle className="mr-1" />
+            "Skipped (No Email)": <FiAlertCircle className="mr-1" />,
+            "Skipped (Already Reminded in Slot)": <FiClock className="mr-1" />
         };
 
         return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${styles[status] || styles["Skipped (No Email)"]}`}>
-                {icons[status]} {status}
+                {icons[status] || <FiAlertCircle className="mr-1" />} {status}
             </span>
         );
     };
 
-    const report = allReports.find(r => r.id === selectedReportId) || allReports[0];
+    let report = null;
+    let dailySlot1Sent = 0;
+    let dailySlot2Sent = 0;
+
+    if (selectedDate && allReports.length > 0) {
+        const dayReports = allReports.filter(r => r.date === selectedDate);
+        
+        // Calculate daily totals
+        dayReports.forEach(r => {
+            if (r.details && Array.isArray(r.details)) {
+                r.details.forEach(d => {
+                    if (d.status === 'Success') {
+                        const s = d.slot || getSlotFromTimestamp(d.timestamp);
+                        if (s === 'Slot 1') dailySlot1Sent++;
+                        if (s === 'Slot 2') dailySlot2Sent++;
+                    }
+                });
+            }
+        });
+
+        // Compute merged report for the exact selected slot
+        const slotReports = dayReports.filter(r => getSlotFromTimestamp(r.timestamp) === selectedSlot);
+        if (slotReports.length > 0) {
+            let totalUsers = 0;
+            let remindersSent = 0;
+            const detailsMap = new Map();
+
+            // Reverse to process oldest first, latest overwrites
+            [...slotReports].reverse().forEach(r => {
+                if (r.details) {
+                    r.details.forEach(d => {
+                        detailsMap.set(d.uid, { ...d });
+                    });
+                }
+            });
+
+            const mergedDetails = Array.from(detailsMap.values());
+            totalUsers = mergedDetails.length;
+            remindersSent = mergedDetails.filter(d => d.status === 'Success').length;
+
+            report = {
+                date: selectedDate,
+                slot: selectedSlot,
+                id: slotReports[0].id, // loosely keep latest ID
+                timestamp: slotReports[0].timestamp,
+                summary: {
+                    totalUsers,
+                    remindersSent,
+                    remaindersSent: remindersSent
+                },
+                details: mergedDetails.sort((a,b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+            };
+        }
+    }
 
     return (
         <div className="min-h-screen bg-[#f8fafc] dark:bg-[#0f172a] p-4 md:p-8">
@@ -278,7 +364,7 @@ const ReminderPage = () => {
                                                         const newDate = e.target.value;
                                                         setSelectedDate(newDate);
                                                         const firstForDate = allReports.find(r => r.date === newDate);
-                                                        if (firstForDate) setSelectedReportId(firstForDate.id);
+                                                        if (firstForDate) setSelectedSlot(getSlotFromTimestamp(firstForDate.timestamp));
                                                     }}
                                                 >
                                                     {[...new Set(allReports.map(r => r.date))].map(d => (
@@ -293,19 +379,16 @@ const ReminderPage = () => {
 
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 ml-1 flex items-center gap-2">
-                                                <FiClock size={14} /> Time
+                                                <FiClock size={14} /> Slot
                                             </label>
                                             <div className="relative">
                                                 <select
                                                     className="w-full p-3 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-                                                    value={selectedReportId || ''}
-                                                    onChange={(e) => setSelectedReportId(e.target.value)}
+                                                    value={selectedSlot}
+                                                    onChange={(e) => setSelectedSlot(e.target.value)}
                                                 >
-                                                    {allReports.filter(r => r.date === selectedDate).map(r => (
-                                                        <option key={r.id} value={r.id}>
-                                                            {formatTimestamp(r.timestamp, false)}
-                                                        </option>
-                                                    ))}
+                                                    <option value="Slot 1">Slot 1</option>
+                                                    <option value="Slot 2">Slot 2</option>
                                                 </select>
                                                 <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
                                                     <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -336,6 +419,22 @@ const ReminderPage = () => {
                                     </div>
                                     <div className="text-3xl font-black">{report.summary.remindersSent !== undefined ? report.summary.remindersSent : (report.summary.remaindersSent || 0)}</div>
                                     <div className="text-xs font-medium opacity-80 mt-1 uppercase tracking-tight">Emails Delivered</div>
+                                </div>
+
+                                <div className="p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+                                     <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+                                     <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Daily Sent ({selectedDate})</h3>
+                                     
+                                     <div className="space-y-3">
+                                         <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                             <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Slot 1 Total</span>
+                                             <span className="text-lg font-black text-blue-600 dark:text-blue-400">{dailySlot1Sent}</span>
+                                         </div>
+                                         <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                             <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Slot 2 Total</span>
+                                             <span className="text-lg font-black text-orange-600 dark:text-orange-400">{dailySlot2Sent}</span>
+                                         </div>
+                                     </div>
                                 </div>
                             </div>
                         )}
@@ -370,8 +469,13 @@ const ReminderPage = () => {
                                     <div className="flex items-center gap-2">
                                         <div className="text-right mr-2 hidden md:block">
                                             <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Execution Date</div>
-                                            <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                            <div className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center justify-end gap-2">
                                                 {report?.date || 'N/A'}
+                                                {report && (
+                                                    <span className="text-[10px] uppercase font-black bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md">
+                                                        {getSlotFromTimestamp(report.timestamp)}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="h-10 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden md:block" />
@@ -388,6 +492,7 @@ const ReminderPage = () => {
                                             <tr>
                                                 <th className="px-8 py-4 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">User Profile</th>
                                                 <th className="px-8 py-4 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Email Address</th>
+                                                <th className="px-8 py-4 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Slot</th>
                                                 <th className="px-8 py-4 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Status</th>
                                                 <th className="px-8 py-4 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700 text-right">Processed At</th>
                                             </tr>
@@ -410,6 +515,9 @@ const ReminderPage = () => {
                                                             <FiMail className="opacity-50" />
                                                             {row.email}
                                                         </div>
+                                                    </td>
+                                                    <td className="px-8 py-5">
+                                                        <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">{row.slot || 'Unknown'}</span>
                                                     </td>
                                                     <td className="px-8 py-5">
                                                         <StatusBadge status={row.status} />
