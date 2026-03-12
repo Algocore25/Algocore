@@ -396,17 +396,13 @@ const SqlResultTable = ({ text, className = '', columns = null, tableName = null
 
     // If first row explicitly matches columns, skip it
     if (isActuallyHeader && rows.length > 1) {
-
+      headers = firstRow;
       dataRows = rows.slice(1);
-
     } else if (isActuallyHeader && rows.length === 1) {
-
+      headers = firstRow;
       dataRows = [];
-
     } else {
-
       dataRows = rows;
-
     }
 
   } else if (rows.length > 0 && dataColCount > 0) {
@@ -470,7 +466,7 @@ const SqlResultTable = ({ text, className = '', columns = null, tableName = null
 
               {headers.map((col, j) => (
 
-                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 uppercase tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
+                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
 
                   {col}
 

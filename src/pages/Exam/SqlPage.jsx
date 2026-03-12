@@ -114,8 +114,10 @@ const SqlResultTable = ({ text, className = '', columns = null }) => {
 
     // If first row explicitly matches columns, skip it
     if (isActuallyHeader && rows.length > 1) {
+      headers = firstRow;
       dataRows = rows.slice(1);
     } else if (isActuallyHeader && rows.length === 1) {
+      headers = firstRow;
       dataRows = [];
     } else {
       dataRows = rows;
@@ -152,7 +154,7 @@ const SqlResultTable = ({ text, className = '', columns = null }) => {
           <thead>
             <tr className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 border-b-2 border-blue-300 dark:border-blue-700">
               {headers.map((col, j) => (
-                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 uppercase tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
+                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
                   {col}
                 </th>
               ))}
