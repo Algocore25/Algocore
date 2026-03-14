@@ -1441,9 +1441,14 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                       setIsChatLoading(true);
 
                       try {
+                        const messageCount = chatMessages.length;
+                        const additionalInstructions = messageCount < 20 
+                          ? "\\n\\nIMPORTANT: We have had fewer than 20 messages in this chat. You MUST NOT give direct answers or full code solutions. Provide ONLY hints, suggestions, and pseudo-code. If the user asks for the answer, tell them you can only give hints for now."
+                          : "\\n\\nWe have reached 20 messages. You may now provide direct answers and full code solutions if applicable.";
+
                         const systemMessage = {
                           role: 'system',
-                          content: `Context: Solving coding problem "${questionData?.questionname}".\nDescription: ${questionData?.question || ''}\n\nCurrent Code:\n${code}\n\nPlease use the above code context to answer the user's questions, but only use it if needed or relevant to the user's question.`
+                          content: `Context: Solving coding problem "${questionData?.questionname}".\nDescription: ${questionData?.question || ''}\n\nCurrent Code:\n${code}\n\nPlease use the above code context to answer the user's questions, but only use it if needed or relevant to the user's question.${additionalInstructions}`
                         };
                         const apiMessages = [systemMessage, ...newMessages];
                         const res = await aiApi.chat(apiMessages);
