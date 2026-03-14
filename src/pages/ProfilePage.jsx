@@ -16,6 +16,7 @@ import useUserActivityTime from '../hooks/useUserActivityTime';
 import ActivityCalendar from './ActivityCalendar';
 import { sendEmailService, getUserEmail } from '../utils/emailService';
 import AnimatedBackground from '../components/AnimatedBackground';
+import algocoreLogo from '../assets/LOGO-1.png';
 
 import Footer from '../components/Footer';
 import {
@@ -212,6 +213,7 @@ function ProfilePage() {
 
   // Reset progress
   const [courses, setCourses] = useState([]);
+  const [completedCourses, setCompletedCourses] = useState([]);
   const [resetModal, setResetModal] = useState(null); // { course }
   const [resetting, setResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(null);
@@ -303,16 +305,48 @@ function ProfilePage() {
       setFollowerCount(followersSnap.exists() ? Object.keys(followersSnap.val()).length : 0);
       setFollowingCount(followingSnap.exists() ? Object.keys(followingSnap.val()).length : 0);
 
-      // 2. Load progress → list of courses
+      // 2. Load progress → list of courses + completed courses
       const progressSnap = await get(child(dbRef, `userprogress/${user.uid}`));
       const courseSet = new Set();
       if (progressSnap.exists()) {
         const pd = progressSnap.val();
-        for (const courseKey in pd) {
-          courseSet.add(courseKey);
-        }
+        for (const courseKey in pd) courseSet.add(courseKey);
       }
       setCourses([...courseSet]);
+
+      // Load full courses list to find completed ones
+      try {
+        const coursesSnap = await get(child(dbRef, 'Courses'));
+        if (coursesSnap.exists()) {
+          const coursesData = coursesSnap.val();
+          const coursesArr = Array.isArray(coursesData) ? coursesData : Object.values(coursesData);
+          const completed = [];
+          await Promise.all(coursesArr.filter(Boolean).map(async (c) => {
+            try {
+              const [lessonsSnap, progSnap] = await Promise.all([
+                get(child(dbRef, `AlgoCore/${c.id}/lessons`)),
+                get(child(dbRef, `userprogress/${user.uid}/${c.id}`))
+              ]);
+              if (!lessonsSnap.exists()) return;
+              const lessons = lessonsSnap.val();
+              const userProg = progSnap.exists() ? progSnap.val() : {};
+              let total = 0, done = 0;
+              Object.keys(lessons).forEach(tk => {
+                const t = lessons[tk];
+                if (!t?.description) return;
+                const qs = Array.isArray(t.questions) ? t.questions : Object.keys(t.questions || {});
+                total += qs.length;
+                const tp = userProg[tk] || {};
+                qs.forEach(q => { if (tp[q] === true) done++; });
+              });
+              if (total > 0 && done === total) {
+                completed.push({ id: c.id, title: c.title || c.id, description: c.description || '' });
+              }
+            } catch (_) {}
+          }));
+          setCompletedCourses(completed);
+        }
+      } catch (_) {}
 
       // 3. Load submissions
       const subSnap = await get(child(dbRef, `Submissions/${user.uid}`));
@@ -876,7 +910,7 @@ function ProfilePage() {
         <div className="bg-white/50 dark:bg-dark-tertiary/50 backdrop-blur-md rounded-xl shadow-sm border border-gray-200/50 dark:border-dark-tertiary/50 overflow-hidden w-full">
           {/* Tab bar */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 overflow-x-auto">
-            {["overview", "submissions", "find-users", "social", "linked-accounts", "settings", "reset-progress"].map(tab => (
+            {["overview", "certificates", "submissions", "find-users", "social", "linked-accounts", "settings", "reset-progress"].map(tab => (
               <button
                 key={tab}
                 onClick={() => { setActiveTab(tab); if (tab === 'social') loadSocialLists(); if (tab === 'find-users') loadSearchUsers(); }}
@@ -890,7 +924,8 @@ function ProfilePage() {
                     : tab === 'social' ? '👥 Social'
                       : tab === 'find-users' ? '🔍 Find Users'
                         : tab === 'settings' ? '⚙️ Settings'
-                          : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                          : tab === 'certificates' ? '🏅 Certificates'
+                            : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -963,6 +998,73 @@ function ProfilePage() {
                     </div>
                   );
                 })()}
+              </div>
+            )}
+
+            {/* ── Certificates Tab ─────────────────────────────────────── */}
+            {activeTab === "certificates" && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Your Certificates</h3>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">{completedCourses.length} earned</span>
+                </div>
+
+                {completedCourses.length === 0 ? (
+                  <div className="text-center py-20 flex flex-col items-center gap-4">
+                    <div className="w-20 h-20 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-4xl">🎓</div>
+                    <div>
+                      <p className="text-gray-700 dark:text-gray-300 font-semibold">No certificates yet</p>
+                      <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Complete a course 100% to earn your first certificate!</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {completedCourses.map((c) => (
+                      <div
+                        key={c.id}
+                        className="relative bg-gradient-to-b from-blue-50 to-white dark:from-blue-900/30 dark:to-dark-tertiary rounded-xl border-2 border-blue-300 dark:border-blue-700/60 p-5 flex flex-col items-center text-center overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+                        style={{ minHeight: '260px' }}
+                      >
+                        {/* Corner decorations */}
+                        <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-blue-400 rounded-tl" />
+                        <div className="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-blue-400 rounded-tr" />
+                        <div className="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-blue-400 rounded-bl" />
+                        <div className="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-blue-400 rounded-br" />
+
+                        {/* AlgoCore Logo */}
+                        <img src={algocoreLogo} alt="AlgoCore" className="h-6 object-contain mb-2 mt-1" />
+                        <div className="w-16 h-px bg-blue-300 dark:bg-blue-600 mb-2" />
+
+                        <h4 className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-[0.15em] mb-2">
+                          Certificate of Completion
+                        </h4>
+
+                        <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">Presented to</p>
+
+                        {/* Display Name */}
+                        <p className="text-sm font-extrabold text-gray-900 dark:text-white uppercase tracking-wider leading-tight px-2 mb-0.5">
+                          {profileData.displayName}
+                        </p>
+                        <p className="text-[8px] text-gray-400 dark:text-gray-500 mb-2">{profileData.email}</p>
+
+                        <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-1">for successfully completing</p>
+
+                        {/* Course Name */}
+                        <p className="text-xs font-bold text-blue-700 dark:text-blue-300 px-3 leading-snug mb-3">
+                          {c.title}
+                        </p>
+
+                        <div className="relative mt-auto flex flex-col items-center">
+                          <p className="font-serif italic text-base text-blue-600 dark:text-blue-400 opacity-80 -rotate-2 select-none">
+                            AlgoCore
+                          </p>
+                          <div className="w-16 h-px bg-blue-300 dark:bg-blue-600 mt-1" />
+                          <p className="text-[8px] text-blue-500 dark:text-blue-400 mt-0.5 font-medium tracking-widest uppercase">AlgoCore Platform</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

@@ -590,7 +590,8 @@ export const AuthProvider = ({ children }) => {
     logout: (isAuto = false) => logout(isAuto, 'manual'),
     login,
     sessionEnforced,
-    setSessionEnforced
+    setSessionEnforced,
+    isAdmin: user ? adminUids.includes(user.uid) : false
   };
 
   return (

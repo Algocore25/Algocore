@@ -7,6 +7,7 @@ import { sendEmailService, getUserEmail } from "../utils/emailService";
 import ActivityCalendar from "./ActivityCalendar";
 import LoadingPage from "./LoadingPage";
 import AnimatedBackground from "../components/AnimatedBackground";
+import algocoreLogo from "../assets/LOGO-1.png";
 
 import Footer from "../components/Footer";
 
@@ -423,6 +424,7 @@ export default function PublicProfilePage() {
                         {[
                             { key: "activity", label: "Activity" },
                             { key: "courses", label: `Courses (${courses.length})` },
+                            { key: "certificates", label: `Certificates (${courses.filter(c => c.progress === 100).length})` },
                             { key: "submissions", label: `Submissions (${submissions.length})` },
                         ].map(({ key, label }) => (
                             <button
@@ -476,6 +478,73 @@ export default function PublicProfilePage() {
                                 )}
                             </div>
                         )}
+
+                        {/* Certificates Tab */}
+                        {activeTab === "certificates" && (() => {
+                            const certs = courses.filter(c => c.progress === 100);
+                            return (
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Certificates of Completion</h3>
+                                        <span className="text-xs text-gray-400">{certs.length} earned</span>
+                                    </div>
+                                    {certs.length === 0 ? (
+                                        <div className="text-center py-16 flex flex-col items-center gap-3">
+                                            <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-3xl">🎓</div>
+                                            <p className="text-gray-500 dark:text-gray-400 text-sm">No certificates earned yet.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                                            {certs.map((c, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="relative bg-gradient-to-b from-blue-50 to-white dark:from-blue-900/30 dark:to-dark-tertiary rounded-xl border-2 border-blue-300 dark:border-blue-700/60 p-5 flex flex-col items-center text-center overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+                                                    style={{ minHeight: '260px' }}
+                                                >
+                                                    {/* Corner decorations */}
+                                                    <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-blue-400 rounded-tl" />
+                                                    <div className="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-blue-400 rounded-tr" />
+                                                    <div className="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-blue-400 rounded-bl" />
+                                                    <div className="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-blue-400 rounded-br" />
+
+                                                    {/* AlgoCore Logo */}
+                                                    <img src={algocoreLogo} alt="AlgoCore" className="h-6 object-contain mb-2 mt-1" />
+                                                    <div className="w-16 h-px bg-blue-300 dark:bg-blue-600 mb-2" />
+
+                                                    <h4 className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-[0.15em] mb-2">
+                                                        Certificate of Completion
+                                                    </h4>
+
+                                                    <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">Presented to</p>
+
+                                                    {/* Display Name */}
+                                                    <p className="text-sm font-extrabold text-gray-900 dark:text-white uppercase tracking-wider leading-tight px-2 mb-0.5">
+                                                        {profile.displayName}
+                                                    </p>
+                                                    
+                                                    {/* We may not have public email here, so we skip it to keep UI clean if it empty */}
+
+                                                    <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-1">for successfully completing</p>
+
+                                                    {/* Course Name */}
+                                                    <p className="text-xs font-bold text-blue-700 dark:text-blue-300 px-3 leading-snug mb-3">
+                                                        {c.title}
+                                                    </p>
+
+                                                    <div className="relative mt-auto flex flex-col items-center">
+                                                        <p className="font-serif italic text-base text-blue-600 dark:text-blue-400 opacity-80 -rotate-2 select-none">
+                                                            AlgoCore
+                                                        </p>
+                                                        <div className="w-16 h-px bg-blue-300 dark:bg-blue-600 mt-1" />
+                                                        <p className="text-[8px] text-blue-500 dark:text-blue-400 mt-0.5 font-medium tracking-widest uppercase">AlgoCore Platform</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         {/* Submissions Tab */}
                         {activeTab === "submissions" && (
