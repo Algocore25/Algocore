@@ -2,11 +2,30 @@ import React, { useEffect } from 'react';
 
 const GoogleAd = ({ className = "" }) => {
     useEffect(() => {
+        const scriptId = 'google-adsense-script';
+        if (!document.getElementById(scriptId)) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.async = true;
+            script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1357668949487642";
+            script.crossOrigin = "anonymous";
+            document.head.appendChild(script);
+        }
+
         try {
             (window.adsbygoogle = window.adsbygoogle || []).push({});
         } catch (e) {
             console.error("Adsbygoogle error", e);
         }
+
+        return () => {
+            const script = document.getElementById(scriptId);
+            if (script) {
+                script.remove();
+            }
+            // Remove any dynamically injected auto-ads containers if possible, 
+            // though relying on AdSense URL settings is best practice.
+        };
     }, []);
 
     return (

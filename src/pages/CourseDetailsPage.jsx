@@ -5,6 +5,7 @@ import { ChevronLeft, BookMarked, Code, AlertCircle } from 'lucide-react';
 
 import { courseContent } from '../utils/courseContent';
 import FloatingChatbot from '../components/FloatingChatbot';
+import GoogleAd from '../components/GoogleAd';
 
 
 const parseInlineMarkdown = (text) => {
@@ -415,6 +416,11 @@ const CourseDetailsPage = () => {
                                     <div className={`prose prose-sm md:prose-base max-w-none ${theme === 'dark' ? 'prose-invert' : ''
                                         }`}>
                                         {renderContent(lesson.content, theme)}
+                                    </div>
+
+                                    {/* Google Ad for Course details */}
+                                    <div className="mt-8">
+                                        <GoogleAd />
                                     </div>
 
                                     {/* Bottom Navigation */}

@@ -16,7 +16,7 @@ import useUserActivityTime from '../hooks/useUserActivityTime';
 import ActivityCalendar from './ActivityCalendar';
 import { sendEmailService, getUserEmail } from '../utils/emailService';
 import AnimatedBackground from '../components/AnimatedBackground';
-import GoogleAd from '../components/GoogleAd';
+
 import Footer from '../components/Footer';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
@@ -1338,7 +1338,7 @@ function ProfilePage() {
             )}
           </div>
         </div>
-        <GoogleAd className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-800" />
+
       </div>
 
       <Footer />

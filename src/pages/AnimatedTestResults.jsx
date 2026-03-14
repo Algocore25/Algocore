@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import GoogleAd from '../components/GoogleAd';
+
 
 export default function AnimatedTestResults({ testResults = [], runsubmit }) {
   const [showResults, setShowResults] = useState(false);
@@ -190,7 +190,7 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
             </div>
           </div>
         </div>
-        <GoogleAd className="mt-8" />
+
       </div>
     );
   }

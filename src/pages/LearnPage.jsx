@@ -5,6 +5,7 @@ import { BookOpen, ArrowRight, Star, Users, Clock, TrendingUp } from 'lucide-rea
 import { courseContent } from '../utils/courseContent';
 import FloatingChatbot from '../components/FloatingChatbot';
 
+
 const LearnPage = () => {
     const { theme } = useTheme();
     const navigate = useNavigate();
@@ -76,7 +77,6 @@ const LearnPage = () => {
                         </div>
                     ))}
                 </div>
-
 
             </div>
             {/* Include floating chatbot */}

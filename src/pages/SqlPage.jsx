@@ -28,7 +28,7 @@ import AnimatedTestResults from './AnimatedTestResults';
 
 import { executeCode } from './api';
 
-import GoogleAd from '../components/GoogleAd';
+
 
 import CompletionAnimation from '../components/CompletionAnimation';
 
@@ -4051,7 +4051,7 @@ function SqlPage({ data, navigation }) {
 
                 )}
 
-                <GoogleAd className="mt-8" />
+
 
               </div>
 

@@ -7,7 +7,7 @@ import { sendEmailService, getUserEmail } from "../utils/emailService";
 import ActivityCalendar from "./ActivityCalendar";
 import LoadingPage from "./LoadingPage";
 import AnimatedBackground from "../components/AnimatedBackground";
-import GoogleAd from "../components/GoogleAd";
+
 import Footer from "../components/Footer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -527,7 +527,7 @@ export default function PublicProfilePage() {
                         )}
                     </div>
                 </div>
-                <GoogleAd className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-800" />
+
             </div>
             <Footer />
         </div>

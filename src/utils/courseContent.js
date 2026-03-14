@@ -6,6 +6,7 @@ import { javascript } from './learncourses/javascript';
 import { dsa } from './learncourses/dsa';
 import { c } from './learncourses/c';
 import { html_css } from './learncourses/html_css';
+import { daa } from './learncourses/daa';
 
 export const courseContent = {
     java,
@@ -15,5 +16,6 @@ export const courseContent = {
     javascript,
     dsa,
     c,
-    html_css
+    html_css,
+    daa
 };
