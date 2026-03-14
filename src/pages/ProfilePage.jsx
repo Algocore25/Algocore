@@ -235,6 +235,7 @@ function ProfilePage() {
   // Global Settings
   const [globalChatbotEnabled, setGlobalChatbotEnabled] = useState(true);
   const [globalCodeEvaluateEnabled, setGlobalCodeEvaluateEnabled] = useState(true);
+  const [certificatesEnabled, setCertificatesEnabled] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
   // ── Data loading ──────────────────────────────────────────────────────────
@@ -284,6 +285,7 @@ function ProfilePage() {
       if (profileNode.settings) {
         setGlobalChatbotEnabled(profileNode.settings.chatbotEnabled !== false);
         setGlobalCodeEvaluateEnabled(profileNode.settings.codeEvaluateEnabled !== false);
+        setCertificatesEnabled(profileNode.settings.certificatesEnabled === true);
       }
 
       setProfileData({
@@ -699,6 +701,7 @@ function ProfilePage() {
       await set(ref(database, `users/${user.uid}/profile/settings/${settingName}`), newValue);
       if (settingName === 'chatbotEnabled') setGlobalChatbotEnabled(newValue);
       if (settingName === 'codeEvaluateEnabled') setGlobalCodeEvaluateEnabled(newValue);
+      if (settingName === 'certificatesEnabled') setCertificatesEnabled(newValue);
     } catch (e) {
       console.error("Error saving setting:", e);
     }
@@ -910,7 +913,7 @@ function ProfilePage() {
         <div className="bg-white/50 dark:bg-dark-tertiary/50 backdrop-blur-md rounded-xl shadow-sm border border-gray-200/50 dark:border-dark-tertiary/50 overflow-hidden w-full">
           {/* Tab bar */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 overflow-x-auto">
-            {["overview", "certificates", "submissions", "find-users", "social", "linked-accounts", "settings", "reset-progress"].map(tab => (
+            {["overview", "certificates", "submissions", "find-users", "social", "linked-accounts", "settings", "reset-progress"].filter(t => t !== 'certificates' || certificatesEnabled).map(tab => (
               <button
                 key={tab}
                 onClick={() => { setActiveTab(tab); if (tab === 'social') loadSocialLists(); if (tab === 'find-users') loadSearchUsers(); }}
@@ -1002,7 +1005,7 @@ function ProfilePage() {
             )}
 
             {/* ── Certificates Tab ─────────────────────────────────────── */}
-            {activeTab === "certificates" && (
+            {activeTab === "certificates" && certificatesEnabled && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Your Certificates</h3>
@@ -1259,6 +1262,20 @@ function ProfilePage() {
                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${globalCodeEvaluateEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'} disabled:opacity-50`}
                       >
                         <span aria-hidden="true" className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${globalCodeEvaluateEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-gray-100 dark:border-gray-700/50">
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">Enable Certificates Display</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Show earned certificates on your profile and course pages.</p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleSetting('certificatesEnabled', certificatesEnabled)}
+                        disabled={settingsSaving}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${certificatesEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'} disabled:opacity-50`}
+                      >
+                        <span aria-hidden="true" className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${certificatesEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                       </button>
                     </div>
                   </div>

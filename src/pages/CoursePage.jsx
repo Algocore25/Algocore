@@ -80,6 +80,7 @@ const CoursePage = () => {
   // UI state
   const [openTopic, setOpenTopic] = useState(null);
   const [emailing, setEmailing] = useState(false);
+  const [certificatesEnabled, setCertificatesEnabled] = useState(false);
 
   // localStorage keys
   const openTopicKey = `coursePageOpenTopic:${course}`;
@@ -153,6 +154,16 @@ const CoursePage = () => {
 
     return () => { cancelled = true; };
   }, [course]);
+
+  // Fetch certificate settings
+  useEffect(() => {
+    if (!user?.uid) return;
+    get(ref(database, `users/${user.uid}/profile/settings/certificatesEnabled`))
+      .then(snap => {
+        if (snap.exists()) setCertificatesEnabled(snap.val() === true);
+      })
+      .catch(() => {});
+  }, [user]);
 
   // ── PHASE 2 — fetch lessons + all question difficulties IN PARALLEL ─────────
   useEffect(() => {
@@ -682,7 +693,7 @@ const CoursePage = () => {
           </div>
 
           {/* ── Right Column: Certificate ── */}
-          {(progressPercent === 100 || isAdmin) && (
+          {(progressPercent === 100 || isAdmin) && certificatesEnabled && (
           <div className="lg:col-span-1">
             <div className="sticky top-8">
               <div className="bg-white dark:bg-dark-tertiary rounded-xl p-6 shadow-sm border border-gray-200 dark:border-dark-tertiary flex flex-col items-center relative overflow-hidden">

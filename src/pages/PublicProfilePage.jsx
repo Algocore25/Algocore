@@ -239,7 +239,8 @@ export default function PublicProfilePage() {
                     username, displayName, photoURL: foundProfile.photoURL || null,
                     joinDate: fmtJoin(foundProfile.joinedAt || null),
                     githubLink: foundProfile.githubLink || '',
-                    totalSubmissions: total, acceptedSubmissions: accepted, acceptRate, initials
+                    totalSubmissions: total, acceptedSubmissions: accepted, acceptRate, initials,
+                    certificatesEnabled: foundProfile.settings?.certificatesEnabled === true
                 });
                 setSubmissions(subList);
                 setStreak(calculateStreak(subList));
@@ -424,7 +425,7 @@ export default function PublicProfilePage() {
                         {[
                             { key: "activity", label: "Activity" },
                             { key: "courses", label: `Courses (${courses.length})` },
-                            { key: "certificates", label: `Certificates (${courses.filter(c => c.progress === 100).length})` },
+                            ...(profile.certificatesEnabled ? [{ key: "certificates", label: `Certificates (${courses.filter(c => c.progress === 100).length})` }] : []),
                             { key: "submissions", label: `Submissions (${submissions.length})` },
                         ].map(({ key, label }) => (
                             <button
