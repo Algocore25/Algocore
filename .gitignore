@@ -24,4 +24,5 @@ dist-ssr
 *.sw?
 
 # Azure publish profile (contains credentials - NEVER commit)
-publish_profile.xml
+*publish_profile.xml
+*publish_profile_clean.xml
