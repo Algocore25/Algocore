@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { useTheme } from '../context/ThemeContext';
 import { INTELLISENSE_OPTIONS } from '../hooks/useMonacoIntelliSense';
-import { Icons } from '../pages/constants';
+import { Icons } from '../views/constants';
 
 /**
  * MultiFileEditor component for handling non-editable and editable file tabs

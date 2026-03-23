@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icons } from '../pages/constants';
+import { Icons } from '../views/constants';
 
 /**
  * Component displayed when no supported languages are available

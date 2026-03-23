@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
+
 import { FiX, FiAlertCircle, FiClock } from 'react-icons/fi';
 import { useScheduledExams } from '../hooks/useScheduledExams';
 import { useAuth } from '../context/AuthContext';
@@ -7,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 const ExamNotificationBanner = () => {
     const { user } = useAuth();
     const { exams, loading } = useScheduledExams(user);
-    const navigate = useNavigate();
+    const router = useRouter();
     const [isDismissed, setIsDismissed] = useState(false);
 
     // Debug logging
@@ -69,7 +70,7 @@ const ExamNotificationBanner = () => {
                 {/* Quick action buttons */}
                 <div className="flex items-center gap-2 ml-4">
                     <button
-                        onClick={() => navigate('/tests')}
+                        onClick={() => router.push('/tests')}
                         className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap ${hasActive
                             ? 'bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white'
                             : 'bg-amber-600 hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600 text-white'
@@ -95,7 +96,7 @@ const ExamNotificationBanner = () => {
                             {exams.active.map((exam) => (
                                 <button
                                     key={exam.id}
-                                    onClick={() => navigate('/tests')}
+                                    onClick={() => router.push('/tests')}
                                     className="text-left p-2 rounded bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
                                 >
                                     <p className="font-semibold text-green-800 dark:text-green-200 truncate">🔴 {exam.name}</p>
@@ -105,7 +106,7 @@ const ExamNotificationBanner = () => {
                             {exams.upcoming.map((exam) => (
                                 <button
                                     key={exam.id}
-                                    onClick={() => navigate('/tests')}
+                                    onClick={() => router.push('/tests')}
                                     className="text-left p-2 rounded bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
                                 >
                                     <p className="font-semibold text-amber-800 dark:text-amber-200 truncate">⏰ {exam.name}</p>
@@ -117,7 +118,7 @@ const ExamNotificationBanner = () => {
                             {exams.anytime.map((exam) => (
                                 <button
                                     key={exam.id}
-                                    onClick={() => navigate('/tests')}
+                                    onClick={() => router.push('/tests')}
                                     className="text-left p-2 rounded bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                                 >
                                     <p className="font-semibold text-blue-800 dark:text-blue-200 truncate">📚 {exam.name}</p>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useNavigate, matchPath } from 'react-router-dom';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { matchPath } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { database } from '../firebase';
@@ -26,8 +28,10 @@ const Navbar = () => {
   const [match, setMatch] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const location = useLocation();
-  const navigate = useNavigate();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // TODO: Fix manual location references
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { user, loading, logout } = useAuth();
 
@@ -185,16 +189,15 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
         {/* Left: Logo + Menu */}
         <div className="flex items-center gap-6">
-          <Link to={matched?.path || '/'} className="flex items-center gap-2">
-            <img src={theme === 'dark' ? logoDark : logoLight} alt="AlgoCore Logo" className="h-8 w-auto" />
+          <Link href={matched?.path || '/'} className="flex items-center gap-2">
+            <img src={theme === 'dark' ? logoDark.src : logoLight.src} alt="AlgoCore Logo" className="h-8 w-auto" />
             <span className="text-xl font-bold text-[#202124] dark:text-white">AlgoCore</span>
           </Link>
 
           <div className="hidden md:flex items-center gap-6">
             {menuItems.map((item, i) => (
-              <Link
-                key={i}
-                to={item.href}
+              <Link key={i}
+                href={item.href}
                 className={`text-sm font-medium transition-colors ${location.pathname === item.href
                   ? 'text-[#4285F4]'
                   : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
@@ -220,9 +223,9 @@ const Navbar = () => {
 
                   if (currentIndex > 0) {
                     const dSub = decodeShort(subcourse);
-                    navigate(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex - 1])}`);
+                    router.push(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex - 1])}`);
                   } else {
-                    navigate(`/course/${encodedCourse}`);
+                    router.push(`/course/${encodedCourse}`);
                   }
                 }}
                 className={`px-2 sm:px-3 py-1.5 rounded-md transition-all duration-150 flex items-center gap-1 text-xs sm:text-sm font-medium ${currentIndex === 0
@@ -257,7 +260,7 @@ const Navbar = () => {
                     onClick={() => {
                       const { course: encodedCourse, subcourse } = match.params;
                       const dSub = decodeShort(subcourse);
-                      navigate(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(q)}`);
+                      router.push(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(q)}`);
                     }}
                   />
                 ))}
@@ -270,9 +273,9 @@ const Navbar = () => {
 
                   if (currentIndex < questionData.length - 1) {
                     const dSub = decodeShort(subcourse);
-                    navigate(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex + 1])}`);
+                    router.push(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex + 1])}`);
                   } else {
-                    navigate(`/course/${encodedCourse}`);
+                    router.push(`/course/${encodedCourse}`);
                   }
                 }}
                 className={`px-2 sm:px-3 py-1.5 rounded-md transition-all duration-150 flex items-center gap-1 text-xs sm:text-sm font-medium ${currentIndex === questionData.length - 1
@@ -288,8 +291,7 @@ const Navbar = () => {
           )}
 
           {/* Learn item with icon - positioned on the right */}
-          <Link
-            to={learnItem.href}
+          <Link href={learnItem.href}
             className={`text-sm font-medium transition-colors flex items-center gap-1 ${location.pathname === learnItem.href
               ? 'text-[#4285F4]'
               : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
@@ -340,7 +342,7 @@ const Navbar = () => {
                   >
                     <div
                       className="px-4 py-2 border-b border-gray-100 dark:border-dark-tertiary cursor-pointer"
-                      onClick={() => navigate('/profile')}
+                      onClick={() => router.push('/profile')}
                     >
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name || 'User'}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
@@ -349,7 +351,7 @@ const Navbar = () => {
                       onClick={() => {
                         logout();
                         setIsAuthOpen(false);
-                        navigate('/');
+                        router.push('/');
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-tertiary"
                     >
@@ -359,8 +361,7 @@ const Navbar = () => {
                 )}
               </>
             ) : (
-              <Link
-                to="/login"
+              <Link href="/login"
                 className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-colors whitespace-nowrap text-xs sm:text-sm font-bold"
               >
                 Sign In
@@ -394,9 +395,8 @@ const Navbar = () => {
               className="absolute top-16 right-4 w-64 bg-white dark:bg-dark-secondary rounded-lg shadow-lg border border-gray-200 dark:border-dark-tertiary py-2 animate-fadeIn mobile-menu transition-all duration-300"
             >
               {menuItems.map((item, index) => (
-                <Link
-                  key={index}
-                  to={item.href}
+                <Link key={index}
+                  href={item.href}
                   className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${location.pathname === item.href
                     ? 'bg-[#4285F4]/10 text-[#4285F4]'
                     : 'text-gray-700 dark:text-gray-200'
@@ -408,8 +408,7 @@ const Navbar = () => {
               ))}
 
               {/* Learn item with icon in mobile menu */}
-              <Link
-                to={learnItem.href}
+              <Link href={learnItem.href}
                 className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${location.pathname === learnItem.href
                   ? 'bg-[#4285F4]/10 text-[#4285F4]'
                   : 'text-gray-700 dark:text-gray-200'

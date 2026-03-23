@@ -3,9 +3,9 @@ import { auth, database } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { ref, get } from "firebase/database";
 import { useAuth } from "./context/AuthContext";
-import LoadingPage from "./pages/LoadingPage";
-import SignInRequiredPage from "./pages/SignInRequiredPage";
-import UnauthorizedPage from "./pages/UnauthorizedPage";
+import LoadingPage from "./views/LoadingPage";
+import SignInRequiredPage from "./views/SignInRequiredPage";
+import UnauthorizedPage from "./views/UnauthorizedPage";
 
 
 

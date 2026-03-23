@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Azure publish profile (contains credentials - NEVER commit)
+publish_profile.xml
