@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -15,6 +16,138 @@ import { BsDashCircle } from "react-icons/bs";
 
 import { database } from "../../firebase";
 import { ref, get, set, child } from "firebase/database";
+
+// Helper: Convert JSON directly to table format (blue theme for user output)
+const JsonToTableDisplay = ({ text, className = '', theme = 'blue' }) => {
+  if (!text || typeof text !== 'string') {
+    return <span className="text-gray-400 italic">No output</span>;
+  }
+
+  const trimmed = text.trim();
+  
+  // Check if it's JSON format
+  let jsonStr = trimmed;
+  let isJsonFormat = false;
+  
+  if (trimmed.startsWith('json[') && trimmed.endsWith(']')) {
+    jsonStr = trimmed.slice(4);
+    isJsonFormat = true;
+  } else if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+    isJsonFormat = true;
+  }
+  
+  if (!isJsonFormat) {
+    // Not JSON - display as pre
+    const bgClass = theme === 'green' 
+      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+    
+    return (
+      <pre className={`${bgClass} p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border ${className}`}>
+        {text}
+      </pre>
+    );
+  }
+  
+  try {
+    // Fix common JSON issues
+    let fixedJsonStr = jsonStr;
+    fixedJsonStr = fixedJsonStr.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+    fixedJsonStr = fixedJsonStr.replace(/:\s*([a-zA-Z][a-zA-Z0-9_]*)([,\}])/g, ':"$1"$2');
+    
+    let parsed = JSON.parse(fixedJsonStr);
+    
+    if (!Array.isArray(parsed)) {
+      parsed = [parsed];
+    }
+    
+    if (parsed.length === 0) {
+      return <span className="text-gray-400 italic">Empty data</span>;
+    }
+    
+    // Get all unique keys preserving order
+    const allKeys = [];
+    const keySet = new Set();
+    
+    parsed.forEach(obj => {
+      if (obj && typeof obj === 'object') {
+        Object.keys(obj).forEach(key => {
+          if (!keySet.has(key)) {
+            keySet.add(key);
+            allKeys.push(key);
+          }
+        });
+      }
+    });
+    
+    // Theme colors
+    const headerBg = theme === 'green' 
+      ? 'from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30'
+      : 'from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30';
+    const headerBorder = theme === 'green'
+      ? 'border-green-300 dark:border-green-700'
+      : 'border-blue-300 dark:border-blue-700';
+    const headerText = theme === 'green'
+      ? 'text-green-900 dark:text-green-200'
+      : 'text-blue-900 dark:text-blue-200';
+    const hoverBg = theme === 'green'
+      ? 'hover:bg-green-50 dark:hover:bg-green-900/10'
+      : 'hover:bg-blue-50 dark:hover:bg-blue-900/10';
+    
+    return (
+      <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
+        <table className="min-w-full text-sm bg-white dark:bg-gray-900">
+          <thead>
+            <tr className={`bg-gradient-to-r ${headerBg} border-b-2 ${headerBorder}`}>
+              {allKeys.map((key, idx) => (
+                <th key={idx} className={`px-4 py-3 font-bold text-left text-xs ${headerText} tracking-widest border-r ${headerBorder} last:border-r-0`}>
+                  {key}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            {parsed.map((row, i) => (
+              <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/30'}>
+                {allKeys.map((key, colIdx) => (
+                  <td key={colIdx} className="px-4 py-2.5 font-mono text-xs text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                    {row[key] !== null && row[key] !== undefined ? String(row[key]) : ''}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+    
+  } catch (error) {
+    console.error('Error parsing JSON for table:', error);
+    const bgClass = theme === 'green' 
+      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+    
+    return (
+      <pre className={`${bgClass} p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border ${className}`}>
+        {text}
+      </pre>
+    );
+  }
+};
+
+const logSubmission = async (status, submittedCode) => {
+
+    console.log("logging submission");
+
+    console.log(user?.email);
+
+
+
+    if (!user?.uid) return;
+
+
+
+  };
 
 import AnimatedTestResults from '../AnimatedTestResults';
 import { executeCode } from '../api';
@@ -70,115 +203,6 @@ const getColumnsFromSchema = (schema) => {
   }
 
   return columns;
-};
-
-// Helper: Render pipe-separated SQL output as a styled table with optional headers
-const SqlResultTable = ({ text, className = '', columns = null }) => {
-  if (!text || typeof text !== 'string') return <span className="text-gray-400 italic">No output</span>;
-  const lines = text.split('\n').filter(l => l.trim() !== '');
-  if (lines.length === 0) return <span className="text-gray-400 italic">Empty result</span>;
-
-  // Check if output contains pipes (table format)
-  const hasPipes = lines.some(line => line.includes('|'));
-
-  let rows;
-  let dataColCount;
-
-  if (!hasPipes) {
-    // No pipes - treat each line as a single cell in one column
-    rows = lines.map(line => [line]);
-    dataColCount = 1;
-  } else {
-    // Has pipes - split by pipe
-    rows = lines.map(line => line.split('|').map(cell => cell.trim()));
-    dataColCount = Math.max(...rows.map(r => r.length));
-  }
-
-  // Decide which headers to use
-  let headers = null;
-  let dataRows = rows;
-
-  // If columns provided, use them
-  if (columns && columns.length > 0) {
-    // Use provided columns as headers
-    headers = columns.slice(0, dataColCount);
-
-    // Check if first row is explicitly the header (matches expected columns exactly)
-    const firstRow = rows[0];
-    
-    // Check if the first row exactly matches the provided columns
-    const isActuallyHeader = firstRow && firstRow.length <= headers.length && firstRow.every((cell, idx) => {
-      const header = headers[idx];
-      return header && cell.trim().toLowerCase() === header.toLowerCase();
-    });
-
-    // If first row explicitly matches columns, skip it
-    if (isActuallyHeader && rows.length > 1) {
-      headers = firstRow;
-      dataRows = rows.slice(1);
-    } else if (isActuallyHeader && rows.length === 1) {
-      headers = firstRow;
-      dataRows = [];
-    } else {
-      dataRows = rows;
-    }
-  } else if (rows.length > 0 && dataColCount > 0) {
-    // For all tables: check if first row looks like headers
-    const firstRow = rows[0];
-
-    // Check if first row looks like headers (column names)
-    // Matches simple column names OR SQL function expressions like AVG(amount), MAX(price), COUNT(*)
-    const looksLikeHeader = firstRow.every(cell =>
-      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
-    );
-
-    if (looksLikeHeader && rows.length > 1) {
-      // First row looks like headers - use it
-      headers = firstRow;
-      dataRows = rows.slice(1);
-    } else if (rows.length === 1 && dataColCount === 1) {
-      // Single scalar result (like SELECT MAX())
-      headers = ['Result'];
-      dataRows = rows;
-    } else {
-      // No headers - generate generic ones
-      headers = Array.from({ length: dataColCount }, (_, i) => `Column ${i + 1}`);
-      dataRows = rows;
-    }
-  }
-
-  return (
-    <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
-      <table className="min-w-full text-sm bg-white dark:bg-gray-900">
-        {headers && headers.length > 0 && (
-          <thead>
-            <tr className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 border-b-2 border-blue-300 dark:border-blue-700">
-              {headers.map((col, j) => (
-                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-        )}
-        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-          {dataRows.map((row, i) => (
-            <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors' : 'bg-gray-50 dark:bg-gray-800/30 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors'}>
-              {row.map((cell, j) => (
-                <td key={j} className="px-4 py-2.5 font-mono text-xs text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
-                  {cell}
-                </td>
-              ))}
-              {/* Pad empty cells if needed */}
-              {Array.from({ length: dataColCount - row.length }).map((_, k) => (
-                <td key={`pad-${k}`} className="px-4 py-2.5"></td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 };
 
 // Helper: Parse and display CREATE TABLE schema visually
@@ -407,10 +431,10 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null }) 
                       );
                     }
                     return (
-                      <SqlResultTable
+                      <JsonToTableDisplay
                         text={test.expected}
+                        theme="green"
                         className=""
-                        columns={firstTableColumns}
                       />
                     );
                   })()}
@@ -452,10 +476,10 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null }) 
                     }
 
                     return (
-                      <SqlResultTable
+                      <JsonToTableDisplay
                         text={test.output}
+                        theme="blue"
                         className=""
-                        columns={userColumns}
                       />
                     );
                   })()}
@@ -1351,7 +1375,7 @@ function SqlPage({ question }) {
                 <div className="mt-6">
                   <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example Output:</h2>
                   {questionData?.Example?.[0]?.includes('|') ? (
-                    <SqlResultTable text={questionData.Example[0].split('Output:')[1]?.trim() || questionData.Example[0]} />
+                    <JsonToTableDisplay text={questionData.Example[0].split('Output:')[1]?.trim() || questionData.Example[0]} />
                   ) : (
                     <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
                       {questionData?.Example?.[0]}
@@ -1363,7 +1387,7 @@ function SqlPage({ question }) {
                   <div className="mt-6">
                     <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
                     {questionData.Example[1].includes('|') ? (
-                      <SqlResultTable text={questionData.Example[1].split('Output:')[1]?.trim() || questionData.Example[1]} />
+                      <JsonToTableDisplay text={questionData.Example[1].split('Output:')[1]?.trim() || questionData.Example[1]} />
                     ) : (
                       <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
                         {questionData.Example[1]}

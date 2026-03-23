@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDatabase, ref, onValue, set, remove, get } from 'firebase/database';
-import { FiPlus, FiEdit2, FiTrash2 } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiUpload } from 'react-icons/fi';
 import { database } from '../../firebase';
 import toast from 'react-hot-toast';
 import LoadingPage from '../LoadingPage';
@@ -134,14 +134,23 @@ const ManageCourses = () => {
         <div className="p-6">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Manage Courses</h2>
-                <button
-                    onClick={createCourse}
-                    disabled={creatingCourse}
-                    className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors duration-200"
-                >
-                    <FiPlus className="mr-2" />
-                    {creatingCourse ? 'Creating...' : 'Create Course'}
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => navigate('/bulk-course-upload')}
+                        className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors duration-200"
+                    >
+                        <FiUpload className="mr-2" />
+                        Bulk Upload
+                    </button>
+                    <button
+                        onClick={createCourse}
+                        disabled={creatingCourse}
+                        className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors duration-200"
+                    >
+                        <FiPlus className="mr-2" />
+                        {creatingCourse ? 'Creating...' : 'Create Course'}
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

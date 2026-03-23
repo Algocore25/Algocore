@@ -13,6 +13,7 @@ import TestsList from './pages/Admin/TestsList';
 import TestManage from './pages/Admin/TestManage';
 import ExamMonitor from './pages/Admin/ExamMonitor';
 import CourseEdit from './pages/Admin/CourseEdit';
+import BulkCourseUpload from './pages/Admin/BulkCourseUpload';
 import ProtectedRoute from './ProtectedRoute';
 import CompilerPage from './pages/CompilerPage';
 import LoadingPage from './pages/LoadingPage';
@@ -94,6 +95,7 @@ function App() {
               <Route path="/admin-email" element={<ProtectedRoute requireAdmin={true}><EmailPage /></ProtectedRoute>} />
               <Route path="/testedit/:testId" element={<ProtectedRoute requireAdmin={true}><TestManage /></ProtectedRoute>} />
               <Route path="/courseedit/:courseId" element={<ProtectedRoute requireAdmin={true}><CourseEdit /></ProtectedRoute>} />
+              <Route path="/bulk-course-upload" element={<ProtectedRoute requireAdmin={true}><BulkCourseUpload /></ProtectedRoute>} />
 
               <Route path="/problem/:course/:subcourse/:questionId" element={<ProtectedRoute > <DynamicComponent /></ProtectedRoute>} />
               <Route path="/profile" element={<ProfilePage />} />

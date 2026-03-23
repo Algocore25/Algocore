@@ -43,7 +43,8 @@ const CourseEdit = () => {
         { id: 'javascript', label: 'JavaScript' },
         { id: 'java', label: 'Java' },
         { id: 'cpp', label: 'C++' },
-        { id: 'typescript', label: 'TypeScript' }
+        { id: 'typescript', label: 'TypeScript' },
+        { id: 'sql', label: 'SQL' }
     ];
 
     useEffect(() => {

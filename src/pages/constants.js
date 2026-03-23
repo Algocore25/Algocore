@@ -194,5 +194,7 @@ rl.on('line', (line: string) => {
 rl.on('close', () => {
   // Write your code here
   
-});`
+});`,
+  sql: `-- Write your SQL query here
+SELECT * FROM table_name;`
 };

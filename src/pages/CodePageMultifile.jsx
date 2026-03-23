@@ -306,12 +306,13 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
         const currentResult = {
           input,
           expected: expectedOutput,
-          output: result.output,
+          output: result?.error || result.output,
           passed,
           status: 'done',
           time: result.cpuTime || 0,
           memory: result.memory || 0,
           timeout: result.timeout || false,
+          error: result?.error
         };
 
         updatedResults[i] = currentResult;
@@ -322,12 +323,13 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
         const errorResult = {
           input,
           expected: expectedOutput,
-          output: error.message || 'Error',
+          output: error.message || 'Error executing code',
           passed: false,
           status: 'done',
           time: 0,
           memory: 0,
           timeout: false,
+          error: error.message || 'Error executing code'
         };
         updatedResults[i] = errorResult;
         setTestResults([...updatedResults]);

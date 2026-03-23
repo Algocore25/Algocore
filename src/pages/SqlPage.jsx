@@ -50,475 +50,192 @@ import { decodeShort } from '../utils/urlEncoder';
 
 
 
-// Helper: Extract all columns from schema for display
-
-const getColumnsFromSchema = (schema) => {
-
-  if (!schema) return {};
-
-
-
-  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]*?)\)(?:;|\n)/gi;
-
-  const columns = {};
-
-  let match;
-
-
-
-  while ((match = tableRegex.exec(schema)) !== null) {
-
-    const tableName = match[1];
-
-    const columnsStr = match[2];
-
-    const tableColumns = [];
-
-    let currentCol = '';
-
-    let parenDepth = 0;
-
-
-
-    for (let i = 0; i < columnsStr.length; i++) {
-
-      const char = columnsStr[i];
-
-      if (char === '(') parenDepth++;
-
-      else if (char === ')') parenDepth--;
-
-      else if (char === ',' && parenDepth === 0) {
-
-        if (currentCol.trim()) {
-
-          const parts = currentCol.trim().split(/\s+/);
-
-          if (parts.length > 0) {
-
-            tableColumns.push(parts[0]);
-
-          }
-
-        }
-
-        currentCol = '';
-
-        continue;
-
-      }
-
-      currentCol += char;
-
-    }
-
-
-
-    if (currentCol.trim()) {
-
-      const parts = currentCol.trim().split(/\s+/);
-
-      if (parts.length > 0) {
-
-        tableColumns.push(parts[0]);
-
-      }
-
-    }
-
-
-
-    if (tableColumns.length > 0) {
-
-      columns[tableName] = tableColumns;
-
-    }
-
+// Helper: Convert JSON directly to table format (blue theme for user output)
+const JsonToTableDisplay = ({ text, className = '', theme = 'blue' }) => {
+  if (!text || typeof text !== 'string') {
+    return <span className="text-gray-400 italic">No output</span>;
   }
 
-
-
-  return columns;
-
-};
-
-
-
-// Helper: Extract column names from SELECT statement
-
-const extractColumnsFromQuery = (sqlCode) => {
-
-  if (!sqlCode || typeof sqlCode !== 'string') return null;
-
-
-
-  // Match SELECT clause
-
-  const selectMatch = sqlCode.match(/SELECT\s+(.*?)\s+FROM\s+/is);
-
-  if (!selectMatch) return null;
-
-
-
-  const selectClause = selectMatch[1];
-
-
-
-  // Split by comma, but be careful with function calls
-
-  const columns = [];
-
-  let currentColumn = '';
-
-  let parenDepth = 0;
-
-
-
-  for (let i = 0; i < selectClause.length; i++) {
-
-    const char = selectClause[i];
-
-    if (char === '(') parenDepth++;
-
-    else if (char === ')') parenDepth--;
-
-    else if (char === ',' && parenDepth === 0) {
-
-      const col = currentColumn.trim();
-
-      if (col) {
-
-        const columnName = extractColumnName(col);
-
-        if (columnName) {
-
-          columns.push(columnName);
-
-        }
-
-      }
-
-      currentColumn = '';
-
-      continue;
-
-    }
-
-    currentColumn += char;
-
+  const trimmed = text.trim();
+  
+  // Check if it's JSON format
+  let jsonStr = trimmed;
+  let isJsonFormat = false;
+  
+  if (trimmed.startsWith('json[') && trimmed.endsWith(']')) {
+    jsonStr = trimmed.slice(4);
+    isJsonFormat = true;
+  } else if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+    isJsonFormat = true;
   }
-
-
-
-  // Don't forget the last column
-
-  if (currentColumn.trim()) {
-
-    const col = currentColumn.trim();
-
-    const columnName = extractColumnName(col);
-
-    if (columnName) {
-
-      columns.push(columnName);
-
-    }
-
-  }
-
-
-
-  // Return null if SELECT * or no valid columns found
-
-  if (columns.length === 0 || columns[0] === '*') return null;
-
-
-
-  return columns.length > 0 ? columns : null;
-
-};
-
-
-
-// Helper: Extract column name, handling aliases
-
-const extractColumnName = (colStr) => {
-
-  // Check for alias (with AS keyword or without)
-
-  const aliasMatch = colStr.match(/\s+AS\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i);
-
-  if (aliasMatch) {
-
-    // Return the alias if it exists
-
-    return aliasMatch[1];
-
-  }
-
-
-
-  // Check for alias without AS keyword (space-separated at end)
-
-  const spaceParts = colStr.trim().split(/\s+/);
-
-
-
-  // If there are multiple parts and the last part looks like an identifier and is not a keyword
-
-  if (spaceParts.length > 1) {
-
-    const lastPart = spaceParts[spaceParts.length - 1];
-
-    const commonKeywords = ['FROM', 'WHERE', 'GROUP', 'ORDER', 'LIMIT', 'AND', 'OR', 'ON'];
-
-
-
-    // Check if last part is a valid identifier and not a keyword
-
-    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lastPart) && !commonKeywords.includes(lastPart.toUpperCase())) {
-
-      return lastPart;
-
-    }
-
-  }
-
-
-
-  // No alias - extract base column name
-
-  let columnName = colStr.trim().split(/\s+/)[0];
-
-
-
-  // Handle table.column format
-
-  if (columnName.includes('.')) {
-
-    columnName = columnName.split('.')[1];
-
-  }
-
-
-
-  // Filter out function calls
-
-  if (!columnName.includes('(')) {
-
-    return columnName;
-
-  }
-
-
-
-  return null;
-
-};
-
-
-
-// Helper: Render pipe-separated SQL output as a styled table with optional headers
-
-const SqlResultTable = ({ text, className = '', columns = null, tableName = null }) => {
-
-  console.log('Rendering SqlResultTable with text:', columns);
-
-  if (!text || typeof text !== 'string') return <span className="text-gray-400 italic">No output</span>;
-
-  const lines = text.split('\n').filter(l => l.trim() !== '');
-
-  if (lines.length === 0) return <span className="text-gray-400 italic">Empty result</span>;
-
-
-
-  // Check if output contains pipes (table format)
-
-  const hasPipes = lines.some(line => line.includes('|'));
-
-
-
-  let rows;
-
-  let dataColCount;
-
-
-
-  if (!hasPipes) {
-
-    // No pipes - treat each line as a single cell in one column
-
-    rows = lines.map(line => [line]);
-
-    dataColCount = 1;
-
-  } else {
-
-    // Has pipes - split by pipe
-
-    rows = lines.map(line => line.split('|').map(cell => cell.trim()));
-
-    dataColCount = Math.max(...rows.map(r => r.length));
-
-  }
-
-
-
-  // Decide which headers to use
-
-  let headers = null;
-
-  let dataRows = rows;
-
-
-
-  // For "products" table, use actual column names from schema
-
-  if (columns && columns.length > 0) {
-
-    // Use provided columns as headers
-
-    headers = columns.slice(0, dataColCount);
-
-
-
-    // Check if first row is explicitly the header (matches expected columns exactly)
-
-    const firstRow = rows[0];
-
-    // Check if the first row exactly matches the provided columns
-    const isActuallyHeader = firstRow && firstRow.length <= headers.length && firstRow.every((cell, idx) => {
-      const header = headers[idx];
-      return header && cell.trim().toLowerCase() === header.toLowerCase();
-    });
-
-
-
-    // If first row explicitly matches columns, skip it
-    if (isActuallyHeader && rows.length > 1) {
-      headers = firstRow;
-      dataRows = rows.slice(1);
-    } else if (isActuallyHeader && rows.length === 1) {
-      headers = firstRow;
-      dataRows = [];
-    } else {
-      dataRows = rows;
-    }
-
-  } else if (rows.length > 0 && dataColCount > 0) {
-
-    // For all tables: check if first row looks like headers
-
-    const firstRow = rows[0];
-
-
-
-    // Check if first row looks like headers (column names)
-
-    // Matches simple column names OR SQL function expressions like AVG(amount), MAX(price), COUNT(*)
-    const looksLikeHeader = firstRow.every(cell =>
-      cell.length < 100 && /^[a-zA-Z_][a-zA-Z0-9_()*,\s.]*$/.test(cell.trim())
+  
+  if (!isJsonFormat) {
+    // Not JSON - display as pre
+    const bgClass = theme === 'green' 
+      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+    
+    return (
+      <pre className={`${bgClass} p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border ${className}`}>
+        {text}
+      </pre>
     );
-
-
-
-    if (looksLikeHeader && rows.length > 1) {
-
-      // First row looks like headers - use it
-
-      headers = firstRow;
-
-      dataRows = rows.slice(1);
-
-    } else if (rows.length === 1 && dataColCount === 1) {
-
-      // Single scalar result (like SELECT MAX(price))
-
-      headers = ['Result'];
-
-      dataRows = rows;
-
-    } else {
-
-      // No headers - generate generic ones
-
-      headers = Array.from({ length: dataColCount }, (_, i) => `Column ${i + 1}`);
-
-      dataRows = rows;
-
-    }
-
   }
-
-
-
-  return (
-
-    <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
-
-      <table className="min-w-full text-sm bg-white dark:bg-gray-900">
-
-        {headers && headers.length > 0 && (
-
+  
+  try {
+    // Fix common JSON issues
+    let fixedJsonStr = jsonStr;
+    fixedJsonStr = fixedJsonStr.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+    fixedJsonStr = fixedJsonStr.replace(/:\s*([a-zA-Z][a-zA-Z0-9_]*)([,\}])/g, ':"$1"$2');
+    
+    let parsed = JSON.parse(fixedJsonStr);
+    
+    if (!Array.isArray(parsed)) {
+      parsed = [parsed];
+    }
+    
+    if (parsed.length === 0) {
+      return <span className="text-gray-400 italic">Empty data</span>;
+    }
+    
+    // Get all unique keys preserving order
+    const allKeys = [];
+    const keySet = new Set();
+    
+    parsed.forEach(obj => {
+      if (obj && typeof obj === 'object') {
+        Object.keys(obj).forEach(key => {
+          if (!keySet.has(key)) {
+            keySet.add(key);
+            allKeys.push(key);
+          }
+        });
+      }
+    });
+    
+    // Theme colors
+    const headerBg = theme === 'green' 
+      ? 'from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30'
+      : 'from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30';
+    const headerBorder = theme === 'green'
+      ? 'border-green-300 dark:border-green-700'
+      : 'border-blue-300 dark:border-blue-700';
+    const headerText = theme === 'green'
+      ? 'text-green-900 dark:text-green-200'
+      : 'text-blue-900 dark:text-blue-200';
+    const hoverBg = theme === 'green'
+      ? 'hover:bg-green-50 dark:hover:bg-green-900/10'
+      : 'hover:bg-blue-50 dark:hover:bg-blue-900/10';
+    
+    return (
+      <div className={`overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
+        <table className="min-w-full text-sm bg-white dark:bg-gray-900">
           <thead>
-
-            <tr className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 border-b-2 border-blue-300 dark:border-blue-700">
-
-              {headers.map((col, j) => (
-
-                <th key={j} className="px-4 py-3 font-bold text-left text-xs text-blue-900 dark:text-blue-200 tracking-widest border-r border-blue-200 dark:border-blue-700 last:border-r-0">
-
-                  {col}
-
+            <tr className={`bg-gradient-to-r ${headerBg} border-b-2 ${headerBorder}`}>
+              {allKeys.map((key, idx) => (
+                <th key={idx} className={`px-4 py-3 font-bold text-left text-xs ${headerText} tracking-widest border-r ${headerBorder} last:border-r-0`}>
+                  {key}
                 </th>
-
               ))}
-
             </tr>
-
           </thead>
-
-        )}
-
-        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-
-          {dataRows.map((row, i) => (
-
-            <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors' : 'bg-gray-50 dark:bg-gray-800/30 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors'}>
-
-              {row.map((cell, j) => (
-
-                <td key={j} className="px-4 py-2.5 font-mono text-xs text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
-
-                  {cell}
-
-                </td>
-
-              ))}
-
-              {/* Pad empty cells if needed */}
-
-              {Array.from({ length: dataColCount - row.length }).map((_, k) => (
-
-                <td key={`pad-${k}`} className="px-4 py-2.5"></td>
-
-              ))}
-
-            </tr>
-
-          ))}
-
-        </tbody>
-
-      </table>
-
-    </div>
-
-  );
-
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            {parsed.map((row, i) => (
+              <tr key={i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/30'}>
+                {allKeys.map((key, colIdx) => (
+                  <td key={colIdx} className="px-4 py-2.5 font-mono text-xs text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                    {row[key] !== null && row[key] !== undefined ? String(row[key]) : ''}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+    
+  } catch (error) {
+    console.error('Error parsing JSON for table:', error);
+    const bgClass = theme === 'green' 
+      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+    
+    return (
+      <pre className={`${bgClass} p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border ${className}`}>
+        {text}
+      </pre>
+    );
+  }
 };
 
-
+// Helper: Convert JSON array format to plain text format
+const convertJsonToPipeFormat = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  // Check if the text is in JSON array format
+  const trimmed = text.trim();
+  
+  // Handle both 'json[...]' and plain JSON array formats
+  let jsonStr = trimmed;
+  let isJsonFormat = false;
+  
+  if (trimmed.startsWith('json[') && trimmed.endsWith(']')) {
+    jsonStr = trimmed.slice(4); // Remove 'json[' prefix
+    isJsonFormat = true;
+  } else if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+    isJsonFormat = true;
+  }
+  
+  if (isJsonFormat) {
+    try {
+      console.log('Attempting to parse JSON:', jsonStr);
+      
+      // Fix common JSON issues like missing quotes
+      let fixedJsonStr = jsonStr;
+      
+      // Fix missing quotes around object keys
+      fixedJsonStr = fixedJsonStr.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+      
+      // Fix missing quotes around string values that aren't properly quoted
+      fixedJsonStr = fixedJsonStr.replace(/:\s*([a-zA-Z][a-zA-Z0-9_]*)([,\}])/g, ':"$1"$2');
+      
+      console.log('Fixed JSON string:', fixedJsonStr);
+      
+      let parsed = JSON.parse(fixedJsonStr);
+      
+      // Handle single object by wrapping in array
+      if (!Array.isArray(parsed)) {
+        parsed = [parsed];
+      }
+      
+      if (parsed.length === 0) return text;
+      
+      // Convert to plain text format
+      const textLines = parsed.map(obj => {
+        if (!obj || typeof obj !== 'object') return String(obj);
+        
+        return Object.entries(obj)
+          .map(([key, value]) => {
+            if (value === null || value === undefined) return `${key}: `;
+            if (typeof value === 'object') return `${key}: ${JSON.stringify(value)}`;
+            return `${key}: ${value}`;
+          })
+          .join(', ');
+      });
+      
+      const result = textLines.join('\n');
+      console.log('Converted JSON to plain text format:', result);
+      return result;
+      
+    } catch (error) {
+      console.error('Error parsing JSON format:', error);
+      console.error('JSON string that failed:', jsonStr);
+      return text; // Return as-is if parsing fails
+    }
+  }
+  
+  return text; // Return as-is if not JSON format
+};
 
 // Helper: Parse and display CREATE TABLE schema visually
 
@@ -526,6 +243,7 @@ const SqlSchemaDisplay = ({ schema }) => {
 
   if (!schema) return null;
 
+// ... (rest of the code remains the same)
 
 
   // Parse CREATE TABLE statements - improved regex to handle various formats
@@ -740,514 +458,6 @@ const SqlSchemaDisplay = ({ schema }) => {
 
 
 
-// Helper: Parse and display tables with actual data from INSERT statements
-
-const SqlTablesDisplay = ({ schema }) => {
-
-  if (!schema) return <p className="text-gray-600 dark:text-gray-400">No schema available</p>;
-
-
-
-  // Parse CREATE TABLE statements - improved regex
-
-  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([^;]*?)\)(?:;|\n)/gi;
-
-  const tableStructures = {};
-
-  let match;
-
-
-
-  while ((match = tableRegex.exec(schema)) !== null) {
-
-    const tableName = match[1];
-
-    const columnsStr = match[2];
-
-
-
-    // Parse column names accounting for parentheses in data types
-
-    const columns = [];
-
-    let currentCol = '';
-
-    let parenDepth = 0;
-
-
-
-    for (let i = 0; i < columnsStr.length; i++) {
-
-      const char = columnsStr[i];
-
-      if (char === '(') parenDepth++;
-
-      else if (char === ')') parenDepth--;
-
-      else if (char === ',' && parenDepth === 0) {
-
-        if (currentCol.trim()) {
-
-          const parts = currentCol.trim().split(/\s+/);
-
-          if (parts.length > 0) {
-
-            columns.push(parts[0]);
-
-          }
-
-        }
-
-        currentCol = '';
-
-        continue;
-
-      }
-
-      currentCol += char;
-
-    }
-
-
-
-    if (currentCol.trim()) {
-
-      const parts = currentCol.trim().split(/\s+/);
-
-      if (parts.length > 0) {
-
-        columns.push(parts[0]);
-
-      }
-
-    }
-
-
-
-    tableStructures[tableName] = columns;
-
-  }
-
-
-
-  // Parse INSERT statements with data - handle multiple rows per INSERT
-
-  const tableData = {};
-
-
-
-  // Find each complete INSERT statement
-
-  const insertStatements = schema.match(/INSERT\s+INTO\s+\w+[^;]*;/gi) || [];
-
-
-
-  for (const stmt of insertStatements) {
-
-    // Extract table name
-
-    const tableMatch = stmt.match(/INSERT\s+INTO\s+(\w+)/i);
-
-    if (!tableMatch) continue;
-
-
-
-    const tableName = tableMatch[1];
-
-    if (!tableData[tableName]) {
-
-      tableData[tableName] = [];
-
-    }
-
-
-
-    // Extract VALUES clause
-
-    const valuesMatch = stmt.match(/VALUES\s*(.+?)(?:;|$)/is);
-
-    if (!valuesMatch) continue;
-
-
-
-    const valuesSection = valuesMatch[1];
-
-
-
-    // Split into individual rows - need to handle nested parentheses and quotes
-
-    const rows = [];
-
-    let currentRow = '';
-
-    let parenDepth = 0;
-
-    let inString = false;
-
-    let stringChar = null;
-
-
-
-    for (let i = 0; i < valuesSection.length; i++) {
-
-      const char = valuesSection[i];
-
-      const prevChar = i > 0 ? valuesSection[i - 1] : '';
-
-
-
-      // Track string state
-
-      if ((char === '"' || char === "'") && prevChar !== '\\') {
-
-        if (!inString) {
-
-          inString = true;
-
-          stringChar = char;
-
-        } else if (char === stringChar) {
-
-          inString = false;
-
-        }
-
-      }
-
-
-
-      // Track parenthesis depth when not in string
-
-      if (!inString) {
-
-        if (char === '(') {
-
-          parenDepth++;
-
-        } else if (char === ')') {
-
-          parenDepth--;
-
-        }
-
-      }
-
-
-
-      // At top level (parenDepth === 0), split on commas
-
-      if (!inString && char === ',' && parenDepth === 0) {
-
-        const trimmed = currentRow.trim();
-
-        if (trimmed) {
-
-          rows.push(trimmed);
-
-        }
-
-        currentRow = '';
-
-        continue;
-
-      }
-
-
-
-      currentRow += char;
-
-    }
-
-
-
-    // Don't forget the last row
-
-    if (currentRow.trim()) {
-
-      rows.push(currentRow.trim());
-
-    }
-
-
-
-    // Parse each row
-
-    for (const rowStr of rows) {
-
-      const match = rowStr.match(/^\((.+)\)$/);
-
-      if (!match) continue;
-
-
-
-      const valuesStr = match[1];
-
-      const values = [];
-
-      let currentValue = '';
-
-      let inStr = false;
-
-      let strChar = null;
-
-      let pDepth = 0;
-
-
-
-      for (let i = 0; i < valuesStr.length; i++) {
-
-        const c = valuesStr[i];
-
-        const prev = i > 0 ? valuesStr[i - 1] : '';
-
-
-
-        // Handle quotes
-
-        if ((c === '"' || c === "'") && prev !== '\\') {
-
-          if (!inStr) {
-
-            inStr = true;
-
-            strChar = c;
-
-            currentValue += c;
-
-          } else if (c === strChar) {
-
-            inStr = false;
-
-            strChar = null;
-
-            currentValue += c;
-
-          } else {
-
-            currentValue += c;
-
-          }
-
-        }
-
-        // Handle parentheses
-
-        else if (c === '(' && !inStr) {
-
-          pDepth++;
-
-          currentValue += c;
-
-        } else if (c === ')' && !inStr) {
-
-          pDepth--;
-
-          currentValue += c;
-
-        }
-
-        // Handle value separator
-
-        else if (c === ',' && !inStr && pDepth === 0) {
-
-          let v = currentValue.trim();
-
-          if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) {
-
-            v = v.slice(1, -1);
-
-          }
-
-          values.push(v);
-
-          currentValue = '';
-
-        } else {
-
-          currentValue += c;
-
-        }
-
-      }
-
-
-
-      // Add last value
-
-      if (currentValue.trim()) {
-
-        let v = currentValue.trim();
-
-        if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) {
-
-          v = v.slice(1, -1);
-
-        }
-
-        values.push(v);
-
-      }
-
-
-
-      if (values.length > 0) {
-
-        tableData[tableName].push(values);
-
-      }
-
-    }
-
-  }
-
-
-
-
-
-  if (Object.keys(tableData).length === 0) {
-
-    return (
-
-      <div className="text-center py-8">
-
-        <p className="text-gray-600 dark:text-gray-400 mb-2">No tables with data found</p>
-
-        <p className="text-xs text-gray-500 dark:text-gray-500">Schema: {schema?.substring(0, 100)}...</p>
-
-      </div>
-
-    );
-
-  }
-
-
-
-  return (
-
-    <div className="space-y-6">
-
-      {Object.entries(tableData).map(([tableName, rows]) => {
-
-        const columns = tableStructures[tableName] || [];
-
-        return (
-
-          <div key={tableName} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-
-            <div className="bg-purple-50 dark:bg-purple-900/20 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
-
-              <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-
-              </svg>
-
-              <span className="font-bold text-base text-purple-700 dark:text-purple-300">{tableName}</span>
-
-              <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 font-medium">{rows.length} {rows.length === 1 ? 'row' : 'rows'}</span>
-
-            </div>
-
-            <div className="overflow-x-auto">
-
-              <table className="min-w-full text-sm">
-
-                <thead>
-
-                  <tr className="bg-gray-100 dark:bg-gray-800">
-
-                    {columns.length > 0 ? (
-
-                      columns.map((col, idx) => (
-
-                        <th
-
-                          key={idx}
-
-                          className="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 last:border-r-0"
-
-                        >
-
-                          {col}
-
-                        </th>
-
-                      ))
-
-                    ) : (
-
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Data</th>
-
-                    )}
-
-                  </tr>
-
-                </thead>
-
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-
-                  {rows.map((row, rowIdx) => (
-
-                    <tr
-
-                      key={rowIdx}
-
-                      className={rowIdx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50'}
-
-                    >
-
-                      {columns.length > 0 ? (
-
-                        columns.map((col, colIdx) => (
-
-                          <td
-
-                            key={colIdx}
-
-                            className="px-4 py-2.5 font-mono text-sm text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0 whitespace-nowrap"
-
-                          >
-
-                            {row[colIdx] || '-'}
-
-                          </td>
-
-                        ))
-
-                      ) : (
-
-                        <td className="px-4 py-2.5 font-mono text-sm text-gray-800 dark:text-gray-200">
-
-                          {row.join(' | ')}
-
-                        </td>
-
-                      )}
-
-                    </tr>
-
-                  ))}
-
-                </tbody>
-
-              </table>
-
-            </div>
-
-          </div>
-
-        );
-
-      })}
-
-    </div>
-
-  );
-
-};
-
-
-
 // SQL-specific test results display with table formatting
 
 const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null, questionData = null, code = '' }) => {
@@ -1399,53 +609,27 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null, qu
                   <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Expected Output</p>
 
                   {(() => {
-
-                    const schemaColumns = getColumnsFromSchema(schema);
-
+                    const schemaColumns = null;
                     console.log('Schema columns for expected output:', schemaColumns);
-
-                    const firstTableColumns = Object.values(schemaColumns)[0] || null;
-
-                    const expectedSchema = questionData?.testcases[0]?.expectedColumns || firstTableColumns;
+                    const expectedSchema = questionData?.testcases[0]?.expectedColumns || null;
 
                     if (!test.expected || test.expected === 'No output') {
-
-
-
-
-
                       // Non-table format (plain description/text)
-
                       return (
-
                         <pre className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-800">
-
                           {test.expected || 'No output'}
-
                         </pre>
-
                       );
-
                     }
 
-
-
-                    // Table format
-
+                    // Check if expected output is in JSON format and display as table
                     return (
-
-                      <SqlResultTable
-
+                      <JsonToTableDisplay
                         text={test.expected}
-
+                        theme="green"
                         className=""
-
-                        columns={expectedSchema}
-
                       />
-
                     );
-
                   })()}
 
                 </div>
@@ -1459,95 +643,60 @@ const SqlAnimatedTestResults = ({ testResults = [], runsubmit, schema = null, qu
                   <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Your Output</p>
 
                   {(() => {
-
-                    if (!test.output || test.output === 'No output' || test.output.startsWith('Error:')) {
-
-
-
-
-
-                      // Non-table format (plain description/text)
-
-                      const bgClass = test.passed
-
-                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-
-                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
-
-
-
+                    if (!test.output || test.output === 'No output') {
+                      // No output case
                       return (
-
-                        <pre className={`p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border ${bgClass}`}>
-
-                          {test.output || 'No output'}
-
+                        <pre className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-800">
+                          {test.output || test.error || 'No output'}
                         </pre>
-
                       );
-
                     }
 
+                    // Check if output is an error object
+                    let outputToDisplay = test.output;
+                    let hasError = false;
 
-
-                    // Table format - extract columns from actual output only
-
-                    let userColumns = null;
-
-
-
-                    // Extract columns from the actual output headers only
-
-                    const outputLines = test.output ? test.output.split('\n').filter(l => l.trim() !== '') : [];
-
-
-
-                    if (outputLines.length > 0) {
-
-                      const firstLine = outputLines[0];
-
-                      const potentialHeaders = firstLine.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
-
-
-
-                      // Check if first row looks like headers (pattern: word characters and underscores)
-
-                      const looksLikeHeaders = potentialHeaders.every(cell =>
-
-                        /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
-
-                      );
-
-
-
-                      if (looksLikeHeaders && outputLines.length > 1) {
-
-                        userColumns = potentialHeaders;
-
+                    if (typeof test.output === 'string') {
+                      try {
+                        const parsed = JSON.parse(test.output);
+                        if (parsed.error) {
+                          outputToDisplay = parsed.error;
+                          hasError = true;
+                        }
+                      } catch (e) {
+                        // Not JSON, use as-is
                       }
-
+                    } else if (test.output && test.output.error) {
+                      outputToDisplay = test.output.error;
+                      hasError = true;
                     }
 
+                    if (hasError || (typeof outputToDisplay === 'string' && outputToDisplay.startsWith('Error:'))) {
+                      // Error display with red styling
+                      return (
+                        <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
+                          <div className="flex items-start gap-2">
+                            <svg className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">SQL Error</p>
+                              <pre className="font-mono text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap break-words">
+                                {outputToDisplay}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
 
-
-                    console.log('Final columns used for user output:', userColumns);
-
-
-
+                    // Convert user output to table format if it's in JSON format
                     return (
-
-                      <SqlResultTable
-
+                      <JsonToTableDisplay
                         text={test.output}
-
                         className=""
-
-                        columns={userColumns}
-
                       />
-
                     );
-
                   })()}
 
                 </div>
@@ -1863,10 +1012,19 @@ function SqlPage({ data, navigation }) {
 
 
   // Helper: Compare both columns and rows for SQL output validation
-
   const compareTableOutput = (expectedOutput, actualOutput) => {
-
     const expectedColumns = questionData?.testcases[0]?.expectedColumns || null;
+
+    // Convert both inputs to pipe format if they're in JSON format
+    const normalizedExpected = convertJsonToPipeFormat(expectedOutput);
+    const normalizedActual = convertJsonToPipeFormat(actualOutput);
+
+    // Enhanced logging for debugging
+    console.log('=== Output Validation Debug ===');
+    console.log('Expected Output:', expectedOutput);
+    console.log('Actual Output:', actualOutput);
+    console.log('Normalized Expected:', normalizedExpected);
+    console.log('Normalized Actual:', normalizedActual);
 
     const normalize = (text) => {
       if (!text && text !== "") return [];
@@ -1878,182 +1036,141 @@ function SqlPage({ data, navigation }) {
       return processed;
     };
 
-    const rowexpectedLines = normalize(expectedOutput);
-
-    const actualLines = normalize(actualOutput);
+    const rowexpectedLines = normalize(normalizedExpected);
+    const actualLines = normalize(normalizedActual);
 
     const expectedLines = expectedColumns && rowexpectedLines.length > 0
       ? [expectedColumns.join('|'), ...rowexpectedLines]
       : rowexpectedLines;
 
+    console.log('Final Expected Lines:', expectedLines);
+    console.log('Final Actual Lines:', actualLines);
 
-
-    console.log(expectedLines);
-
-    console.log(actualLines);
-
-
+    // Handle error cases first
+    if (actualOutput && actualOutput.startsWith('Error:')) {
+      console.log('Actual output contains error - validation failed');
+      return false;
+    }
 
     // condition to compare column names if expected output has column names defined in question data
-
     if (expectedColumns && expectedLines.length > 0) {
-
       const expectedHeader = expectedLines[0];
-
       const actualHeader = actualLines.length > 0 ? actualLines[0] : '';
 
       console.log('Comparing headers:');
-
       console.log('Expected header:', expectedHeader);
-
       console.log('Actual header:', actualHeader);
 
       if (expectedHeader.trim() !== actualHeader.trim()) {
-
+        console.log('Header mismatch - validation failed');
         return false;
-
       }
-
     }
-
-
-
-    console.log('After header check:');
-
-
-
-
-
-
 
     // Check if both outputs have pipes (table format)
-
     const expectedHasPipes = expectedLines.some(line => line.includes('|'));
-
     const actualHasPipes = actualLines.some(line => line.includes('|'));
 
-
-
-
+    console.log('Expected has pipes:', expectedHasPipes);
+    console.log('Actual has pipes:', actualHasPipes);
 
     // If both are table format, compare columns and rows separately
-
     if (expectedHasPipes && actualHasPipes) {
-
       // Parse expected output
-
       const expectedRows = expectedLines.map(line =>
-
         line.split('|').map(cell => cell.trim()).filter(cell => cell !== '')
-
       );
-
-
 
       // Parse actual output
-
       const actualRows = actualLines.map(line =>
-
         line.split('|').map(cell => cell.trim()).filter(cell => cell !== '')
-
       );
 
-
+      console.log('Expected rows:', expectedRows);
+      console.log('Actual rows:', actualRows);
 
       // Must have at least header row
-
-      if (expectedRows.length === 0 || actualRows.length === 0) return false;
-
-
-
-      // Extract headers (first row) and data rows from expected output
-
-      const expectedHeaders = expectedRows[0];
-
-      const expectedDataRows = expectedRows.slice(1);
-
-
-
-      // Check if first row of actual output looks like column headers
-
-      // If it does, skip it; otherwise treat all rows as data
-
-      const firstRowLooksLikeHeader = actualRows[0].every(cell =>
-
-        /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
-
-      );
-
-      const actualDataRows = firstRowLooksLikeHeader ? actualRows.slice(1) : actualRows;
-
-      const actualHeaders = firstRowLooksLikeHeader ? actualRows[0] : null;
-
-
-
-      // Validate columns: must have same number of columns
-
-      if (expectedDataRows.length === 0) return false;
-
-      if (expectedDataRows[0].length !== actualDataRows[0].length) return false;
-
-
-
-      // Validate number of data rows match
-
-      if (expectedDataRows.length !== actualDataRows.length) return false;
-
-
-
-      // Validate each data row matches (case-insensitive, trimmed)
-
-      for (let i = 0; i < expectedDataRows.length; i++) {
-
-        const expectedRow = expectedDataRows[i];
-
-        const actualRow = actualDataRows[i];
-
-
-
-        // Check if each row has the same number of columns
-
-        if (expectedRow.length !== actualRow.length) return false;
-
-
-
-        // Check if each cell matches (case-insensitive, trimmed)
-
-        for (let j = 0; j < expectedRow.length; j++) {
-
-          if (expectedRow[j].toLowerCase() !== actualRow[j].toLowerCase()) return false;
-
-        }
-
+      if (expectedRows.length === 0 || actualRows.length === 0) {
+        console.log('Empty rows - validation failed');
+        return false;
       }
 
+      // Extract headers (first row) and data rows from expected output
+      const expectedHeaders = expectedRows[0];
+      const expectedDataRows = expectedRows.slice(1);
 
+      // Check if first row of actual output looks like column headers
+      // If it does, skip it; otherwise treat all rows as data
+      const firstRowLooksLikeHeader = actualRows[0].every(cell =>
+        /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(cell)
+      );
+      const actualDataRows = firstRowLooksLikeHeader ? actualRows.slice(1) : actualRows;
+      const actualHeaders = firstRowLooksLikeHeader ? actualRows[0] : null;
 
+      console.log('Expected headers:', expectedHeaders);
+      console.log('Actual headers:', actualHeaders);
+      console.log('Expected data rows:', expectedDataRows);
+      console.log('Actual data rows:', actualDataRows);
+
+      // Validate columns: must have same number of columns
+      if (expectedDataRows.length === 0) {
+        console.log('No expected data rows - validation failed');
+        return false;
+      }
+      if (expectedDataRows[0].length !== actualDataRows[0].length) {
+        console.log('Column count mismatch - validation failed');
+        return false;
+      }
+
+      // Validate number of data rows match
+      if (expectedDataRows.length !== actualDataRows.length) {
+        console.log('Row count mismatch - validation failed');
+        return false;
+      }
+
+      // Validate each data row matches (case-insensitive, trimmed)
+      for (let i = 0; i < expectedDataRows.length; i++) {
+        const expectedRow = expectedDataRows[i];
+        const actualRow = actualDataRows[i];
+
+        // Check if each row has the same number of columns
+        if (expectedRow.length !== actualRow.length) {
+          console.log(`Row ${i} column count mismatch - validation failed`);
+          return false;
+        }
+
+        // Check if each cell matches (case-insensitive, trimmed)
+        for (let j = 0; j < expectedRow.length; j++) {
+          const expectedCell = expectedRow[j].toLowerCase().trim();
+          const actualCell = actualRow[j].toLowerCase().trim();
+          
+          if (expectedCell !== actualCell) {
+            console.log(`Cell mismatch at row ${i}, column ${j}: expected "${expectedCell}", got "${actualCell}"`);
+            return false;
+          }
+        }
+      }
+
+      console.log('All validations passed - test successful');
       return true;
-
     }
-
-
 
     // If neither are table format, do simple line-by-line comparison
-
     if (!expectedHasPipes && !actualHasPipes) {
-
-      if (expectedLines.length !== actualLines.length) return false;
-
-      return expectedLines.every((val, idx) => val.trimEnd() === actualLines[idx].trimEnd());
-
+      console.log('Both non-table format - doing line-by-line comparison');
+      if (expectedLines.length !== actualLines.length) {
+        console.log('Line count mismatch - validation failed');
+        return false;
+      }
+      
+      const allMatch = expectedLines.every((val, idx) => val.trimEnd() === actualLines[idx].trimEnd());
+      console.log('Line-by-line comparison result:', allMatch);
+      return allMatch;
     }
 
-
-
     // If one is table format and other is not, they don't match
-
+    console.log('Format mismatch (one table, one not) - validation failed');
     return false;
-
   };
 
 
@@ -2202,6 +1319,7 @@ function SqlPage({ data, navigation }) {
 
       expected: tc.expectedOutput,
 
+
       output: '',
 
       passed: false,
@@ -2246,49 +1364,16 @@ function SqlPage({ data, navigation }) {
 
 
 
-        if (questionData.testcases[2]?.input === "regex2") {
+      
 
-          const regex = new RegExp(/^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
+          const resultlist = result.output ? result.output.split("\n") : [JSON.stringify(result)];
 
-          currentResult = {
-
-            input,
-
-            expected: expectedOutput,
-
-            output: result.output,
-
-            passed: regex.test(result.output),
-
-            status: 'done',
-
-          };
-
-        }
-
-        else if (questionData.testcases[2]?.input === "regex") {
-
-          const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
-
-          currentResult = {
-
-            input,
-
-            expected: expectedOutput,
-
-            output: result.output,
-
-            passed: regex.test(result.output),
-
-            status: 'done',
-
-          };
-
-        }
-
-        else {
-
-          const resultlist = result.output ? result.output.split("\n") : ["No output received."];
+          console.log(result);
+          
+          // If no output, show complete API response
+          if (!result.output) {
+            console.log('No output received, showing complete API response:', result);
+          }
 
           while (resultlist[resultlist.length - 1] === "") resultlist.pop();
 
@@ -2314,11 +1399,13 @@ function SqlPage({ data, navigation }) {
 
             passed,
 
+            error: result.error ,
+
             status: 'done',
 
           };
 
-        }
+        
 
 
 
@@ -2339,6 +1426,8 @@ function SqlPage({ data, navigation }) {
           expected: expectedOutput,
 
           output: error.message || 'Error',
+
+          error: error.message|| 'Error' ,
 
           passed: false,
 
@@ -2472,54 +1561,31 @@ function SqlPage({ data, navigation }) {
         const { input: testInput, expectedOutput } = tc;
         try {
           const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-          const { run: result } = await executeCode('sql', sqlSourceCode, testInput);
+          const  result  = await executeCode('sql', sqlSourceCode, testInput);
 
-          let currentResult;
-          if (questionData.testcases[2]?.input === "regex2") {
-            const regex = new RegExp(/^PID of example\.c = \d+\n[A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} [A-Z]+ \d{4}\n?$/);
-            currentResult = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: false
-            };
-          } else if (questionData.testcases[2]?.input === "regex") {
-            const regex = new RegExp(/^Child => PPID: \d+, PID: \d+\nParent => PID: \d+\nWaiting for child process to finish\.\nChild process finished\.\n?$/);
-            currentResult = {
-              input: testInput,
-              expected: expectedOutput,
-              output: result.output,
-              passed: regex.test(result.output),
-              status: 'done',
-              isFirstFailure: false
-            };
-          } else {
-            const resultOutput = result.output || '';
-            const normalize = (text) => {
-              if (!text && text !== "") return [];
-              const lines = String(text).split('\n');
-              const processed = [...lines];
-              while (processed.length > 0 && processed[processed.length - 1].trimEnd() === "") {
-                processed.pop();
-              }
-              return processed;
-            };
+       
+     
+          
 
-            const resultLines = normalize(resultOutput);
-            const expectedLines = normalize(expectedOutput);
+            console.log('Result output:', result);
+
+              const resultOutput = result.output || '';
+
+          
+
+           
             const passed = compareTableOutput(expectedOutput, resultOutput);
 
-            currentResult = {
+            const currentResult = {
               input: testInput,
               expected: expectedOutput,
               output: resultOutput,
               passed,
+              error: result.error || null,
               status: 'done',
               isFirstFailure: false
             };
-          }
+          
 
           updatedResults[i] = currentResult;
           setTestResults([...updatedResults]);
@@ -3591,7 +2657,7 @@ function SqlPage({ data, navigation }) {
 
                   <div className="mt-6">
 
-                    <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white flex items-center gap-2">
+                    <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white flex items-center gap-2">
 
                       <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
@@ -3604,55 +2670,30 @@ function SqlPage({ data, navigation }) {
                     </h2>
 
                     {questionData?.testcases?.[0]?.expectedOutput ? (
-
-                      questionData.testcases[0].expectedOutput.includes('|') ? (
-
-                        (() => {
-
-                          const schemaColumns = getColumnsFromSchema(questionData.schema);
-
-                          const firstTableColumns = Object.values(schemaColumns)[0] || null;
-
-                          return (
-
-                            <SqlResultTable
-
-                              text={questionData.testcases[0].expectedOutput}
-
-                              className="border-green-200 dark:border-green-800"
-
-                              columns={questionData.testcases[0].expectedColumns || firstTableColumns}
-
-                            />
-
-                          );
-
-                        })()
-
-                      ) : (
-
-                        <pre className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-green-200 dark:border-green-800">
-
-                          {questionData.testcases[0].expectedOutput}
-
-                        </pre>
-
-                      )
-
+                      (() => {
+                        const expectedOutput = questionData.testcases[0].expectedOutput;
+                        console.log('Description section - expected output:', expectedOutput);
+                        
+                        return (
+                          <JsonToTableDisplay
+                            text={expectedOutput}
+                            theme="green"
+                            className="border-green-200 dark:border-green-800"
+                          />
+                        );
+                      })()
                     ) : questionData?.Example?.[0]?.includes('|') ? (
 
                       <div>
-
-                        <SqlResultTable text={questionData.Example[0].split('Output:')[1]?.trim() || questionData.Example[0]} />
-
+                        <pre className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-green-200 dark:border-green-800">
+                          {questionData?.Example?.[0]?.split('Output:')[1]?.trim() || questionData?.Example?.[0]}
+                        </pre>
                       </div>
 
                     ) : (
 
-                      <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-
-                        {questionData?.Example?.[0]}
-
+                      <pre className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-green-200 dark:border-green-800">
+                        {questionData?.Example?.[0]?.split('Output:')[1]?.trim() || questionData?.Example?.[0]}
                       </pre>
 
                     )}
@@ -3667,18 +2708,14 @@ function SqlPage({ data, navigation }) {
 
                       <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Example 2:</h2>
 
-                      {questionData.Example[1].includes('|') ? (
-
-                        <SqlResultTable text={questionData.Example[1].split('Output:')[1]?.trim() || questionData.Example[1]} />
-
-                      ) : (
-
-                        <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
-
-                          {questionData.Example[1]}
-
+                      {questionData?.Example?.[1]?.includes('|') ? (
+                        <pre className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-green-200 dark:border-green-800">
+                          {questionData?.Example?.[1]}
                         </pre>
-
+                      ) : (
+                        <pre className="bg-gray-50 dark:bg-dark-secondary p-4 rounded-lg font-mono whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200">
+                          {questionData?.Example?.[1]}
+                        </pre>
                       )}
 
                     </div>
@@ -3739,36 +2776,77 @@ function SqlPage({ data, navigation }) {
 
               <div className="text-gray-700 dark:text-gray-400">
 
-                {questionData?.schema ? (
-
-                  <div>
-
-                    <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
-
-                      <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-
-                      </svg>
-
-                      Database Tables
-
-                    </h2>
-
-                    <SqlTablesDisplay schema={questionData.schema} />
-
-                  </div>
-
-                ) : (
-
-                  <p className="text-gray-500 dark:text-gray-400">No schema data available</p>
-
-                )}
+                {questionData?.schemaTable ? (
+                      <div className="space-y-4">
+                        {Object.entries(questionData.schemaTable).map(([tableName, tableData]) => (
+                          <div key={tableName} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="bg-purple-50 dark:bg-purple-900/20 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+                              <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <span className="font-bold text-base text-purple-700 dark:text-purple-300">{tableName}</span>
+                              <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 font-medium">{tableData.rows.length} {tableData.rows.length === 1 ? 'row' : 'rows'}</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full text-sm">
+                                <thead>
+                                  <tr className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                                    {tableData.columns.map((col, idx) => (
+                                      <th
+                                        key={idx}
+                                        className="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider bg-gray-100 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 last:border-r-0"
+                                      >
+                                        {col.name} ({col.type})
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                  {tableData.rows.map((row, rowIdx) => {
+                                    // Convert key-value array to object for display
+                                    const rowObj = {};
+                                    if (Array.isArray(row)) {
+                                      row.forEach(item => {
+                                        if (item.key && item.value !== undefined) {
+                                          rowObj[item.key] = item.value;
+                                        }
+                                      });
+                                    } else {
+                                      // Handle case where row is already an object
+                                      Object.assign(rowObj, row);
+                                    }
+                                    
+                                    return (
+                                      <tr
+                                        key={rowIdx}
+                                        className={rowIdx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}
+                                      >
+                                        {tableData.columns.map((col, colIdx) => (
+                                          <td
+                                            key={colIdx}
+                                            className="px-4 py-2.5 font-mono text-sm text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 last:border-r-0 whitespace-nowrap"
+                                          >
+                                            {rowObj[col.name] !== null && rowObj[col.name] !== undefined ? String(rowObj[col.name]) : '-'}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : questionData?.schema ? (
+                      <p className="text-gray-600 dark:text-gray-400">Schema visualization not available</p>
+                    ) : (
+                      <p className="text-gray-500 dark:text-gray-400">No schema data available</p>
+                    )}
 
               </div>
 
             )}
-
 
 
             {activeTab === 'testcases' && (
@@ -3940,29 +3018,18 @@ function SqlPage({ data, navigation }) {
                               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wider">Preview:</p>
 
                               {(() => {
-
-                                const schemaColumns = getColumnsFromSchema(questionData?.schema);
-
-                                const firstTableColumns = Object.values(schemaColumns)[0] || null;
-
-                                const expectedSchema = questionData.testcases[0].expectedColumns || firstTableColumns;
-
+                                const schemaColumns = null;
+                                const expectedSchema = questionData.testcases[0].expectedColumns || null;
                                 console.log('Rendering expected output preview with columns:', questionData);
-
+                                
+                                const expectedOutput = testCasesrun[testCaseTab].expectedOutput;
+                                const normalizedExpected = convertJsonToPipeFormat(expectedOutput);
+                                
                                 return (
-
-                                  <SqlResultTable
-
-                                    text={testCasesrun[testCaseTab].expectedOutput}
-
-                                    className="border-blue-200 dark:border-blue-900"
-
-                                    columns={expectedSchema || firstTableColumns}
-
-                                  />
-
+                                  <pre className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-800">
+                                    {normalizedExpected}
+                                  </pre>
                                 );
-
                               })()}
 
                             </div>
@@ -4034,9 +3101,9 @@ function SqlPage({ data, navigation }) {
                     {console.log('Output displayed:', output)}
 
                     <div className="w-full">
-
-                      <SqlResultTable text={output} className="border-blue-200 dark:border-blue-800 w-full" columns={null} />
-
+                      <pre className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg font-mono text-xs whitespace-pre-wrap break-words text-gray-800 dark:text-gray-200 border border-blue-200 dark:border-blue-800 w-full">
+                        {output}
+                      </pre>
                     </div>
 
                   </div>

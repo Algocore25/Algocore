@@ -10,24 +10,25 @@ import { COURSE_ICONS, getCourseIcon } from '../utils/courseIcons';
 
 import { encodeShort } from '../utils/urlEncoder';
 
-const CourseCard = ({ course, onDragStart, onDragOver, onDrop, onDragEnd, isAdmin, draggedCourse, section }) => {
+const CourseCard = ({ course, onDragStart, onDragOver, onDrop, onDragEnd, isAdmin, adminModeEnabled, draggedCourse, section }) => {
   const isDragged = draggedCourse?.id === course.id;
+  const canDrag = isAdmin && adminModeEnabled;
   
   return (
     <div
-      draggable={isAdmin}
+      draggable={canDrag}
       onDragStart={(e) => onDragStart(e, course, section)}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, course, section)}
       onDragEnd={onDragEnd}
-      className={`relative ${isAdmin ? 'cursor-move' : ''} ${isDragged ? 'opacity-50' : ''}`}
+      className={`relative ${canDrag ? 'cursor-move' : ''} ${isDragged ? 'opacity-50' : ''}`}
     >
       <Link
         to={`/course/${encodeShort(course.id)}`}
-        className={`group relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-[2rem] p-6 md:p-8 border border-white/40 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 h-full flex flex-col overflow-hidden ${isAdmin ? 'pointer-events-none' : ''}`}
+        className={`group relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-[2rem] p-6 md:p-8 border border-white/40 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 h-full flex flex-col overflow-hidden ${canDrag ? 'pointer-events-none' : ''}`}
       >
         {/* Admin drag indicator */}
-        {isAdmin && (
+        {canDrag && (
           <div className="absolute top-2 left-2 z-20 text-gray-400 dark:text-gray-600">
             <FiMenu className="w-5 h-5" />
           </div>
@@ -83,6 +84,7 @@ const CoursesPage = () => {
   const [draggedCourse, setDraggedCourse] = useState(null);
   const [draggedSection, setDraggedSection] = useState(null);
   const [isReordering, setIsReordering] = useState(false);
+  const [adminModeEnabled, setAdminModeEnabled] = useState(true);
   const { user } = useAuth();
 
   // Check if user is admin
@@ -113,8 +115,8 @@ const CoursesPage = () => {
 
   // Drag handlers
   const handleDragStart = (e, course, section) => {
-    console.log('[Courses Debug] Drag start:', course.title, 'Admin:', isAdmin);
-    if (!isAdmin) return;
+    console.log('[Courses Debug] Drag start:', course.title, 'Admin:', isAdmin, 'AdminModeEnabled:', adminModeEnabled);
+    if (!isAdmin || !adminModeEnabled) return;
     setDraggedCourse(course);
     setDraggedSection(section);
     e.dataTransfer.effectAllowed = 'move';
@@ -122,14 +124,14 @@ const CoursesPage = () => {
   };
 
   const handleDragOver = (e) => {
-    if (!isAdmin) return;
+    if (!isAdmin || !adminModeEnabled) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
 
   const handleDrop = (e, targetCourse, targetSection) => {
-    console.log('[Courses Debug] Drop attempt:', draggedCourse?.title, '→', targetCourse.title);
-    if (!isAdmin || !draggedCourse) return;
+    console.log('[Courses Debug] Drop attempt:', draggedCourse?.title, '→', targetCourse.title, 'AdminModeEnabled:', adminModeEnabled);
+    if (!isAdmin || !adminModeEnabled || !draggedCourse) return;
     e.preventDefault();
 
     // Don't allow dropping on same course
@@ -291,14 +293,31 @@ const CoursesPage = () => {
               {/* Admin Controls */}
               {isAdmin && (
                 <div className="text-right">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800 mb-2">
-                    <FiMenu className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      Admin Mode - Drag to Reorder
+                  <div className="inline-flex items-center gap-3">
+                    <button
+                      onClick={() => setAdminModeEnabled(!adminModeEnabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        adminModeEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                          adminModeEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {adminModeEnabled ? 'Admin Mode' : 'Normal View'}
                     </span>
                   </div>
-                  {isReordering && (
-                    <div className="text-sm text-green-600 dark:text-green-400 font-medium animate-pulse">
+                  {adminModeEnabled && (
+                    <div className="mt-2 text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-2">
+                      <FiMenu className="w-4 h-4" />
+                      Drag to reorder courses
+                    </div>
+                  )}
+                  {isReordering && adminModeEnabled && (
+                    <div className="text-sm text-green-600 dark:text-green-400 font-medium animate-pulse mt-1">
                       Saving new order...
                     </div>
                   )}
@@ -340,6 +359,7 @@ const CoursesPage = () => {
                         onDrop={handleDrop}
                         onDragEnd={handleDragEnd}
                         isAdmin={isAdmin}
+                        adminModeEnabled={adminModeEnabled}
                         draggedCourse={draggedCourse}
                         section={sectionName}
                       />

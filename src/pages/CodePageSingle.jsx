@@ -223,7 +223,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
     const promises = testCases.map(async (tc, i) => {
       const { input, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
+        const  result  = await executeCode(selectedLanguage, sourceCode, input);
 
         const normalize = (text) => {
           if (!text && text !== "") return [];
@@ -348,7 +348,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
       const promises = testCases.map(async (tc, i) => {
         const { input: testInput, expectedOutput } = tc;
         try {
-          const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
+          const result  = await executeCode(selectedLanguage, sourceCode, testInput);
           const resultOutput = result.output || '';
           const normalize = (text) => {
             if (!text && text !== "") return [];
@@ -369,13 +369,14 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
           const currentResult = {
             input: testInput,
             expected: expectedOutput,
-            output: resultOutput,
+            output: result?.error || resultOutput,
             passed,
             status: 'done',
             isFirstFailure: false,
             time: result.cpuTime || 0,
             memory: result.memory || 0,
             timeout: result.timeout || false,
+            error: result?.error
           };
           updatedResults[i] = currentResult;
           setTestResults([...updatedResults]);
@@ -392,6 +393,7 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
             time: 0,
             memory: 0,
             timeout: false,
+            error: error.message || 'Error executing code'
           };
           updatedResults[i] = errorResult;
           setTestResults([...updatedResults]);
