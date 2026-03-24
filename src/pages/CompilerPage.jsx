@@ -412,12 +412,12 @@ const CompilerPage = () => {
     try {
       const result = await executeCode(language, code, input);
       setOutput({
-        stdout: result.run.stdout || '',
-        stderr: result.run.stderr || '',
-        time: `${result.run.cpuTime} ms`,
-        memory: `${result.run.memory} KB`,
-        timeout: result.run.timeout || false,
-        statusId: result.run.statusId || null,
+        stdout: result.stdout || result.output || '',
+        stderr: result.stderr || result.error || '',
+        time: `${result.cpuTime || 0} ms`,
+        memory: `${result.memory || 0} KB`,
+        timeout: result.timeout || false,
+        statusId: result.statusId || null,
       });
     } catch (error) {
       setOutput({

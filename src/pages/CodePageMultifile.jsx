@@ -285,7 +285,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
     const promises = testCases.map(async (tc, i) => {
       const { input, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
+        const result = await executeCode(selectedLanguage, sourceCode, input);
 
         const normalize = (text) => {
           if (!text && text !== "") return [];
@@ -397,7 +397,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       const promises = testCases.map(async (tc, i) => {
         const { input: testInput, expectedOutput } = tc;
         try {
-          const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
+          const result = await executeCode(selectedLanguage, sourceCode, testInput);
           const resultOutput = result.output || '';
           const normalize = (text) => {
             if (!text && text !== "") return [];

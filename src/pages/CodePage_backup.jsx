@@ -472,7 +472,7 @@ function CodePage({ data, navigation }) {
     const promises = testCases.map(async (tc, i) => {
       const { input, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
+        const result = await executeCode(selectedLanguage, sourceCode, input);
 
         const resultlist = result.output ? result.output.split("\n") : ["No output received."];
         while (resultlist[resultlist.length - 1] === "") resultlist.pop();
@@ -567,7 +567,7 @@ function CodePage({ data, navigation }) {
       const promises = testCases.map(async (tc, i) => {
         const { input: testInput, expectedOutput } = tc;
         try {
-          const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
+          const result = await executeCode(selectedLanguage, sourceCode, testInput);
           const resultOutput = result.output || '';
           const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
           const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];

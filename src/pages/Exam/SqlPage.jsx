@@ -782,7 +782,7 @@ function SqlPage({ question }) {
       const { input, expectedOutput } = tc;
       try {
         const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-        const { run: result } = await executeCode('sql', sqlSourceCode, input);
+        const result = await executeCode('sql', sqlSourceCode, input);
 
         let passed = false;
         if (questionData?.testcases[2]?.input === "regex2") {
@@ -937,7 +937,7 @@ function SqlPage({ question }) {
         const { input: testInput, expectedOutput } = tc;
         try {
           const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-          const { run: result } = await executeCode('sql', sqlSourceCode, testInput);
+          const result = await executeCode('sql', sqlSourceCode, testInput);
 
           let passed = false;
           // regex

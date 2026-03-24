@@ -150,7 +150,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
     const promises = testCases.map(async (tc, i) => {
       const { input, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
+        const result = await executeCode(selectedLanguage, sourceCode, input);
 
         const normalize = (text) => {
           if (!text && text !== "") return [];
@@ -280,7 +280,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
     const promises = testCases.map(async (tc, i) => {
       const { input: testInput, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
+        const result = await executeCode(selectedLanguage, sourceCode, testInput);
 
         const normalize = (text) => {
           if (!text && text !== "") return [];
