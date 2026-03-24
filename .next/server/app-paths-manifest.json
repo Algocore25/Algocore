@@ -1,9 +1,8 @@
 {
-  "/page": "app/page.js",
-  "/admin/page": "app/admin/page.js",
-  "/profile/page": "app/profile/page.js",
-  "/all-questions/page": "app/all-questions/page.js",
   "/courses/page": "app/courses/page.js",
-  "/adminmonitor/page": "app/adminmonitor/page.js",
-  "/firebase-upload/page": "app/firebase-upload/page.js"
+  "/compiler/page": "app/compiler/page.js",
+  "/all-questions/page": "app/all-questions/page.js",
+  "/problem/[course]/[subcourse]/[questionId]/page": "app/problem/[course]/[subcourse]/[questionId]/page.js",
+  "/course/[course]/page": "app/course/[course]/page.js",
+  "/page": "app/page.js"
 }

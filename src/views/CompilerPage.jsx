@@ -410,14 +410,16 @@ const CompilerPage = () => {
     setComplexity(null);
     setOutput({ stdout: 'Executing...', stderr: null, time: null, memory: null, timeout: false, statusId: null });
     try {
-      const result = await executeCode(language, code, input);
+      const resp = await executeCode(language, code, input);
+      const result = resp.run || resp;
+      
       setOutput({
-        stdout: result.run.stdout || '',
-        stderr: result.run.stderr || '',
-        time: `${result.run.cpuTime} ms`,
-        memory: `${result.run.memory} KB`,
-        timeout: result.run.timeout || false,
-        statusId: result.run.statusId || null,
+        stdout: (result.stdout || result.output || '').toString(),
+        stderr: (result.stderr || result.error || '').toString(),
+        time: result.time !== undefined ? `${result.time} ms` : (result.cpuTime !== undefined ? `${result.cpuTime} ms` : 'N/A'),
+        memory: result.memory !== undefined ? `${result.memory} KB` : 'N/A',
+        timeout: result.timeout || false,
+        statusId: result.statusId || null,
       });
     } catch (error) {
       setOutput({
@@ -562,6 +564,7 @@ const CompilerPage = () => {
                 <option value="javascript">JavaScript</option>
                 <option value="python">Python</option>
                 <option value="java">Java</option>
+                <option value="sql">SQL (SQLite)</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>

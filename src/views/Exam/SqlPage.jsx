@@ -783,7 +783,8 @@ function SqlPage({ question }) {
       const { input, expectedOutput } = tc;
       try {
         const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-        const { run: result } = await executeCode('sql', sqlSourceCode, input);
+        const resp = await executeCode('sql', sqlSourceCode, input);
+        const result = resp.run || resp;
 
         let passed = false;
         if (questionData?.testcases[2]?.input === "regex2") {
@@ -813,10 +814,10 @@ function SqlPage({ question }) {
         const currentResult = {
           input,
           expected: expectedOutput,
-          output: result.output,
+          output: result.output || result.stdout || '',
           passed,
           status: 'done',
-          time: result.cpuTime || 0,
+          time: result.time || result.cpuTime || 0,
           memory: result.memory || 0,
           timeout: result.timeout || false,
         };
@@ -938,7 +939,8 @@ function SqlPage({ question }) {
         const { input: testInput, expectedOutput } = tc;
         try {
           const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-          const { run: result } = await executeCode('sql', sqlSourceCode, testInput);
+          const resp = await executeCode('sql', sqlSourceCode, testInput);
+          const result = resp.run || resp;
 
           let passed = false;
           // regex
@@ -971,11 +973,11 @@ function SqlPage({ question }) {
           const currentResult = {
             input: testInput,
             expected: expectedOutput,
-            output: result.output,
+            output: result.output || result.stdout || '',
             passed,
             status: 'done',
             isFirstFailure: false,
-            time: result.cpuTime || 0,
+            time: result.time || result.cpuTime || 0,
             memory: result.memory || 0,
             timeout: result.timeout || false,
           };

@@ -1357,7 +1357,8 @@ function SqlPage({ data, navigation }) {
 
         const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
 
-        const { run: result } = await executeCode('sql', sqlSourceCode, input);
+        const resp = await executeCode('sql', sqlSourceCode, input);
+        const result = resp.run || resp;
 
 
 
@@ -1562,7 +1563,8 @@ function SqlPage({ data, navigation }) {
         const { input: testInput, expectedOutput } = tc;
         try {
           const sqlSourceCode = (questionData?.schema || "") + "\n\n" + code;
-          const  result  = await executeCode('sql', sqlSourceCode, testInput);
+          const  resp  = await executeCode('sql', sqlSourceCode, testInput);
+          const result = resp.run || resp;
 
        
      
