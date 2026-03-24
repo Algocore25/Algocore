@@ -42,6 +42,16 @@
       "static/chunks/main-app.js",
       "static/css/app/all-questions/page.css",
       "static/chunks/app/all-questions/page.js"
+    ],
+    "/learn/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/learn/page.js"
+    ],
+    "/learn/[courseId]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/learn/[courseId]/page.js"
     ]
   }
 }

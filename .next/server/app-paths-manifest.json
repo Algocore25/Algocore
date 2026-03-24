@@ -1,8 +1,8 @@
 {
-  "/courses/page": "app/courses/page.js",
   "/compiler/page": "app/compiler/page.js",
-  "/all-questions/page": "app/all-questions/page.js",
   "/problem/[course]/[subcourse]/[questionId]/page": "app/problem/[course]/[subcourse]/[questionId]/page.js",
-  "/course/[course]/page": "app/course/[course]/page.js",
-  "/page": "app/page.js"
+  "/all-questions/page": "app/all-questions/page.js",
+  "/learn/[courseId]/page": "app/learn/[courseId]/page.js",
+  "/learn/page": "app/learn/page.js",
+  "/courses/page": "app/courses/page.js"
 }
