@@ -16,42 +16,30 @@
       "static/chunks/main-app.js",
       "static/chunks/app/not-found.js"
     ],
+    "/profile/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/profile/page.js"
+    ],
     "/courses/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/courses/page.js"
-    ],
-    "/compiler/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/compiler/page.js"
     ],
     "/course/[course]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/course/[course]/page.js"
     ],
-    "/problem/[course]/[subcourse]/[questionId]/page": [
+    "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/css/app/problem/[course]/[subcourse]/[questionId]/page.css",
-      "static/chunks/app/problem/[course]/[subcourse]/[questionId]/page.js"
+      "static/chunks/app/_not-found/page.js"
     ],
-    "/all-questions/page": [
+    "/u/[username]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/css/app/all-questions/page.css",
-      "static/chunks/app/all-questions/page.js"
-    ],
-    "/learn/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/learn/page.js"
-    ],
-    "/learn/[courseId]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/learn/[courseId]/page.js"
+      "static/chunks/app/u/[username]/page.js"
     ]
   }
 }

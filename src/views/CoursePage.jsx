@@ -78,10 +78,9 @@ const CoursePage = () => {
   const [progressPercent, setProgressPercent] = useState(0);
   const [topicsLoading, setTopicsLoading] = useState(true);
 
-  // UI state
   const [openTopic, setOpenTopic] = useState(null);
-  const [emailing, setEmailing] = useState(false);
   const [certificatesEnabled, setCertificatesEnabled] = useState(false);
+  const [certName, setCertName] = useState("");
 
   // localStorage keys
   const openTopicKey = `coursePageOpenTopic:${course}`;
@@ -156,12 +155,22 @@ const CoursePage = () => {
     return () => { cancelled = true; };
   }, [course]);
 
-  // Fetch certificate settings
+  // Fetch certificate settings and name
   useEffect(() => {
     if (!user?.uid) return;
-    get(ref(database, `users/${user.uid}/profile/settings/certificatesEnabled`))
+    const profileRef = ref(database, `users/${user.uid}/profile`);
+    
+    // Fetch certificatesEnabled
+    get(child(profileRef, 'settings/certificatesEnabled'))
       .then(snap => {
         if (snap.exists()) setCertificatesEnabled(snap.val() === true);
+      })
+      .catch(() => {});
+
+    // Fetch display name from profile to use on certificate
+    get(child(profileRef, 'displayName'))
+      .then(snap => {
+        if (snap.exists() && snap.val()) setCertName(snap.val());
       })
       .catch(() => {});
   }, [user]);
@@ -328,19 +337,19 @@ const CoursePage = () => {
     const DARK_SLATE = [30, 41, 59];
 
     // ── 1. Page Background ──────────────────────────────────────────────
-    doc.setFillColor(255, 255, 255);
+    doc.setFillColor(255, 253, 245);
     doc.rect(0, 0, W, H, 'F');
 
     // ── 2. Decorative Borders ───────────────────────────────────────────
     // Thick Navy Outer
     doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
     doc.rect(5, 5, W - 10, H - 10, 'F');
-    doc.setFillColor(255, 255, 255);
+    doc.setFillColor(255, 253, 245);
     doc.rect(7, 7, W - 14, H - 14, 'F');
 
     // Gold Inner Border
     doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
-    doc.setLineWidth(0.8);
+    doc.setLineWidth(1.0);
     doc.rect(10, 10, W - 20, H - 20, 'S');
 
     // Thin Navy Border
@@ -396,7 +405,7 @@ const CoursePage = () => {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
     doc.setFontSize(42);
-    doc.text((user?.name || 'STUDENT').toUpperCase(), W / 2, 105, { align: 'center' });
+    doc.text((certName || user?.name || 'STUDENT').toUpperCase(), W / 2, 105, { align: 'center' });
 
     // Email
     doc.setFont('helvetica', 'normal');
@@ -448,42 +457,39 @@ const CoursePage = () => {
     doc.text('VERIFIED', sealX, sealY - 1, { align: 'center' });
     doc.text('ALGOCORE', sealX, sealY + 2, { align: 'center' });
 
-    // ── 7. Signatures & Info (Bottom) ─────────────────────────────────
+    // ── 7. Certificate Info (Bottom Centered) ─────────────────────────────────
     const date = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
     const certId = `AC-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
-    // Date/ID (Centered Bottom)
-    doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Certificate ID: ${certId}`, W / 2, 175, { align: 'center' });
-    doc.text(`Issued on: ${date}`, W / 2, 181, { align: 'center' });
-
-    // Signature Area (Bottom Right)
-    const sigX = W - 65;
-    const sigY = 175;
-
-    // Draw rough signature first
-    doc.setFont('times', 'italic');
-    doc.setTextColor(20, 30, 60); // Dark Blue-ish for ink
-    doc.setFontSize(22);
-    doc.text('AlgoCore', sigX, sigY - 4, { align: 'center', angle: -2 });
-
-    // Add some "scribble" lines to make it look real
-    doc.setDrawColor(20, 30, 60);
+    const footY = 175;
+    
+    // Background for footer info
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(W / 2 - 60, footY - 8, 120, 20, 3, 3, 'F');
+    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
     doc.setLineWidth(0.2);
+    doc.roundedRect(W / 2 - 60, footY - 8, 120, 20, 3, 3, 'S');
 
-    doc.setDrawColor(DARK_SLATE[0], DARK_SLATE[1], DARK_SLATE[2]);
-    doc.setLineWidth(0.4);
-    doc.line(sigX - 25, sigY, sigX + 25, sigY);
-
-    doc.setTextColor(DARK_SLATE[0], DARK_SLATE[1], DARK_SLATE[2]);
+    // Date/ID
+    doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
     doc.setFontSize(10);
-    doc.setFont('times', 'italic');
-    doc.text('Founder & Director', sigX, sigY + 5, { align: 'center' });
     doc.setFont('helvetica', 'bold');
+    doc.text('CERTIFICATE OF COMPLETION', W / 2, footY, { align: 'center' });
+    
+    doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
     doc.setFontSize(8);
-    doc.text('AlgoCore Education', sigX, sigY + 9, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Certificate ID: ${certId}  |  Issued on: ${date}`, W / 2, footY + 6, { align: 'center' });
+
+    // ── 8. Bottom Decoration ──────────────────────────────────────────
+    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+    doc.setLineWidth(0.5);
+    doc.line(W / 2 - 100, H - 15, W / 2 + 100, H - 15);
+    
+    doc.setFont('times', 'italic');
+    doc.setFontSize(10);
+    doc.setTextColor(GOLD[0], GOLD[1], GOLD[2]);
+    doc.text('This is an official document from AlgoCore Education Platform', W / 2, H - 10, { align: 'center' });
 
     return doc;
   };
@@ -493,45 +499,6 @@ const CoursePage = () => {
     doc.save(`${title || course}_Certificate.pdf`);
   };
 
-  const handleEmailCertificate = async () => {
-    if (!user) return;
-    setEmailing(true);
-    try {
-      const email = await getUserEmail(user.uid);
-      if (!email) {
-        toast.error("Could not find your email address.");
-        setEmailing(false);
-        return;
-      }
-
-      const htmlContent = `
-        <div style="font-family: sans-serif; text-align: center; padding: 20px;">
-          <h1 style="color: #2563eb;">Congratulations!</h1>
-          <p>Hi ${user?.name || 'Student'},</p>
-          <p>You have successfully completed the course: <strong>${title || course}</strong>.</p>
-          <p>Your dedication and hard work have paid off!</p>
-          <p>Log in to AlgoCore to download your certificate anytime.</p>
-        </div>
-      `;
-
-      const res = await sendEmailService({
-        to: email,
-        subject: `Certificate of Completion: ${title || course}`,
-        text: `Congratulations on completing ${title || course}! Log in to download your certificate.`,
-        html: htmlContent
-      });
-
-      if (res.success) {
-        toast.success("Certificate email sent successfully!");
-      } else {
-        toast.error("Failed to send email.");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Error sending email.");
-    }
-    setEmailing(false);
-  };
 
   return (
     <div className="relative text-gray-900 dark:text-gray-100 min-h-screen flex flex-col w-full">
@@ -694,12 +661,13 @@ const CoursePage = () => {
           </div>
 
           {/* ── Right Column: Certificate ── */}
-          {(progressPercent === 100 || isAdmin) && certificatesEnabled && (
+          {(isAdmin || (progressPercent === 100 && certificatesEnabled)) && (
           <div className="lg:col-span-1">
             <div className="sticky top-8">
               <div className="bg-white dark:bg-dark-tertiary rounded-xl p-6 shadow-sm border border-gray-200 dark:border-dark-tertiary flex flex-col items-center relative overflow-hidden">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                  <FaCertificate className="text-yellow-500" /> Course Certification
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-center justify-center">
+                  <FaCertificate className="text-yellow-500" /> 
+                  {isAdmin && progressPercent < 100 ? "Admin Demo Mode" : "Course Certification"}
                 </h3>
                 
                 {/* Certificate Preview */}
@@ -726,7 +694,7 @@ const CoursePage = () => {
 
                   {/* Display Name */}
                   <p className="text-base font-extrabold text-gray-900 dark:text-white uppercase tracking-wider leading-tight px-2 mb-1">
-                    {user?.name || 'Student'}
+                    {certName || user?.name || 'Student'}
                   </p>
                   {user?.email && (
                     <p className="text-[9px] text-gray-400 dark:text-gray-500 mb-2">{user.email}</p>
@@ -756,14 +724,6 @@ const CoursePage = () => {
                      className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     <FaDownload /> Download PDF
-                  </button>
-                  <button
-                     onClick={handleEmailCertificate}
-                     disabled={emailing}
-                     className="w-full py-2.5 px-4 bg-white dark:bg-dark-tertiary border border-gray-200 dark:border-dark-tertiary shadow-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                  >
-                    {emailing ? <RefreshCw className="animate-spin w-4 h-4" /> : <FaEnvelope />}
-                    {emailing ? 'Sending...' : 'Email to Me'}
                   </button>
                 </div>
               </div>

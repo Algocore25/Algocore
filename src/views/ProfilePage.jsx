@@ -751,6 +751,23 @@ function ProfilePage() {
     }
   };
 
+  const handleResetPhoto = async (e) => {
+    e.stopPropagation(); // prevent triggering file input
+    if (!user?.photoURL) {
+      alert("No default Google photo found.");
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      await set(ref(database, `users/${user.uid}/profile/photoURL`), user.photoURL);
+      setProfileData(prev => ({ ...prev, photoURL: user.photoURL }));
+    } catch (error) {
+      console.error(error);
+      alert("Failed to reset photo.");
+    }
+    setUploadingPhoto(false);
+  };
+
   // ── Guards ────────────────────────────────────────────────────────────────
   if (loading) return <LoadingPage />;
   if (!user) return <SignInRequiredPage />;
@@ -789,7 +806,7 @@ function ProfilePage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-5">
               {/* Avatar with upload option */}
               <div 
-                className="relative group cursor-pointer w-16 h-16 rounded-xl shadow-sm bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shrink-0 overflow-hidden"
+                className="relative group cursor-pointer w-28 h-28 rounded-2xl shadow-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-bold shrink-0 overflow-hidden border-4 border-white dark:border-dark-tertiary"
                 onClick={() => photoInputRef.current?.click()}
                 title="Change profile picture"
               >
@@ -798,8 +815,17 @@ function ProfilePage() {
                 ) : initials}
                 
                 {/* Overlay on hover */}
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-3">
                   <Ic.Camera />
+                  {profileData.photoURL !== user?.photoURL && (
+                    <button 
+                      onClick={handleResetPhoto} 
+                      title="Reset to Google photo"
+                      className="p-1 hover:text-red-400 transition"
+                    >
+                      <Ic.Refresh />
+                    </button>
+                  )}
                 </div>
                 
                 {/* Uploading Spinner */}
@@ -855,12 +881,12 @@ function ProfilePage() {
                     </button>
                   </>
                 ) : (
-                  <>
+                  <div className="group flex items-center gap-2">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{profileData.displayName}</h1>
                     <button onClick={() => setEditingName(true)} className="text-gray-400 hover:text-blue-500 transition" title="Edit display name">
                       <Ic.Edit />
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
 
