@@ -1,4 +1,6 @@
 {
+  "/examwindow/[testid]/page": "app/examwindow/[testid]/page.js",
   "/test/page": "app/test/page.js",
-  "/examwindow/[testid]/page": "app/examwindow/[testid]/page.js"
+  "/course/[course]/page": "app/course/[course]/page.js",
+  "/_not-found/page": "app/_not-found/page.js"
 }
