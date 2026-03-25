@@ -9,6 +9,7 @@ const TestsSidebar = ({ activeTab, setActiveTab }) => {
     { id: 'bulk-add', label: 'Bulk Add Data', icon: '📦' },
     { id: 'email-center', label: 'Email Center', icon: '✉️' },
     { id: 'reminder-service', label: 'Reminder Service', icon: '⏰' },
+    { id: 'recordings', label: 'Recordings', icon: '🎥' },
   ];
 
   return (

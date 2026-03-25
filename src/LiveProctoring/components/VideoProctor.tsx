@@ -284,3 +284,5 @@ export const VideoProctor: React.FC = () => {
     </div>
   );
 };
+
+export default VideoProctor;

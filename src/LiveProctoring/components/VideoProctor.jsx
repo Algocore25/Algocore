@@ -4,6 +4,9 @@ import { usePersonDetection } from '../hooks/usePersonDetection.js';
 import { VideoCanvas } from './VideoCanvas.jsx';
 import { AlertPanel } from './AlertPanel.jsx';
 import { StatsPanel } from './StatsPanel.jsx';
+import { useExamRecorder } from '../hooks/useExamRecorder.js';
+import { useAuth } from '../../context/AuthContext';
+import { useParams } from 'next/navigation';
 
 export const VideoProctor = () => {
   const videoRef = useRef(null);
@@ -22,6 +25,17 @@ export const VideoProctor = () => {
     sessionStartTime: new Date(),
     isActive: false,
   });
+
+  const { testid } = useParams();
+  const { user } = useAuth();
+  
+  const { startRecording, stopRecording: stopSessionRecording } = useExamRecorder(
+    testid || 'proctor-demo',
+    user?.uid || 'guest-user',
+    streamRef.current,
+    null, // No screen capture in this standalone view for now
+    isProctoringActive
+  );
 
   const addAlert = useCallback((type, message) => {
     const newAlert = {
@@ -267,3 +281,5 @@ export const VideoProctor = () => {
     </div>
   );
 };
+
+export default VideoProctor;

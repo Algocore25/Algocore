@@ -473,9 +473,11 @@ function CodePage({ data, navigation }) {
     const promises = testCases.map(async (tc, i) => {
       const { input, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
+        const response = await executeCode(selectedLanguage, sourceCode, input);
+        const result = response.run || response;
 
-        const resultlist = result.output ? result.output.split("\n") : ["No output received."];
+        const resultOutput = result.output || '';
+        const resultlist = resultOutput ? resultOutput.split("\n") : ["No output received."];
         while (resultlist[resultlist.length - 1] === "") resultlist.pop();
 
         const expectedLines = expectedOutput.split("\n");
@@ -487,9 +489,13 @@ function CodePage({ data, navigation }) {
         const currentResult = {
           input,
           expected: expectedOutput,
-          output: result.output,
+          output: result.error || resultOutput,
           passed,
           status: 'done',
+          time: result.time || result.cpuTime || 0,
+          memory: result.memory || 0,
+          timeout: result.timeout || false,
+          error: result.error
         };
 
         updatedResults[i] = currentResult;
@@ -568,7 +574,8 @@ function CodePage({ data, navigation }) {
       const promises = testCases.map(async (tc, i) => {
         const { input: testInput, expectedOutput } = tc;
         try {
-          const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
+          const response = await executeCode(selectedLanguage, sourceCode, testInput);
+          const result = response.run || response;
           const resultOutput = result.output || '';
           const resultLines = resultOutput ? resultOutput.split("\n").filter(line => line !== '') : [];
           const expectedLines = expectedOutput ? expectedOutput.split("\n").filter(line => line !== '') : [];
@@ -579,10 +586,14 @@ function CodePage({ data, navigation }) {
           const currentResult = {
             input: testInput,
             expected: expectedOutput,
-            output: resultOutput,
+            output: result.error || resultOutput,
             passed,
             status: 'done',
-            isFirstFailure: false
+            isFirstFailure: false,
+            time: result.time || result.cpuTime || 0,
+            memory: result.memory || 0,
+            timeout: result.timeout || false,
+            error: result.error
           };
           updatedResults[i] = currentResult;
           setTestResults([...updatedResults]);

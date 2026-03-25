@@ -286,7 +286,8 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
     const promises = testCases.map(async (tc, i) => {
       const { input, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
+        const response = await executeCode(selectedLanguage, sourceCode, input);
+        const result = response.run || response;
 
         const normalize = (text) => {
           if (!text && text !== "") return [];
@@ -298,7 +299,8 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
           return processed;
         };
 
-        const resultLines = normalize(result.output);
+        const resultOutput = result.output || '';
+        const resultLines = normalize(resultOutput);
         const expectedLines = normalize(expectedOutput);
 
         const passed = resultLines.length === expectedLines.length &&
@@ -307,10 +309,10 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
         const currentResult = {
           input,
           expected: expectedOutput,
-          output: result?.error || result.output,
+          output: result?.error || resultOutput,
           passed,
           status: 'done',
-          time: result.cpuTime || 0,
+          time: result.time || result.cpuTime || 0,
           memory: result.memory || 0,
           timeout: result.timeout || false,
           error: result?.error
@@ -398,8 +400,10 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
       const promises = testCases.map(async (tc, i) => {
         const { input: testInput, expectedOutput } = tc;
         try {
-          const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
+          const response = await executeCode(selectedLanguage, sourceCode, testInput);
+          const result = response.run || response;
           const resultOutput = result.output || '';
+          
           const normalize = (text) => {
             if (!text && text !== "") return [];
             const lines = String(text).split('\n');
@@ -423,7 +427,7 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
             passed,
             status: 'done',
             isFirstFailure: false,
-            time: result.cpuTime || 0,
+            time: result.time || result.cpuTime || 0,
             memory: result.memory || 0,
             timeout: result.timeout || false,
           };
@@ -764,29 +768,28 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
 
   async function getAllowedLanguageTemplates() {
     const dbRef = ref(database);
+    const DEFAULT_LANGUAGES = ['cpp', 'java', 'python', 'javascript'];
 
     try {
       const snapshot = await get(child(dbRef, `/AlgoCore/${course}/course/allowedLanguages`));
 
-      if (!snapshot.exists()) {
-        console.warn("No data found in Firebase.");
-        return {};
+      let mappedLangs = [];
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        let normalizedArray = Array.isArray(data) ? data : Object.values(data);
+        
+        mappedLangs = normalizedArray.map(lang => {
+          const l = String(lang).toLowerCase();
+          if (l === 'c/c++' || l === 'c++') return 'cpp';
+          return l;
+        });
       }
 
-      const data = snapshot.val();
-      console.log(data);
-      let normalizedArray = [];
-      if (Array.isArray(data)) {
-        normalizedArray = data;
-      } else {
-        normalizedArray = Object.values(data);
+      // If no languages found or empty array, use defaults
+      if (mappedLangs.length === 0) {
+        console.warn("No allowed languages found in Firebase, using defaults.");
+        mappedLangs = DEFAULT_LANGUAGES;
       }
-
-      const mappedLangs = normalizedArray.map(lang => {
-        const l = String(lang).toLowerCase();
-        if (l === 'c/c++' || l === 'c++') return 'cpp';
-        return l;
-      });
 
       setallowlanguages(mappedLangs);
       setSelectedLanguage(prev => mappedLangs.includes(prev) ? prev : mappedLangs[0] || '');
@@ -794,7 +797,8 @@ function CodePageMultifile({ data, navigation, questionData: propQuestionData, s
 
     } catch (error) {
       console.error("Failed to fetch templates:", error);
-      return [];
+      setallowlanguages(DEFAULT_LANGUAGES);
+      setSelectedLanguage(prev => DEFAULT_LANGUAGES.includes(prev) ? prev : DEFAULT_LANGUAGES[0]);
     }
   }
 

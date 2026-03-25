@@ -18,6 +18,7 @@ import ManageCourses from './ManageCourses';
 import BulkAddData from './BulkAddData';
 import EmailPage from './EmailPage';
 import ReminderPage from './ReminderPage';
+import AdminRecordings from './AdminRecordings';
 
 const TestsList = () => {
   // ...existing code...
@@ -182,9 +183,11 @@ const TestsList = () => {
       <TestsSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <div className="flex-1 overflow-y-auto p-6">
-        {(activeTab !== 'manage-courses' && activeTab !== 'bulk-add' && activeTab !== 'email-center' && activeTab !== 'reminder-service') && (
+        {(activeTab !== 'manage-courses' && activeTab !== 'bulk-add' && activeTab !== 'email-center' && activeTab !== 'reminder-service' && activeTab !== 'recordings') && (
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tests</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {activeTab === 'recordings' ? 'Recordings' : 'Tests'}
+            </h1>
             <div className="flex flex-wrap items-center gap-4 justify-end">
               <input
                 type="text"
@@ -254,6 +257,8 @@ const TestsList = () => {
           <EmailPage />
         ) : activeTab === 'reminder-service' ? (
           <ReminderPage />
+        ) : activeTab === 'recordings' ? (
+          <AdminRecordings />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sortedTests.map((test) => {

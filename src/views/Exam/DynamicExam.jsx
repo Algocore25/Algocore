@@ -8,6 +8,7 @@ import { useAuth } from "../../context/AuthContext";
 import { usePersonDetection } from "../../LiveProctoring/hooks/usePersonDetection";
 import { useWebRTCStream } from "../../LiveProctoring/hooks/useWebRTCStreamV2";
 import { useAdminAudioReceiver } from "../../LiveProctoring/hooks/useAdminAudioReceiver";
+import { useExamRecorder } from "../../LiveProctoring/hooks/useExamRecorder";
 import { VideoCanvas } from "../../LiveProctoring/components/VideoCanvas";
 import { toast } from "react-hot-toast";
 
@@ -84,6 +85,15 @@ const DynamicExam = () => {
     testid,
     user?.uid,
     permVerified && (stage === "exam" || stage === "instructions" || stage === "resume") // Allow admin audio after permissions granted
+  );
+
+  // Session recording - saves chunks to Azure and URLs to Firebase
+  const { startRecording, stopRecording } = useExamRecorder(
+    testid,
+    user?.uid,
+    proctorStream,
+    screenStream,
+    stage === "exam"
   );
 
   const [examName, setExamName] = useState(null);
@@ -919,6 +929,15 @@ const DynamicExam = () => {
           let selectedQuestions = [];
           const questionList = Object.entries(allQuestions);
 
+          // Normalize type keys: the admin config uses "nat" for numeric questions,
+          // but the global questions collection stores the type as "Numeric".
+          // This maps both sides to a common canonical form before comparing.
+          const normalizeType = (t) => {
+            const lower = (t || '').toLowerCase().trim();
+            if (lower === 'nat' || lower === 'numeric') return 'numeric';
+            return lower; // mcq, msq, programming, sql stay as-is
+          };
+
           // Create a map to track used question IDs
           const usedQuestionIds = new Set();
           let hasInsufficientQuestions = false;
@@ -926,7 +945,7 @@ const DynamicExam = () => {
           // First, validate we have enough questions for each type
           for (const [type, count] of Object.entries(config)) {
             const availableQuestions = questionList
-              .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+              .filter(([_, qType]) => normalizeType(qType) === normalizeType(type))
               .filter(([id]) => !usedQuestionIds.has(id));
 
             if (availableQuestions.length < count) {
@@ -940,7 +959,7 @@ const DynamicExam = () => {
             ? Object.fromEntries(
               Object.entries(config).map(([type, count]) => {
                 const availableQuestions = questionList
-                  .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+                  .filter(([_, qType]) => normalizeType(qType) === normalizeType(type))
                   .filter(([id]) => !usedQuestionIds.has(id));
                 return [type, Math.min(count, availableQuestions.length)];
               })
@@ -953,7 +972,7 @@ const DynamicExam = () => {
 
             // Get available questions of this type that haven't been selected yet
             const availableQuestions = questionList
-              .filter(([_, qType]) => qType.toLowerCase() === type.toLowerCase())
+              .filter(([_, qType]) => normalizeType(qType) === normalizeType(type))
               .filter(([id]) => !usedQuestionIds.has(id));
 
             if (availableQuestions.length === 0) {

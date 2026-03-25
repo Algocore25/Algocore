@@ -216,12 +216,13 @@ const TestManage = () => {
 
           if (configSnapshot.exists() && configSnapshot.val().questionsPerType) {
             const savedConfig = configSnapshot.val().questionsPerType;
-            // Update questionsPerType state with saved values
+            // Update questionsPerType state with saved values — include all 5 types
             const updatedQuestionsPerType = {
               mcq: Number(savedConfig.mcq) || 0,
+              msq: Number(savedConfig.msq) || 0,
               programming: Number(savedConfig.programming) || 0,
               sql: Number(savedConfig.sql) || 0,
-              other: Number(savedConfig.other) || 0
+              nat: Number(savedConfig.nat) || 0
             };
 
             setQuestionsPerType(updatedQuestionsPerType);
@@ -635,7 +636,7 @@ const TestManage = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => router.push(-1)}
+                onClick={() => router.back()}
                 className="p-1.5 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 title="Back to tests"
               >

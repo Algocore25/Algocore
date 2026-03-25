@@ -9,12 +9,17 @@ export const usePersonDetection = () => {
     const loadModel = async () => {
       try {
         setIsLoading(true);
-        // cocoSsd is provided globally via a script tag in index.html
+        // cocoSsd is provided globally via a script tag in layout.jsx
+        if (!globalThis.cocoSsd) {
+          // If not loaded yet, wait a bit or throw error
+          throw new Error('CocoSsd script not found on globalThis. Ensure the script is included in layout.jsx.');
+        }
         const loadedModel = await globalThis.cocoSsd.load();
         setModel(loadedModel);
         setError(null);
+        console.log('Detection model loaded successfully');
       } catch (err) {
-        setError('Failed to load detection model');
+        setError(err.message || 'Failed to load detection model');
         console.error('Model loading error:', err);
       } finally {
         setIsLoading(false);

@@ -151,7 +151,8 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
     const promises = testCases.map(async (tc, i) => {
       const { input, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, input);
+        const response = await executeCode(selectedLanguage, sourceCode, input);
+        const result = response.run || response;
 
         const normalize = (text) => {
           if (!text && text !== "") return [];
@@ -163,7 +164,8 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
           return processed;
         };
 
-        const resultLines = normalize(result.output);
+        const resultOutput = result.output || '';
+        const resultLines = normalize(resultOutput);
         const expectedLines = normalize(expectedOutput);
 
         const passed = resultLines.length === expectedLines.length &&
@@ -172,10 +174,10 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
         const currentResult = {
           input,
           expected: expectedOutput,
-          output: result.output,
+          output: resultOutput,
           passed,
           status: 'done',
-          time: result.time || 0,
+          time: result.time || result.cpuTime || 0,
           memory: result.memory || 0,
           timeout: result.timeout || false,
         };
@@ -281,7 +283,8 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
     const promises = testCases.map(async (tc, i) => {
       const { input: testInput, expectedOutput } = tc;
       try {
-        const { run: result } = await executeCode(selectedLanguage, sourceCode, testInput);
+        const response = await executeCode(selectedLanguage, sourceCode, testInput);
+        const result = response.run || response;
 
         const normalize = (text) => {
           if (!text && text !== "") return [];
@@ -307,7 +310,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
           passed,
           status: 'done',
           isFirstFailure: false,
-          time: result.cpuTime || 0,
+          time: result.cpuTime || result.time || 0,
           memory: result.memory || 0,
           timeout: result.timeout || false,
         };
@@ -460,20 +463,30 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
       }
     };
     const fetchAllowedLanguages = async () => {
+      const DEFAULT_LANGUAGES = ['cpp', 'java', 'python', 'javascript'];
       try {
         const snapshot = await get(child(ref(database), `Exam/${testid}/allowedLanguages`));
+        let mappedLangs = [];
         if (snapshot.exists()) {
           const data = snapshot.val();
           let normalizedArray = Array.isArray(data) ? data : Object.values(data);
-          const mappedLangs = normalizedArray.map(lang => {
+          mappedLangs = normalizedArray.map(lang => {
             const l = String(lang).toLowerCase();
             if (l === 'c/c++' || l === 'c++') return 'cpp';
             return l;
           });
-          setallowlanguages(mappedLangs);
         }
+
+        // If no languages found or empty array, use defaults
+        if (mappedLangs.length === 0) {
+          console.warn("No allowed languages found for exam, using defaults.");
+          mappedLangs = DEFAULT_LANGUAGES;
+        }
+
+        setallowlanguages(mappedLangs);
       } catch (error) {
         console.error("Error fetching allowed languages:", error);
+        setallowlanguages(DEFAULT_LANGUAGES);
       }
     };
     fetchData();

@@ -1,8 +1,4 @@
 {
-  "/page": "app/page.js",
-  "/course/[course]/page": "app/course/[course]/page.js",
-  "/profile/page": "app/profile/page.js",
-  "/courses/page": "app/courses/page.js",
-  "/u/[username]/page": "app/u/[username]/page.js",
-  "/api/upload/route": "app/api/upload/route.js"
+  "/test/page": "app/test/page.js",
+  "/examwindow/[testid]/page": "app/examwindow/[testid]/page.js"
 }

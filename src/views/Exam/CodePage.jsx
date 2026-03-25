@@ -32,7 +32,10 @@ function CodePage({ question, data, questionData, ...props }) {
 
     useEffect(() => {
         const fetchAllowedLanguages = async () => {
-            if (!testid) return;
+            if (!testid) {
+                setLoadingLanguages(false);
+                return;
+            }
             setLoadingLanguages(true);
             try {
                 const snapshot = await get(child(ref(database), `Exam/${testid}/allowedLanguages`));
@@ -54,11 +57,18 @@ function CodePage({ question, data, questionData, ...props }) {
                         if (!firstAvailable) firstAvailable = mappedLangs[0];
 
                         setSelectedLanguage(firstAvailable);
+                    } else if (questionData?.defaultCode) {
+                        // Fallback to question's first language if mappedLangs is empty
+                        const firstLang = Object.keys(questionData.defaultCode)[0];
+                        setSelectedLanguage(firstLang);
                     }
                 } else if (questionData?.defaultCode) {
                     // Fallback to question's first language if no exam restrictions found
                     const firstLang = Object.keys(questionData.defaultCode)[0];
                     setSelectedLanguage(firstLang);
+                } else {
+                    // Final fallback: default to 'cpp' if nothing else available
+                    setSelectedLanguage('cpp');
                 }
             } catch (error) {
                 console.error("Error fetching allowed languages:", error);
@@ -66,6 +76,8 @@ function CodePage({ question, data, questionData, ...props }) {
                 if (questionData?.defaultCode) {
                     const firstLang = Object.keys(questionData.defaultCode)[0];
                     setSelectedLanguage(firstLang);
+                } else {
+                    setSelectedLanguage('cpp');
                 }
             } finally {
                 setLoadingLanguages(false);

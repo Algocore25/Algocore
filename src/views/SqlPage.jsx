@@ -1393,19 +1393,15 @@ function SqlPage({ data, navigation }) {
 
 
           currentResult = {
-
             input,
-
             expected: expectedOutput,
-
-            output: result.output,
-
+            output: result.output || result.stdout || '',
             passed,
-
-            error: result.error ,
-
+            error: result.error,
             status: 'done',
-
+            time: result.time || result.cpuTime || 0,
+            memory: result.memory || 0,
+            timeout: result.timeout || false,
           };
 
         
@@ -1587,7 +1583,10 @@ function SqlPage({ data, navigation }) {
               passed,
               error: result.error || null,
               status: 'done',
-              isFirstFailure: false
+              isFirstFailure: false,
+              time: result.time || result.cpuTime || 0,
+              memory: result.memory || 0,
+              timeout: result.timeout || false,
             };
           
 
