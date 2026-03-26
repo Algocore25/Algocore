@@ -2,7 +2,7 @@ name: Deploy Next.js to Azure Web App
 
 on:
   push:
-    branches: [ "main", "feature/azure-files-integration", "deploy-online", "azure" ]
+    branches: [ "main", "feature/azure-files-integration", "deploy-online", "azure-v2" ]
   workflow_dispatch:
 
 env:
