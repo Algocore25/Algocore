@@ -1,0 +1,426 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { matchPath } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { database } from '../firebase';
+import { ref, get } from 'firebase/database';
+import { Wifi, WifiOff, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
+import { FaSun as SunIcon, FaMoon as MoonIcon, FaUserCircle as UserCircleIcon } from 'react-icons/fa';
+import logoLight from '../assets/LOGO.png';
+import logoDark from '../assets/LOGO-1.png';
+import { encodeShort, decodeShort } from '../utils/urlEncoder';
+
+const pathMappings = [
+  { pattern: "/problem/:course/:subcourse/:questionId", getPath: (params) => `/course/${params.course}` },
+  { pattern: "/course/:courseId", getPath: () => "/courses" },
+];
+
+const Navbar = () => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [questionData, setQuestionData] = useState([]);
+  const [progressMap, setProgressMap] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const pathname = usePathname() || '/';
+  const searchParams = useSearchParams();
+  // TODO: Fix manual location references
+  const router = useRouter();
+  const { theme, toggleTheme } = useTheme();
+  const { user, loading, logout } = useAuth();
+
+  const authDropdownRef = useRef(null);
+  const authButtonRef = useRef(null);
+  const dotsContainerRef = useRef(null);
+
+  // 🚀 SYNCHRONOUSLY compute match and currentIndex
+  const match = matchPath("/problem/:course/:subcourse/:questionId", pathname);
+  const extractedCourse = match ? match.params.course : null;
+  const extractedSubcourse = match ? match.params.subcourse : null;
+  const extractedQuestionId = match ? match.params.questionId : null;
+
+  const decodedCourse = extractedCourse ? decodeShort(extractedCourse) : null;
+  const decodedSubcourse = extractedSubcourse ? decodeShort(extractedSubcourse) : null;
+  const decodedQuestionId = extractedQuestionId ? decodeShort(extractedQuestionId) : null;
+
+  const currentIndex = (match && questionData.length > 0)
+    ? questionData.findIndex(q => q === decodedQuestionId || q === decodedQuestionId?.replaceAll("%20", " "))
+    : -1;
+
+  // Scroll active dot into view
+  useEffect(() => {
+    if (dotsContainerRef.current && currentIndex >= 0) {
+      const activeDot = dotsContainerRef.current.children[currentIndex];
+      if (activeDot) {
+        activeDot.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [currentIndex]);
+
+  // 🟢 Online/Offline listener
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  if (loading) return null;
+
+  const matched = pathMappings
+    .map(({ pattern, getPath }) => {
+      const match = matchPath(pattern, pathname);
+      return match ? { pattern, path: getPath(match.params), params: match.params } : null;
+    })
+    .find(Boolean);
+
+  // 🟣 Menu items
+  const menuItems = [
+    { label: 'Home', href: '/' },
+    { label: 'Courses', href: '/courses' },
+    !isAdmin && user && { label: 'Tests', href: '/test' },
+    isAdmin && { label: 'Admin', href: '/admin' },
+    isAdmin && { label: 'Students', href: '/adminmonitor' },
+    isAdmin && { label: 'All Questions', href: '/all-questions' },
+    isAdmin && { label: 'Reports', href: '/admin-reports' },
+    // isAdmin && { label: 'Email Center', href: '/admin-email' },
+    { label: 'Compiler', href: '/compiler' },
+  ].filter(Boolean);
+
+  // Learn item - separate to be positioned on the right
+  const learnItem = { label: 'Learn', href: '/learn', icon: BookOpen };
+
+  // 🟠 Fetch admin status
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user) return setIsAdmin(false);
+      try {
+        const userRef = ref(database, `Admins/${user.uid}`);
+        const snapshot = await get(userRef);
+        setIsAdmin(snapshot.exists());
+      } catch (error) {
+        console.error("Error checking admin:", error);
+        setIsAdmin(false);
+      }
+    };
+    checkAdminStatus();
+  }, [user]);
+
+  // 🟡 Fetch question progress for navbar dots
+  useEffect(() => {
+    let isMounted = true;
+    if (!decodedCourse || !decodedSubcourse) {
+      setQuestionData([]);
+      setProgressMap({});
+      return;
+    }
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const questionRef = ref(database, `AlgoCore/${decodedCourse}`);
+        const snapshot = await get(questionRef);
+        if (!snapshot.exists()) return;
+
+        const lessons = snapshot.val()?.["lessons"];
+        const questionsArray = lessons[decodedSubcourse]?.["questions"] || [];
+
+        if (!isMounted) return;
+        setQuestionData(questionsArray);
+
+        if (user) {
+          const progressRef = ref(database, `userprogress/${user.uid}/${decodedCourse}/${decodedSubcourse}`);
+          const progressSnap = await get(progressRef);
+          if (isMounted) setProgressMap(progressSnap.exists() ? progressSnap.val() : {});
+        }
+      } catch (err) {
+        console.error("Navbar question fetch error:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    fetchData();
+    return () => (isMounted = false);
+  }, [decodedCourse, decodedSubcourse, user]);
+
+  // 🧠 Handle outside clicks properly
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        isAuthOpen &&
+        authDropdownRef.current &&
+        !authDropdownRef.current.contains(event.target) &&
+        authButtonRef.current &&
+        !authButtonRef.current.contains(event.target)
+      ) {
+        setIsAuthOpen(false);
+      }
+
+      if (
+        isMenuOpen &&
+        !event.target.closest('.mobile-menu-button') &&
+        !event.target.closest('.mobile-menu')
+      ) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isAuthOpen, isMenuOpen]);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+    setIsAuthOpen(false);
+  }, [pathname]);
+
+  return (
+    <nav className="fixed top-0 left-0 right-0 h-16 bg-white/95 dark:bg-dark-secondary/95 backdrop-blur-md border-b border-gray-200/50 dark:border-dark-tertiary/50 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+        {/* Left: Logo + Menu */}
+        <div className="flex items-center gap-6">
+          <Link href={matched?.path || '/'} className="flex items-center gap-2">
+            <img src={theme === 'dark' ? logoDark.src : logoLight.src} alt="AlgoCore Logo" className="h-8 w-auto" />
+            <span className="text-xl font-bold text-[#202124] dark:text-white">AlgoCore</span>
+          </Link>
+
+          <div className="hidden md:flex items-center gap-6">
+            {menuItems.map((item, i) => (
+              <Link key={i}
+                href={item.href}
+                className={`text-sm font-medium transition-colors ${pathname === item.href
+                  ? 'text-[#4285F4]'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
+                  }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+
+
+          </div>
+        </div>
+
+        {/* Right: Controls */}
+        <div className="flex items-center gap-2 sm:gap-4">
+          {/* Question progress dots */}
+          {match && questionData.length > 0 && currentIndex >= 0 && (
+            <div className="mr-2 sm:mr-4 flex items-center gap-1.5 sm:gap-2">
+              {/* Previous button */}
+              <button
+                onClick={() => {
+                  const { course: encodedCourse, subcourse } = match.params;
+
+                  if (currentIndex > 0) {
+                    const dSub = decodeShort(subcourse);
+                    router.push(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex - 1])}`);
+                  } else {
+                    router.push(`/course/${encodedCourse}`);
+                  }
+                }}
+                className={`px-2 sm:px-3 py-1.5 rounded-md transition-all duration-150 flex items-center gap-1 text-xs sm:text-sm font-medium ${currentIndex === 0
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                  }`}
+                title={currentIndex === 0 ? 'Back to course' : 'Previous question'}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Prev</span>
+              </button>
+
+
+              {/* Progress dots */}
+              <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                {currentIndex + 1}/{questionData.length}
+              </div>
+              <div
+                ref={dotsContainerRef}
+                className="flex items-center gap-1 overflow-x-auto hide-scrollbar max-w-[60px] sm:max-w-[120px]"
+              >
+                {questionData.map((q, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-colors flex-shrink-0 ${i === currentIndex
+                      ? 'bg-blue-500'
+                      : progressMap[q]
+                        ? 'bg-green-500'
+                        : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                      }`}
+                    onClick={() => {
+                      const { course: encodedCourse, subcourse } = match.params;
+                      const dSub = decodeShort(subcourse);
+                      router.push(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(q)}`);
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Next button */}
+              <button
+                onClick={() => {
+                  const { course: encodedCourse, subcourse } = match.params;
+
+                  if (currentIndex < questionData.length - 1) {
+                    const dSub = decodeShort(subcourse);
+                    router.push(`/problem/${encodedCourse}/${encodeShort(dSub)}/${encodeShort(questionData[currentIndex + 1])}`);
+                  } else {
+                    router.push(`/course/${encodedCourse}`);
+                  }
+                }}
+                className={`px-2 sm:px-3 py-1.5 rounded-md transition-all duration-150 flex items-center gap-1 text-xs sm:text-sm font-medium ${currentIndex === questionData.length - 1
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+                  }`}
+                title={currentIndex === questionData.length - 1 ? 'Back to course' : 'Next question'}
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Learn item with icon - positioned on the right */}
+          <Link href={learnItem.href}
+            className={`text-sm font-medium transition-colors flex items-center gap-1 ${pathname === learnItem.href
+              ? 'text-[#4285F4]'
+              : 'text-gray-600 dark:text-gray-400 hover:text-[#4285F4] dark:hover:text-gray-100'
+              }`}
+          >
+            <learnItem.icon size={16} />
+            {learnItem.label}
+          </Link>
+
+          {/* Online indicator */}
+          <div className="flex items-center">
+            {isOnline ? (
+              <Wifi className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+            ) : (
+              <WifiOff className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+            )}
+          </div>
+
+          {/* Theme toggle */}
+          <button onClick={toggleTheme} className="p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-dark-tertiary">
+            {theme === 'dark' ? (
+              <SunIcon className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
+            ) : (
+              <MoonIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+            )}
+          </button>
+
+          {/* Auth menu */}
+          <div className="relative">
+            {user ? (
+              <>
+                <button
+                  ref={authButtonRef}
+                  onClick={() => setIsAuthOpen(!isAuthOpen)}
+                  className="p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-dark-tertiary rounded-full"
+                >
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="Profile" className="w-7 h-7 sm:w-8 sm:h-8 rounded-full" />
+                  ) : (
+                    <UserCircleIcon className="w-7 h-7 sm:w-8 sm:h-8 text-gray-700 dark:text-gray-200" />
+                  )}
+                </button>
+
+                {isAuthOpen && (
+                  <div
+                    ref={authDropdownRef}
+                    className="absolute top-12 right-0 w-60 bg-white dark:bg-dark-secondary rounded-lg shadow-lg border border-gray-200 dark:border-dark-tertiary py-2 animate-fadeIn"
+                  >
+                    <div
+                      className="px-4 py-2 border-b border-gray-100 dark:border-dark-tertiary cursor-pointer"
+                      onClick={() => router.push('/profile')}
+                    >
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name || 'User'}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        logout();
+                        setIsAuthOpen(false);
+                        router.push('/');
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-tertiary"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <Link href="/login"
+                className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-colors whitespace-nowrap text-xs sm:text-sm font-bold"
+              >
+                Sign In
+              </Link>
+            )}
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-dark-tertiary rounded-full relative mobile-menu-button"
+            onClick={() => {
+              setIsMenuOpen(!isMenuOpen);
+              setIsAuthOpen(false);
+            }}
+            aria-label="Toggle menu"
+          >
+            {isMenuOpen ? (
+              <svg className="w-6 h-6 text-gray-700 dark:text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 text-gray-700 dark:text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+
+          {/* Mobile dropdown */}
+          {isMenuOpen && (
+            <div
+              className="absolute top-16 right-4 w-64 bg-white dark:bg-dark-secondary rounded-lg shadow-lg border border-gray-200 dark:border-dark-tertiary py-2 animate-fadeIn mobile-menu transition-all duration-300"
+            >
+              {menuItems.map((item, index) => (
+                <Link key={index}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${pathname === item.href
+                    ? 'bg-[#4285F4]/10 text-[#4285F4]'
+                    : 'text-gray-700 dark:text-gray-200'
+                    }`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+
+              {/* Learn item with icon in mobile menu */}
+              <Link href={learnItem.href}
+                className={`flex items-center gap-3 px-4 py-3 hover:bg-[#4285F4]/10 hover:text-[#4285F4] transition-colors ${pathname === learnItem.href
+                  ? 'bg-[#4285F4]/10 text-[#4285F4]'
+                  : 'text-gray-700 dark:text-gray-200'
+                  }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <learnItem.icon size={16} />
+                <span>{learnItem.label}</span>
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+};
+
+export default Navbar;
