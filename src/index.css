@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased text-gray-900 bg-gray-50 dark:bg-gray-900 dark:text-white transition-colors duration-300;
+  }
+
+  /* ensure inputs/selects/textareas have readable text in both themes */
+  input,
+  textarea,
+  select {
+    @apply bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600;
+  }
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  html {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors;
+  }
+
+  .btn-primary {
+    @apply bg-[#4285F4] text-white hover:bg-[#4285F4]/90;
+  }
+
+  .btn-secondary {
+    @apply text-[#4285F4] hover:bg-[#4285F4]/10;
+  }
+
+  /* make plain white backgrounds dark-friendly */
+  .bg-white {
+    @apply dark:bg-dark-secondary;
+  }
+
+  /* lighter gray text becomes lighter in dark mode */
+  .text-gray-500 {
+    @apply dark:text-gray-300;
+  }
+
+  /* collapse light borders in dark mode */
+  .border-gray-200 {
+    @apply dark:border-gray-700;
+  }
+
+  /* make light gray backgrounds dark-themed */
+  .bg-gray-100 {
+    @apply dark:bg-gray-700;
+  }
+
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+      linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-attachment: fixed;
+    opacity: 0.8;
+  }
+
+  .dark .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, #334155 1px, transparent 1px),
+      linear-gradient(to bottom, #334155 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-attachment: fixed;
+    opacity: 0.3;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Custom scrollbar hiding utility */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+  /* Safari and Chrome */
+}

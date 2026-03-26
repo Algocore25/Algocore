@@ -1,0 +1,82 @@
+﻿git : remote: error: GH013: 
+Repository rule violations 
+found for refs/heads/feature/
+azure-files-integration.     
+   
+At line:1 char:1
++ git push origin feature/azu
+re-files-integration 2>&1 | 
+Out-File -Enco ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (remote:  
+   error: ...ration.         
+   :String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+remote: 
+remote: - GITHUB PUSH 
+PROTECTION        
+remote:   ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓ
+ÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇö
+ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇ
+öΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓ
+ÇöΓÇöΓÇöΓÇöΓÇöΓÇö        
+remote:     Resolve the 
+following violations before 
+pushing again        
+remote: 
+remote:     - Push cannot 
+contain secrets        
+remote: 
+remote:             
+remote:      (?) Learn how 
+to resolve a blocked push    
+    
+remote:      https://docs.git
+hub.com/code-security/secret-
+scanning/working-with-secret-
+scanning-and-push-protection/
+working-with-push-protection-
+from-the-command-line#resolvi
+ng-a-blocked-push        
+remote:             
+remote:             
+remote:       ΓÇöΓÇö Google 
+Cloud Service Account 
+Credentials ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇ
+öΓÇöΓÇöΓÇöΓÇö        
+remote:        locations:    
+    
+remote:          - commit: b4
+ff2dbc42b129038f981e1a5cb64dc
+ad5f51fdd        
+remote:            path: 
+src/serviceAccountKey.json:1 
+       
+remote:             
+remote:        (?) To push, 
+remove secret from commit(s) 
+or follow this URL to allow 
+the secret.        
+remote:        https://github
+.com/Algocore25/Algocore/secu
+rity/secret-scanning/unblock-
+secret/3BTOjdEgLMkPjOq4aYp6jz
+ugbOw        
+remote:             
+remote: 
+remote: 
+To https://github.com/Algocor
+e25/Algocore.git
+ ! [remote rejected] feature/
+azure-files-integration -> fe
+ature/azure-files-integration
+ (push declined due to 
+repository rule violations)
+error: failed to push some 
+refs to 'https://github.com/A
+lgocore25/Algocore.git'
