@@ -84,14 +84,32 @@ const FloatingChatbot = ({ contextCode, isCompiler }) => {
         setInput('');
         setIsLoading(true);
 
-        // Augment API payload with context code if available
-        let apiMessages = [...newMessages];
+        // Calculate message count to determine constraints
+        const messageCount = messages.length;
+        let systemConstraint = "";
+        
+        if (messageCount < 20) {
+            systemConstraint = "SYSTEM INSTRUCTION: You are a learning assistant. DO NOT PROVIDE ANY CODE SNIPPETS. Give only textual explanations, conceptual hints, and guidance. If the user asks for code, explain that you can only provide text hints for now.";
+        } else {
+            systemConstraint = "SYSTEM INSTRUCTION: You are a learning assistant. DO NOT PROVIDE RUNNABLE CODE. Provide ONLY pseudocode to explain logic. Do not write full implementations in any specific programming language.";
+        }
+
+        // Augment API payload with context code and system constraints
+        let apiMessages = [
+            { role: 'system', content: systemConstraint },
+            ...newMessages
+        ];
+
         if (contextCode && typeof contextCode === 'string' && contextCode.trim().length > 0) {
             const augmentedLastMessage = {
                 role: 'user',
-                content: `${input.trim()}\n\n[System Context: The user's current editor code is:\n\`\`\`\n${contextCode}\n\`\`\`]`
+                content: `${input.trim()}\n\n[Context - Current Editor Code:\n\`\`\`\n${contextCode}\n\`\`\`]\n\n(Remember: ${messageCount < 20 ? "TEXT ONLY, NO CODE" : "PSEUDOCODE ONLY"})`
             };
-            apiMessages = [...messages, augmentedLastMessage];
+            apiMessages = [
+                { role: 'system', content: systemConstraint },
+                ...messages, 
+                augmentedLastMessage
+            ];
         }
 
         try {

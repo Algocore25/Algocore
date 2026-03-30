@@ -1459,12 +1459,12 @@ function CodePageSingle({ data, navigation, questionData: propQuestionData, sele
                       try {
                         const messageCount = chatMessages.length;
                         const additionalInstructions = messageCount < 20 
-                          ? "\\n\\nIMPORTANT: We have had fewer than 20 messages in this chat. You MUST NOT give direct answers or full code solutions. Provide ONLY hints, suggestions, and pseudo-code. If the user asks for the answer, tell them you can only give hints for now."
-                          : "\\n\\nWe have reached 20 messages. You may now provide direct answers and full code solutions if applicable.";
+                          ? "\n\nCRITICAL RULE: We have had fewer than 20 messages. DO NOT PROVIDE ANY CODE SNIPPETS, CODE BLOCKS, OR PROGRAMMING LANGUAGE SYNTAX. Provide ONLY conceptual text explanations and logical hints. If the user asks for code, politely decline and offer a conceptual explanation instead."
+                          : "\n\nCRITICAL RULE: We have reached 20 messages. DO NOT PROVIDE RUNNABLE CODE. You may now use PSEUDOCODE to explain logic, but do not provide full implementations or language-specific code solutions.";
 
                         const systemMessage = {
                           role: 'system',
-                          content: `Context: Solving coding problem "${questionData?.questionname}".\nDescription: ${questionData?.question || ''}\n\nCurrent Code:\n${code}\n\nPlease use the above code context to answer the user's questions, but only use it if needed or relevant to the user's question.${additionalInstructions}`
+                          content: `You are a learning assistant for the problem "${questionData?.questionname || 'Current Task'}".\n\n${additionalInstructions}\n\nContext - Problem Description: ${questionData?.question || ''}\nContext - User's Current Code:\n\`\`\`\n${code}\n\`\`\``
                         };
                         const apiMessages = [systemMessage, ...newMessages];
                         const res = await aiApi.chat(apiMessages);
