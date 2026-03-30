@@ -63,6 +63,46 @@ const AdminFiles = () => {
         blob.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const handleDelete = async (containerName, blobName) => {
+        if (!window.confirm(`Are you sure you want to delete "${blobName}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        const deletePromise = fetch(`/api/delete-blob?container=${containerName}&blob=${encodeURIComponent(blobName)}`, {
+            method: 'DELETE'
+        });
+
+        toast.promise(deletePromise, {
+            loading: 'Deleting file...',
+            success: (res) => {
+                if (!res.ok) throw new Error('Delete failed');
+                fetchBlobs(containerName);
+                return 'File deleted successfully!';
+            },
+            error: (err) => `Failed to delete: ${err.message}`
+        });
+    };
+
+    const handleDeleteAll = async (containerName) => {
+        if (!window.confirm(`Are you sure you want to delete ALL files from "${containerName}"? This action is permanent and cannot be undone.`)) {
+            return;
+        }
+
+        const deletePromise = fetch(`/api/delete-blob?container=${containerName}&blob=all`, {
+            method: 'DELETE'
+        });
+
+        toast.promise(deletePromise, {
+            loading: `Deleting all files in ${containerName}...`,
+            success: (res) => {
+                if (!res.ok) throw new Error('Failed to delete files');
+                fetchBlobs(containerName);
+                return `All files in "${containerName}" deleted successfully!`;
+            },
+            error: (err) => `Failed to delete: ${err.message}`
+        });
+    };
+
     const formatSize = (bytes) => {
         if (!bytes) return '0 B';
         const k = 1024;
@@ -82,6 +122,16 @@ const AdminFiles = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {selectedContainer && filteredBlobs.length > 0 && (
+                        <button 
+                            onClick={() => handleDeleteAll(selectedContainer)}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-all border border-red-200 dark:border-red-900/50"
+                            title="Delete All Blobs in Container"
+                        >
+                            <FiTrash2 className="w-4 h-4" />
+                            <span>Delete All Files</span>
+                        </button>
+                    )}
                     <button 
                         onClick={() => selectedContainer ? fetchBlobs(selectedContainer) : fetchContainers()} 
                         className="p-2 text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 rounded-lg transition-all"
@@ -192,6 +242,13 @@ const AdminFiles = () => {
                                                         >
                                                             <FiDownload />
                                                         </a>
+                                                        <button 
+                                                            onClick={() => handleDelete(selectedContainer, blob.name)}
+                                                            className="p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-all"
+                                                            title="Delete"
+                                                        >
+                                                            <FiTrash2 />
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>

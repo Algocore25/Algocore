@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ref, onValue, get } from 'firebase/database';
+import { ref, onValue, get, remove } from 'firebase/database';
 import { database } from '../../firebase';
 import { 
   FiSearch, 
@@ -10,10 +10,13 @@ import {
   FiCpu, 
   FiMonitor, 
   FiDownload,
-  FiX
+  FiX,
+  FiTrash2,
+  FiRefreshCw
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingPage from '../LoadingPage';
+import toast from 'react-hot-toast';
 
 const AdminRecordings = () => {
   const [recordings, setRecordings] = useState([]);
@@ -79,6 +82,60 @@ const AdminRecordings = () => {
     );
   }, [recordings, searchTerm]);
 
+  const handleDelete = async (rec) => {
+    if (!window.confirm(`Are you sure you want to delete the recording for ${rec.userName}?`)) {
+        return;
+    }
+
+    const deleteTasks = [];
+    
+    // 1. Delete blobs from Azure
+    if (rec.cameraUrl) {
+        const cameraBlobName = new URL(rec.cameraUrl).pathname.split('/').pop();
+        deleteTasks.push(fetch(`/api/delete-blob?container=exam-recordings&blob=${cameraBlobName}`, { method: 'DELETE' }));
+    }
+    if (rec.screenUrl) {
+        const screenBlobName = new URL(rec.screenUrl).pathname.split('/').pop();
+        deleteTasks.push(fetch(`/api/delete-blob?container=exam-recordings&blob=${screenBlobName}`, { method: 'DELETE' }));
+    }
+
+    // 2. Remove from Firebase
+    deleteTasks.push(remove(ref(database, `ExamRecordings/${rec.testid}/${rec.uid}`)));
+
+    toast.promise(Promise.all(deleteTasks), {
+        loading: 'Deleting recording...',
+        success: () => {
+            setRecordings(prev => prev.filter(r => r.id !== rec.id));
+            return 'Recording deleted successfully';
+        },
+        error: 'Failed to delete recording'
+    });
+  };
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm('CRITICAL ACTION: Are you sure you want to delete ALL proctoring recordings? This will wipe all videos in Azure and all metadata in Firebase.')) {
+        return;
+    }
+
+    const purgePromise = (async () => {
+        // 1. Purge Azure container
+        const res = await fetch('/api/delete-blob?container=exam-recordings&blob=all', { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to purge Azure storage');
+
+        // 2. Clear Firebase branch
+        await remove(ref(database, 'ExamRecordings'));
+        
+        setRecordings([]);
+        return 'All recordings purged';
+    })();
+
+    toast.promise(purgePromise, {
+        loading: 'Purging all recordings...',
+        success: (msg) => msg,
+        error: (err) => `Purge failed: ${err.message}`
+    });
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleString('en-US', {
@@ -100,15 +157,27 @@ const AdminRecordings = () => {
           <p className="text-gray-600 dark:text-gray-400">View and review exam session recordings</p>
         </div>
 
-        <div className="relative w-full md:w-96">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by student or exam..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          {recordings.length > 0 && (
+            <button 
+                onClick={handleDeleteAll}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-all border border-red-200 dark:border-red-900/50"
+                title="Purge All Recordings"
+            >
+                <FiTrash2 className="w-4 h-4" />
+                <span>Delete All</span>
+            </button>
+          )}
+          <div className="relative w-full md:w-80">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by student or exam..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -181,6 +250,13 @@ const AdminRecordings = () => {
                         {!rec.cameraUrl && !rec.screenUrl && (
                           <span className="text-xs text-gray-400 italic">No recordings</span>
                         )}
+                        <button
+                          onClick={() => handleDelete(rec)}
+                          className="p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-all ml-4 border-l dark:border-gray-700 pl-4"
+                          title="Delete Recording"
+                        >
+                          <FiTrash2 />
+                        </button>
                       </div>
                     </td>
                   </tr>
