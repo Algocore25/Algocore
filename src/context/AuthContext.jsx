@@ -9,7 +9,7 @@ import {
 
 import { auth } from '../firebase';
 
-import { ref, set, onValue, onDisconnect, remove, update, get } from 'firebase/database';
+import { ref, set, onValue, onDisconnect, remove, update, get, serverTimestamp } from 'firebase/database';
 import { database } from '../firebase';
 
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -26,6 +26,7 @@ const SESSION_CONFIG = {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sessionId, setSessionId] = useState(null);
   const [sessionEnforced, setSessionEnforced] = useState(true);
   const [adminUids, setAdminUids] = useState([]);
 
@@ -53,7 +54,7 @@ export const AuthProvider = ({ children }) => {
 
   // Generate a more robust session ID
   const generateSessionId = () => {
-    const existingSessionId = localStorage.getItem('algocore_session_id');
+    const existingSessionId = sessionStorage.getItem('algocore_session_id');
     if (existingSessionId) {
       return existingSessionId;
     }
@@ -65,7 +66,7 @@ export const AuthProvider = ({ children }) => {
       // Fallback for older browsers
       newSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
-    localStorage.setItem('algocore_session_id', newSessionId);
+    sessionStorage.setItem('algocore_session_id', newSessionId);
     return newSessionId;
   };
 
@@ -95,7 +96,8 @@ export const AuthProvider = ({ children }) => {
       sessionUnsubRef.current = null;
     }
 
-    // Reset refs
+    // Reset state/refs
+    setSessionId(null);
     sessionIdRef.current = null;
     sessionPathRef.current = null;
     isManualLogoutRef.current = false;
@@ -115,26 +117,15 @@ export const AuthProvider = ({ children }) => {
       // Clean up session listeners first
       cleanupSessionListeners();
 
-      // Clear local storage session ID
-      localStorage.removeItem('algocore_session_id');
+      // Clear session storage ID
+      sessionStorage.removeItem('algocore_session_id');
 
       // Try to remove the session record from database
       const uid = auth.currentUser?.uid || user?.uid;
       if (uid && sessionPathRef.current) {
         try {
-          const sessionRef = ref(database, `sessions/${uid}`);
-          const snap = await get(sessionRef);
-          const currentSession = snap.val();
-
-
-
-
-          if (!currentSession || currentSession.sessionId === sessionIdRef.current || isManualLogoutRef.current) {
-            await remove(sessionRef);
-            console.log('Session record removed from database');
-          } else {
-            console.log('Session owned by another client, skipping removal');
-          }
+          await remove(ref(database, sessionPathRef.current));
+          console.log('Current session record removed from database');
         } catch (error) {
           console.warn('Failed to remove session record:', error);
         }
@@ -214,125 +205,56 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
-  // Enhanced session initialization
-  const initSingleSession = useCallback(async (uid) => {
+  // Enhanced session initialization for multiple sessions
+  const initSession = useCallback(async (uid) => {
     if (isInitializingSessionRef.current) {
-      console.log('Session initialization already in progress');
       return;
     }
 
     try {
       isInitializingSessionRef.current = true;
-      console.log('Initializing single session for user:', uid);
-
-      // Generate new session ID
       const newSessionId = generateSessionId();
+      setSessionId(newSessionId);
       sessionIdRef.current = newSessionId;
-      sessionPathRef.current = `sessions/${uid}`;
+      sessionPathRef.current = `sessions/${uid}/${newSessionId}`;
 
       const sessionRef = ref(database, sessionPathRef.current);
 
-      // Create comprehensive session data
       const sessionData = {
         sessionId: newSessionId,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        lastActive: Date.now(),
+        createdAt: serverTimestamp(),
+        lastActive: serverTimestamp(),
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
         platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
-        language: typeof navigator !== 'undefined' ? navigator.language : 'unknown'
+        isCurrent: true 
       };
 
-      // Check for existing session
-      const snapshot = await get(sessionRef);
-      const existingSession = snapshot.val();
+      // Set session data and schedule removal on disconnect
+      await set(sessionRef, sessionData);
+      onDisconnect(sessionRef).remove();
 
-      if (existingSession && existingSession.sessionId === newSessionId) {
-        console.log('Existing session found with same ID, joining session:', existingSession.sessionId);
-        await update(sessionRef, {
-          lastActive: Date.now(),
-          updatedAt: Date.now()
-        });
-      } else {
-        // Set new session data
-        await set(sessionRef, sessionData);
-        console.log('New session created:', newSessionId);
-      }
-
-      // Don't set up onDisconnect handler to avoid logout on network issues
-      // Sessions will be cleaned up by new logins instead
-      console.log('Session will persist through network disconnections');
-
-      // Set up session listener
-      sessionUnsubRef.current = onValue(sessionRef, (snapshot) => {
-        const sessionValue = snapshot.val();
-
-        if (!sessionValue) {
-          console.log('Session removed from database');
-          // Only logout if we're online (to avoid false logout on network issues)
-          if (!isManualLogoutRef.current && isOnlineRef.current) {
-            console.log('Session genuinely removed while online - logging out');
-            logout(true, 'session-removed');
-          } else if (!isOnlineRef.current) {
-            console.log('Session removed but offline - keeping user logged in');
-          }
-          return;
-        }
-
-        // Check if session ID has changed (new login detected)
-        if (sessionValue.sessionId && sessionValue.sessionId !== sessionIdRef.current) {
-          console.log('Session ID changed - new login detected');
-          console.log('Current session:', sessionIdRef.current);
-          console.log('New session:', sessionValue.sessionId);
-
-          if (!isManualLogoutRef.current) {
-            console.log('Terminating current session due to new login');
-            logout(true, 'new-login');
-          }
-        }
-
-        // No session timeout based on inactivity - sessions persist until new login
-        console.log('Session heartbeat received, session remains active');
-      }, (error) => {
-        console.error('Session listener error:', error);
-        // Don't logout on database connection errors
-        if (error.code === 'PERMISSION_DENIED') {
-          console.log('Permission denied - user may have been signed out');
-          logout(true, 'permission-denied');
-        }
-      });
-
-      // Set up heartbeat to maintain session presence
+      // Set up heartbeat
       const sendHeartbeat = async () => {
-        if (isManualLogoutRef.current || !sessionPathRef.current) {
-          return;
-        }
-
+        if (!sessionPathRef.current) return;
         try {
           await update(ref(database, sessionPathRef.current), {
-            lastActive: Date.now(),
-            updatedAt: Date.now()
+            lastActive: serverTimestamp()
           });
-          // Only log heartbeat in development/debug mode
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Session heartbeat sent');
-          }
         } catch (error) {
-          console.warn('Failed to send heartbeat:', error);
-          // If we can't send heartbeat due to permission issues, the user might be signed out
           if (error.code === 'PERMISSION_DENIED') {
-            console.log('Permission denied on heartbeat - logging out');
             logout(true, 'permission-denied');
           }
         }
       };
 
-      // Send initial heartbeat
-      await sendHeartbeat();
-
-      // Set up heartbeat interval
       heartbeatRef.current = setInterval(sendHeartbeat, SESSION_CONFIG.HEARTBEAT_INTERVAL);
-      console.log('Session initialized with heartbeat. No timeout - session persists until new login detected.');
+
+      // Listen for THIS session removal (admin or user might terminate it from another device)
+      sessionUnsubRef.current = onValue(sessionRef, (snapshot) => {
+        if (!snapshot.exists() && !isManualLogoutRef.current) {
+          logout(true, 'session-terminated');
+        }
+      });
 
     } catch (error) {
       console.error('Failed to initialize session:', error);
@@ -411,28 +333,18 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-
-    const isMultiSessionUser = adminUids.includes(user.uid);
-
-    if (isMultiSessionUser) {
-      console.log(`Multi-session allowed for admin ${user.uid}. Skipping single-session enforcement.`);
-      return; // ✅ Skip session enforcement entirely
-    }
-
-
-
-    console.log('Starting session enforcement for user:', user.uid);
+    console.log('Starting session tracking for user:', user.uid);
 
     // Small delay to ensure auth is fully settled
     const timeoutId = setTimeout(() => {
-      initSingleSession(user.uid);
+      initSession(user.uid);
     }, 100);
 
     return () => {
       clearTimeout(timeoutId);
       cleanupSessionListeners();
     };
-  }, [user?.uid, sessionEnforced, loading, initSingleSession, cleanupSessionListeners, adminUids]);
+  }, [user?.uid, sessionEnforced, loading, initSession, cleanupSessionListeners, adminUids]);
 
   // Security restrictions (Copy/Paste disable)
   useEffect(() => {
@@ -591,7 +503,8 @@ export const AuthProvider = ({ children }) => {
     login,
     sessionEnforced,
     setSessionEnforced,
-    isAdmin: user ? adminUids.includes(user.uid) : false
+    isAdmin: user ? adminUids.includes(user.uid) : false,
+    sessionId: sessionId
   };
 
   return (

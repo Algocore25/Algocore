@@ -141,6 +141,7 @@ const Ic = {
   GitHub: () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" /></svg>,
   Users: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
   Camera: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+  Monitor: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
 };
 
 // ─── Confirmation Modal ───────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ function ConfirmModal({ title, description, confirmLabel = "Confirm", danger = t
 // ─── Main Component ───────────────────────────────────────────────────────────
 function ProfilePage() {
   const { theme } = useTheme();
-  const { user, loading } = useAuth();
+  const { user, loading, sessionId } = useAuth();
   const { totalTime, formatTime } = useUserActivityTime();
   const router = useRouter();
 
@@ -243,6 +244,10 @@ function ProfilePage() {
   const [globalCodeEvaluateEnabled, setGlobalCodeEvaluateEnabled] = useState(true);
   const [certificatesEnabled, setCertificatesEnabled] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+
+  // Sessions
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   // ── Data loading ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -768,6 +773,64 @@ function ProfilePage() {
     setUploadingPhoto(false);
   };
 
+  const loadSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const sessionsRef = ref(database, `sessions/${user.uid}`);
+      const snapshot = await get(sessionsRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.keys(data).map(key => ({
+          ...data[key],
+          id: key
+        }));
+        list.sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
+        setSessions(list);
+      } else {
+        setSessions([]);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setSessionsLoading(false);
+  };
+
+  const handleTerminateSession = async (sid) => {
+    if (sid === sessionId) return; // Can't terminate current session from here
+    if (!window.confirm("Disconnect this device?")) return;
+    try {
+      await remove(ref(database, `sessions/${user.uid}/${sid}`));
+      setSessions(prev => prev.filter(s => s.id !== sid));
+    } catch (e) {
+      console.error(e);
+      alert("Failed to terminate session.");
+    }
+  };
+
+  const handleTerminateAllOtherSessions = async () => {
+    if (!window.confirm("Disconnect all other devices/tabs?")) return;
+    try {
+      const sessionsRef = ref(database, `sessions/${user.uid}`);
+      const snapshot = await get(sessionsRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const updates = {};
+        Object.keys(data).forEach(key => {
+          if (key !== sessionId) {
+            updates[key] = null;
+          }
+        });
+        if (Object.keys(updates).length > 0) {
+          await update(sessionsRef, updates);
+        }
+        setSessions(prev => prev.filter(s => s.id === sessionId));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to terminate sessions.");
+    }
+  };
+
   // ── Guards ────────────────────────────────────────────────────────────────
   if (loading) return <LoadingPage />;
   if (!user) return <SignInRequiredPage />;
@@ -1006,10 +1069,10 @@ function ProfilePage() {
         <div className="bg-white/50 dark:bg-dark-tertiary/50 backdrop-blur-md rounded-xl shadow-sm border border-gray-200/50 dark:border-dark-tertiary/50 overflow-hidden w-full">
           {/* Tab bar */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 px-2 overflow-x-auto">
-            {["overview", "certificates", "submissions", "find-users", "social", "linked-accounts", "settings", "reset-progress"].filter(t => t !== 'certificates' || certificatesEnabled).map(tab => (
+            {["overview", "certificates", "submissions", "find-users", "social", "sessions", "linked-accounts", "settings", "reset-progress"].filter(t => t !== 'certificates' || certificatesEnabled).map(tab => (
               <button
                 key={tab}
-                onClick={() => { setActiveTab(tab); if (tab === 'social') loadSocialLists(); if (tab === 'find-users') loadSearchUsers(); }}
+                onClick={() => { setActiveTab(tab); if (tab === 'social') loadSocialLists(); if (tab === 'find-users') loadSearchUsers(); if (tab === 'sessions') loadSessions(); }}
                 className={`px-5 py-4 text-sm font-medium capitalize transition-all duration-150 whitespace-nowrap ${activeTab === tab
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20'
                   : 'text-gray-600 dark:text-gray-400 hover:text-blue-500'
@@ -1021,7 +1084,8 @@ function ProfilePage() {
                       : tab === 'find-users' ? '🔍 Find Users'
                         : tab === 'settings' ? '⚙️ Settings'
                           : tab === 'certificates' ? '🏅 Certificates'
-                            : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            : tab === 'sessions' ? '🖥️ Sessions'
+                              : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -1406,6 +1470,68 @@ function ProfilePage() {
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Sessions Tab ────────────────────────────────────────── */}
+            {activeTab === "sessions" && (
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Active Sessions</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Manage all your active devices and tabs.</p>
+                  </div>
+                  {sessions.length > 1 && (
+                    <button
+                      onClick={handleTerminateAllOtherSessions}
+                      className="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl text-sm font-semibold hover:bg-red-100 dark:hover:bg-red-900/40 transition"
+                    >
+                      Terminate All Others
+                    </button>
+                  )}
+                </div>
+
+                {sessionsLoading ? (
+                  <div className="text-center py-20 text-gray-400">Loading sessions…</div>
+                ) : sessions.length === 0 ? (
+                  <div className="text-center py-20 text-gray-400">No active sessions found.</div>
+                ) : (
+                  <div className="grid gap-3">
+                    {sessions.map(s => {
+                      const isMe = s.id === sessionId;
+                      return (
+                        <div key={s.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${isMe ? 'bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800' : 'bg-white dark:bg-gray-900/40 border-gray-200 dark:border-gray-700'}`}>
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${isMe ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+                              <Ic.Monitor />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-900 dark:text-white truncate max-w-[200px]">
+                                  {s.platform || 'Unknown Device'}
+                                </span>
+                                {isMe && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold uppercase">This Device</span>}
+                              </div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[300px]">{s.userAgent}</p>
+                              <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-wider font-mono">
+                                Last seen: {s.lastActive ? new Date(s.lastActive).toLocaleString() : 'Just now'}
+                              </p>
+                            </div>
+                          </div>
+                          {!isMe && (
+                            <button
+                              onClick={() => handleTerminateSession(s.id)}
+                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                              title="Terminate Session"
+                            >
+                              <Ic.Trash />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
