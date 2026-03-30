@@ -7,6 +7,7 @@ import LoadingPage from '../LoadingPage';
 import DynamicComponent from '../Exam/DynamicComponent';
 
 const ExamPreview = ({ test, testId, duration }) => {
+  console.log('🔍 ExamPreview: Initial props - test:', test, 'testId:', testId, 'duration:', duration);
   const [previewQuestions, setPreviewQuestions] = useState([]);
   const [questionIds, setQuestionIds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -396,7 +397,8 @@ const ExamPreview = ({ test, testId, duration }) => {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              <DynamicComponent question={questionIds[activeQuestion]} />
+              {console.log('🎯 ExamPreview: Rendering DynamicComponent with testId:', testId, 'for question:', questionIds[activeQuestion])}
+              <DynamicComponent question={questionIds[activeQuestion]} testId={testId} test={test} />
             </div>
           </div>
         </div>

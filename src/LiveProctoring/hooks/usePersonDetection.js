@@ -1,9 +1,9 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 
 // ─── Thresholds ──────────────────────────────────────────────────────────────
 const PERSON_MIN_SCORE = 0.45;  // Standard threshold for persons
-const PHONE_MIN_SCORE  = 0.12;  // Very low — catches partial / angled phones
-const REMOTE_AS_PHONE_MIN_SCORE = 0.20; // "remote" is often a misclassified phone
+const PHONE_MIN_SCORE  = 0.25;  // Increased from 0.12 to reduce false positives
+const REMOTE_AS_PHONE_MIN_SCORE = 0.35; // Increased from 0.20 for better accuracy
 const IOU_DEDUP_THRESHOLD = 0.35; // Suppress duplicate phone boxes
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -20,6 +20,33 @@ function iou([ax, ay, aw, ah], [bx, by, bw, bh]) {
   const intersection = iw * ih;
   const union = aw * ah + bw * bh - intersection;
   return union > 0 ? intersection / union : 0;
+}
+
+/**
+ * Filter phone detections by realistic size constraints.
+ * Phones are typically small objects relative to the frame.
+ */
+function filterBySize(detections, frameWidth, frameHeight) {
+  const minPhoneSize = Math.min(frameWidth, frameHeight) * 0.03; // 3% of smaller dimension
+  const maxPhoneSize = Math.min(frameWidth, frameHeight) * 0.15; // 15% of smaller dimension
+  
+  return detections.filter(d => {
+    const [x, y, w, h] = d.bbox;
+    const area = w * h;
+    const aspectRatio = w / h;
+    
+    // Filter by size
+    if (area < minPhoneSize * minPhoneSize || area > maxPhoneSize * maxPhoneSize) {
+      return false;
+    }
+    
+    // Filter by aspect ratio (phones are typically taller than wide)
+    if (aspectRatio < 0.3 || aspectRatio > 2.0) {
+      return false;
+    }
+    
+    return true;
+  });
 }
 
 /**
@@ -48,6 +75,10 @@ export const usePersonDetection = () => {
   const [model, setModel] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Temporal consistency tracking
+  const phoneDetectionHistory = useRef([]);
+  const lastFrameTime = useRef(0);
 
   useEffect(() => {
     const loadModel = async () => {
@@ -90,6 +121,10 @@ export const usePersonDetection = () => {
     if (!model || !videoElement) return { persons: [], phones: [] };
 
     try {
+      const currentTime = Date.now();
+      const frameWidth = videoElement.videoWidth || 640;
+      const frameHeight = videoElement.videoHeight || 480;
+      
       // ── Pass 1: standard detection (used for persons) ──────────────────
       const standard = await model.detect(videoElement);
 
@@ -130,8 +165,44 @@ export const usePersonDetection = () => {
         .filter((p) => p.class === 'remote' && p.score >= REMOTE_AS_PHONE_MIN_SCORE)
         .forEach((p) => addPhone(p, 'cell phone')); // relabel as cell phone
 
+      // Convert to array and apply size filtering
+      let phones = Array.from(phoneMap.values());
+      phones = filterBySize(phones, frameWidth, frameHeight);
+
       // Dedup via IoU-based NMS
-      const phones = nms(Array.from(phoneMap.values()));
+      phones = nms(phones);
+
+      // Apply temporal consistency - require phone to be detected consistently
+      const currentDetection = {
+        phones: phones,
+        timestamp: currentTime,
+        count: phones.length
+      };
+
+      // Maintain history of last 3 detections
+      phoneDetectionHistory.current.push(currentDetection);
+      if (phoneDetectionHistory.current.length > 3) {
+        phoneDetectionHistory.current.shift();
+      }
+
+      // Only report phone if detected in at least 2 of last 3 frames
+      const recentDetections = phoneDetectionHistory.current.slice(-3);
+      const framesWithPhone = recentDetections.filter(d => d.count > 0).length;
+      
+      if (framesWithPhone < 2 && recentDetections.length === 3) {
+        // Not consistently detected, clear phones
+        phones = [];
+      }
+
+      // Log detection info for debugging
+      if (phones.length > 0) {
+        console.log('📱 Phone detected:', {
+          count: phones.length,
+          scores: phones.map(p => p.score.toFixed(3)),
+          consistency: `${framesWithPhone}/3 frames`,
+          history: recentDetections.map(d => d.count)
+        });
+      }
 
       return { persons, phones };
     } catch (err) {

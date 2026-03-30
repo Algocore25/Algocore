@@ -22,7 +22,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 import { setItemWithExpiry, getItemWithExpiry } from "../../utils/storageWithExpiry";
 
-function CodePageMultifile({ question, data, navigation, questionData: propQuestionData, selectedLanguage: propSelectedLanguage }) {
+function CodePageMultifile({ question, data, navigation, questionData: propQuestionData, selectedLanguage: propSelectedLanguage, test: propTest }) {
   const [code, setCode] = useState("");
   const [runsubmit, setRunSubmit] = useState('none');
   const [activeTab, setActiveTab] = useState('description');
@@ -635,8 +635,10 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
   useEffect(() => {
     if (propSelectedLanguage && propSelectedLanguage !== selectedLanguage) {
       setSelectedLanguage(propSelectedLanguage);
+    } else if (!propSelectedLanguage && !selectedLanguage && allowlanguages.length > 0) {
+      setSelectedLanguage(allowlanguages[0]);
     }
-  }, [propSelectedLanguage]);
+  }, [propSelectedLanguage, selectedLanguage, allowlanguages]);
 
   useEffect(() => {
     const fetchSubmissions = async () => {
@@ -818,17 +820,41 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
   useEffect(() => {
     const fetchAllowedLanguages = async () => {
       const DEFAULT_LANGUAGES = ['cpp', 'java', 'python', 'javascript'];
+      
+      // First try to get allowed languages from test prop if available
+      if (propTest?.allowedLanguages) {
+        console.log('� CodePageMultifile: Using allowedLanguages from test prop:', propTest.allowedLanguages);
+        let normalizedArray = Array.isArray(propTest.allowedLanguages) ? propTest.allowedLanguages : Object.values(propTest.allowedLanguages);
+        const mappedLangs = normalizedArray.map(lang => {
+          const l = String(lang).toLowerCase();
+          if (l === 'c/c++' || l === 'c++') return 'cpp';
+          return l;
+        });
+        console.log('✅ CodePageMultifile: Mapped allowed languages from test prop:', mappedLangs);
+        
+        if (mappedLangs.length > 0) {
+          console.log('🎯 CodePageMultifile: Final allowed languages to set:', mappedLangs);
+          setallowlanguages(mappedLangs);
+          return;
+        }
+      }
+      
       try {
+        console.log('�🔍 Fetching allowed languages for exam:', testid);
         const snapshot = await get(child(ref(database), `Exam/${testid}/allowedLanguages`));
         let mappedLangs = [];
         if (snapshot.exists()) {
           const data = snapshot.val();
+          console.log('📋 Raw allowed languages data:', data);
           let normalizedArray = Array.isArray(data) ? data : Object.values(data);
           mappedLangs = normalizedArray.map(lang => {
             const l = String(lang).toLowerCase();
             if (l === 'c/c++' || l === 'c++') return 'cpp';
             return l;
           });
+          console.log('✅ Mapped allowed languages:', mappedLangs);
+        } else {
+          console.log('⚠️ No allowed languages found in database, using defaults');
         }
 
         // If no languages found or empty array, use defaults
@@ -837,14 +863,23 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
           mappedLangs = DEFAULT_LANGUAGES;
         }
 
+        console.log('🎯 Final allowed languages to set:', mappedLangs);
         setallowlanguages(mappedLangs);
       } catch (error) {
-        console.error("Error fetching allowed languages:", error);
+        console.error("❌ Error fetching allowed languages:", error);
+        console.log('🔄 Using default languages due to error');
         setallowlanguages(DEFAULT_LANGUAGES);
       }
     };
     fetchAllowedLanguages();
-  }, [testid]);
+  }, [testid, propTest]);
+
+  useEffect(() => {
+    if (allowlanguages.length > 0 && !selectedLanguage) {
+      console.log('🎯 Setting initial language to:', allowlanguages[0]);
+      setSelectedLanguage(allowlanguages[0]);
+    }
+  }, [allowlanguages, selectedLanguage]);
 
   useEffect(() => {
     const mapped = getMonacoLanguage(selectedLanguage);
@@ -1224,7 +1259,7 @@ function CodePageMultifile({ question, data, navigation, questionData: propQuest
               <Icons.History className="w-3 h-3" />Reset
             </button>
             <select className="bg-white dark:bg-dark-secondary text-gray-900 dark:text-white border border-gray-300 dark:border-dark-tertiary rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#4285F4] focus:border-transparent" value={selectedLanguage} onChange={handleLanguageChange}>
-              {allowlanguages.map((lang) => (<option key={lang} value={lang}>{lang}</option>))}
+              {(allowlanguages.length > 0 ? allowlanguages : ['cpp', 'java', 'python', 'javascript']).map((lang) => (<option key={lang} value={lang}>{lang}</option>))}
             </select>
           </div>
           <div className="flex items-center gap-2">

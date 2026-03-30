@@ -32,25 +32,41 @@ import {
 } from 'react-icons/fi';
 import DynamicComponent from './DynamicComponent';
 import { useParams } from 'next/navigation';
-
 import { useAuth } from '../../context/AuthContext';
-
 
 const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setviolation, setIsViolationReady, videoRef, detections, isProctoringActive }) => {
 
     const { testid } = useParams();
     const { theme, toggleTheme } = useTheme();
+    const { user } = useAuth();
     const [answeredQuestions, setAnsweredQuestions] = useState({});
     const [activeTab, setActiveTab] = useState('description');
+    const [testData, setTestData] = useState(null);
 
+    // Fetch test data to get allowedLanguages
+    useEffect(() => {
+        const fetchTestData = async () => {
+            if (!testid) return;
+            
+            try {
+                console.log('🔍 Exam2: Fetching test data for testid:', testid);
+                const testRef = ref(database, `Exam/${testid}`);
+                const snapshot = await get(testRef);
+                
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    console.log('✅ Exam2: Test data loaded:', data);
+                    setTestData(data);
+                } else {
+                    console.log('❌ Exam2: No test data found for testid:', testid);
+                }
+            } catch (error) {
+                console.error('❌ Exam2: Error fetching test data:', error);
+            }
+        };
 
-
-
-
-
-
-
-
+        fetchTestData();
+    }, [testid]);
 
     const [timeLeft, setTimeLeft] = useState(() => {
 
@@ -75,11 +91,6 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
         console.log('Remaining Time:', remaining);
         return remaining;
     });
-
-    const { user } = useAuth();
-
-
-
 
     useEffect(() => {
         if (!user || !testid) return;
@@ -735,7 +746,8 @@ const Exam2 = ({ Questions, startTime, onExamComplete, duration, examName, setvi
 
                     {/* Main Content */}
                     <div className="flex-1 flex flex-col overflow-hidden">
-                        <DynamicComponent question={Questions[activeQuestion]} />
+                        {console.log('🎯 Exam2: Rendering DynamicComponent with testId:', testid, 'testData:', testData)}
+                        <DynamicComponent question={Questions[activeQuestion]} testId={testid} test={testData} />
                     </div>
                 </div>
             </div>

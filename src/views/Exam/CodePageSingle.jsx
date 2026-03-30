@@ -21,7 +21,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 import { setItemWithExpiry, getItemWithExpiry } from "../../utils/storageWithExpiry";
 
-function CodePageSingle({ question, data, questionData: propQuestionData, selectedLanguage: propSelectedLanguage }) {
+function CodePageSingle({ question, data, questionData: propQuestionData, selectedLanguage: propSelectedLanguage, test: propTest }) {
   const [code, setCode] = useState("");
   const [runsubmit, setRunSubmit] = useState('none');
   const [activeTab, setActiveTab] = useState('description');
@@ -470,34 +470,67 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
     };
     const fetchAllowedLanguages = async () => {
       const DEFAULT_LANGUAGES = ['cpp', 'java', 'python', 'javascript'];
+      
+      // First try to get allowed languages from test prop if available
+      if (propTest?.allowedLanguages) {
+        console.log('📋 CodePageSingle: Using allowedLanguages from test prop:', propTest.allowedLanguages);
+        let normalizedArray = Array.isArray(propTest.allowedLanguages) ? propTest.allowedLanguages : Object.values(propTest.allowedLanguages);
+        const mappedLangs = normalizedArray.map(lang => {
+          const l = String(lang).toLowerCase();
+          if (l === 'c/c++' || l === 'c++') return 'cpp';
+          return l;
+        });
+        console.log('✅ CodePageSingle: Mapped allowed languages from test prop:', mappedLangs);
+        
+        if (mappedLangs.length > 0) {
+          console.log('🎯 CodePageSingle: Final allowed languages to set:', mappedLangs);
+          setallowlanguages(mappedLangs);
+          return;
+        }
+      }
+      
       try {
+        console.log('🔍 CodePageSingle: Fetching allowed languages for exam:', testid);
         const snapshot = await get(child(ref(database), `Exam/${testid}/allowedLanguages`));
         let mappedLangs = [];
         if (snapshot.exists()) {
           const data = snapshot.val();
+          console.log('📋 CodePageSingle: Raw allowed languages data:', data);
           let normalizedArray = Array.isArray(data) ? data : Object.values(data);
           mappedLangs = normalizedArray.map(lang => {
             const l = String(lang).toLowerCase();
             if (l === 'c/c++' || l === 'c++') return 'cpp';
             return l;
           });
+          console.log('✅ CodePageSingle: Mapped allowed languages:', mappedLangs);
+        } else {
+          console.log('⚠️ CodePageSingle: No allowed languages found in database, using defaults');
         }
 
         // If no languages found or empty array, use defaults
         if (mappedLangs.length === 0) {
-          console.warn("No allowed languages found for exam, using defaults.");
+          console.warn("CodePageSingle: No allowed languages found for exam, using defaults.");
           mappedLangs = DEFAULT_LANGUAGES;
         }
 
+        console.log('🎯 CodePageSingle: Final allowed languages to set:', mappedLangs);
         setallowlanguages(mappedLangs);
       } catch (error) {
-        console.error("Error fetching allowed languages:", error);
+        console.error("❌ CodePageSingle: Error fetching allowed languages:", error);
+        console.log('🔄 CodePageSingle: Using default languages due to error');
         setallowlanguages(DEFAULT_LANGUAGES);
       }
     };
     fetchData();
     fetchAllowedLanguages();
-  }, [question, testid]);
+  }, [question, testid, propTest]);
+
+  useEffect(() => {
+    if (allowlanguages.length > 0 && !propSelectedLanguage) {
+      console.log('🎯 CodePageSingle: Setting initial language to:', allowlanguages[0]);
+      setSelectedLanguage(allowlanguages[0]);
+    }
+  }, [allowlanguages, propSelectedLanguage]);
 
   useEffect(() => {
     setActiveTab('description');
@@ -710,7 +743,7 @@ function CodePageSingle({ question, data, questionData: propQuestionData, select
         <div className="p-3 border-b dark:border-dark-tertiary flex justify-between items-center bg-white dark:bg-dark-secondary">
           <div className="flex gap-4 items-center">
             <select className="bg-white dark:bg-dark-tertiary border border-gray-200 dark:border-dark-tertiary p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" value={selectedLanguage} onChange={handleLanguageChange}>
-              {allowlanguages.map(l => <option key={l} value={l}>{l}</option>)}
+              {(allowlanguages.length > 0 ? allowlanguages : ['cpp', 'java', 'python', 'javascript']).map(l => <option key={l} value={l}>{l}</option>)}
             </select>
             <button onClick={() => setShowResetModal(true)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-500 transition-colors">
               <Icons.History size={12} /> Reset

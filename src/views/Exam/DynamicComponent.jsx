@@ -10,53 +10,32 @@ import LoadingPage from "../LoadingPage";
 
 
 
-
-const DynamicComponent = ({ question }) => {
+const DynamicComponent = ({ question, testId, test }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-
-
-
-
+  console.log('🔍 DynamicComponent: Received props - question:', question, 'testId:', testId, 'test:', test);
 
   // Fetch question data from Firebase
   useEffect(() => {
+    if (!question) return;
 
-    const fetchData = async () => {
-      setLoading(true);
-
-      try {
-        // Single call for both question data and next question URL
-        const questionRef = ref(
-          database,
-          `questions/${question}`);
-
-        // Get both question data and all questions in parallel
-        const [questionSnapshot] = await Promise.all([
-          get(questionRef),
-        ]);
-
-        if (questionSnapshot.exists()) {
-          const question = questionSnapshot.val();
-          setData(question);
-        }
-      } catch (error) {
-        console.error("Error fetching data from Firebase:", error);
-      } finally {
-        setLoading(false);
+    console.log('📋 DynamicComponent: Fetching question data for:', question);
+    const questionRef = ref(database, `questions/${question}`);
+    const unsubscribe = onValue(questionRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const questionData = { id: question, ...snapshot.val() };
+        console.log('✅ DynamicComponent: Question data loaded:', questionData.type);
+        setData(questionData);
+      } else {
+        console.log('❌ DynamicComponent: No data found for question:', question);
+        setData(null);
       }
-    };
+      setLoading(false);
+    });
 
-
-    console.log(data?.type);
-
-    fetchData();
-
-  }, [question]); // Dependencies adjusted
-
-
-
+    return () => unsubscribe();
+  }, [question]);
 
   if (loading) return <LoadingPage message="Loading question, please wait..." />;
 
@@ -65,7 +44,10 @@ const DynamicComponent = ({ question }) => {
   return (
     <div>
       {data?.type === "Programming" && (
-        <CodePage question={question} data={data} questionData={data} />
+        <>
+          {console.log('🎯 DynamicComponent: Rendering CodePage with testId:', testId, 'test:', test)}
+          <CodePage question={question} data={data} questionData={data} testId={testId} test={test} />
+        </>
       )}
       {data?.type === "SQL" && <SqlPage question={question} />}
       {data?.type === "MCQ" && <MCQPage data={data} />}
