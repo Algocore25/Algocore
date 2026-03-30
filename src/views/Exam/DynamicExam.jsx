@@ -303,47 +303,47 @@ const DynamicExam = () => {
       }
       noPersonStartTime.current = null;
       violationTriggered.current.noPerson = false;
-      // Mobile Phone Detection Logic
-      if (mobileCount > 0) {
-        if (!mobilePhoneStartTime.current) {
-          mobilePhoneStartTime.current = now;
-          violationTriggered.current.mobilePhone = false;
-        } else {
-          const duration = (now - mobilePhoneStartTime.current) / 1000;
-          if (duration >= 3 && !violationTriggered.current.mobilePhone) {
-            const newViolationCount = (violation || 0) + 1;
-            showToastNotification(`⚠️ Mobile phone detected - Violation recorded`);
-
-            toast(`🚨 Violation ${newViolationCount}/${proctorSettings.maxViolationCount}: Mobile phone detected in frame`, {
-              duration: 3000,
-              icon: '📱',
-              style: {
-                background: '#ef4444',
-                color: 'white',
-              },
-            });
-
-            setviolation(prev => (prev || 0) + 1);
-            logViolation("Mobile Phone Detected", {
-              duration: `${duration.toFixed(1)} seconds`,
-              phoneCount: mobileCount,
-              detectionTime: new Date().toISOString(),
-              violationCount: newViolationCount,
-              maxViolationCount: proctorSettings.maxViolationCount
-            });
-            violationTriggered.current.mobilePhone = true;
-          }
-        }
-      } else {
-        mobilePhoneStartTime.current = null;
-        violationTriggered.current.mobilePhone = false;
-      }
-
     } else {
       noPersonStartTime.current = null;
       multiPersonStartTime.current = null;
       violationTriggered.current.noPerson = false;
       violationTriggered.current.multiPerson = false;
+    }
+
+    // --- Mobile Phone Detection Logic (Independent) ---
+    if (mobileCount > 0) {
+      if (!mobilePhoneStartTime.current) {
+        mobilePhoneStartTime.current = now;
+        violationTriggered.current.mobilePhone = false;
+      } else {
+        const duration = (now - mobilePhoneStartTime.current) / 1000;
+        if (duration >= 3 && !violationTriggered.current.mobilePhone) {
+          const newViolationCount = (violation || 0) + 1;
+          showToastNotification(`⚠️ Mobile phone detected - Violation recorded`);
+
+          toast(`🚨 Violation ${newViolationCount}/${proctorSettings.maxViolationCount}: Mobile phone detected in frame`, {
+            duration: 3000,
+            icon: '📱',
+            style: {
+              background: '#ef4444',
+              color: 'white',
+            },
+          });
+
+          setviolation(prev => (prev || 0) + 1);
+          logViolation("Mobile Phone Detected", {
+            duration: `${duration.toFixed(1)} seconds`,
+            phoneCount: mobileCount,
+            detectionTime: new Date().toISOString(),
+            violationCount: newViolationCount,
+            maxViolationCount: proctorSettings.maxViolationCount
+          });
+          violationTriggered.current.mobilePhone = true;
+        }
+      }
+    } else {
+      mobilePhoneStartTime.current = null;
+      violationTriggered.current.mobilePhone = false;
     }
   }, [stage, showToastNotification, setviolation, violation, proctorSettings.maxViolationCount, logViolation]);
 

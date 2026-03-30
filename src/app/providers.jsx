@@ -9,6 +9,7 @@ import WhatsNewModal from '../components/WhatsNewModal';
 import PageLayout from '../components/PageLayout';
 import LoadingPage from '../views/LoadingPage';
 import DevToolsBlocker from '../views/DevToolsBlocker';
+import ContainerWarmup from '../components/ContainerWarmup';
 import CopyPasteGuard from '../components/CopyPasteGuard';
 
 
@@ -74,6 +75,7 @@ export function Providers({ children }) {
             <WhatsNewModal />
             <Toaster position="top-center" reverseOrder={false} />
             <PageLayout>
+              <ContainerWarmup />
               <CopyPasteGuard />
               {children}
             </PageLayout>

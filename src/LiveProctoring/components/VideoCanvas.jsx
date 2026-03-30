@@ -21,47 +21,65 @@ export const VideoCanvas = ({ videoRef, detections, isActive }) => {
 
     if (!isActive || detections.length === 0) return;
 
+    const personCount = detections.filter(d => d.class === 'person').length;
+
     // Draw bounding boxes
     detections.forEach((detection) => {
       const [x, y, width, height] = detection.bbox;
       const isPerson = detection.class === 'person';
       const isPhone = detection.class === 'cell phone';
+      const confidence = detection.score;
 
-      // Set box color
+      // --- Colour logic ---
       let color = '#10b981'; // Default green
       if (isPhone) {
-        color = '#ef4444'; // Red for phone
+        // Phone: amber at high confidence, orange-red at low (partial detection)
+        color = confidence >= 0.4 ? '#f59e0b' : '#ef4444';
       } else if (isPerson) {
-        const personCount = detections.filter(d => d.class === 'person').length;
-        color = personCount === 1 ? '#10b981' : '#ef4444'; // Green if 1 person, Red if multiple
+        color = personCount === 1 ? '#10b981' : '#ef4444';
       }
 
+      // Opacity: lower for weak phone detections so admins can gauge confidence
+      const alpha = isPhone ? Math.max(0.55, Math.min(1.0, confidence / 0.4)) : 1.0;
+
+      ctx.globalAlpha = alpha;
       ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.fillStyle = color;
+      ctx.lineWidth = isPhone && confidence < 0.4 ? 2 : 3;
+
+      // Dashed border for low-confidence / partial phone detections
+      if (isPhone && confidence < 0.35) {
+        ctx.setLineDash([8, 4]);
+      } else {
+        ctx.setLineDash([]);
+      }
 
       // Draw bounding box
       ctx.strokeRect(x, y, width, height);
+      ctx.setLineDash([]);
 
-      // Draw label background
+      // Label
       let label = '';
       if (isPerson) {
-        label = `Person (${Math.round(detection.score * 100)}%)`;
+        label = `Person (${Math.round(confidence * 100)}%)`;
       } else if (isPhone) {
-        label = `Mobile Phone (${Math.round(detection.score * 100)}%)`;
+        const qualifier = confidence < 0.35 ? ' partial' : confidence < 0.5 ? '' : '';
+        label = `📱 Phone${qualifier} (${Math.round(confidence * 100)}%)`;
       } else {
-        label = `${detection.class} (${Math.round(detection.score * 100)}%)`;
+        label = `${detection.class} (${Math.round(confidence * 100)}%)`;
       }
-      
-      const labelWidth = ctx.measureText(label).width + 10;
 
-      ctx.fillRect(x, y - 25, labelWidth, 25);
+      ctx.font = 'bold 13px Arial';
+      const labelWidth = ctx.measureText(label).width + 12;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y - 24, labelWidth, 24);
 
-      // Draw label text
+      // Label text
+      ctx.globalAlpha = 1.0;
       ctx.fillStyle = 'white';
-      ctx.font = 'bold 14px Arial';
-      ctx.fillText(label, x + 5, y - 8);
+      ctx.fillText(label, x + 6, y - 7);
     });
+
+    ctx.globalAlpha = 1.0;
   }, [detections, isActive]);
 
   return (

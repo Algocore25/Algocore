@@ -20,6 +20,7 @@ import EmailPage from './EmailPage';
 import ReminderPage from './ReminderPage';
 import AdminRecordings from './AdminRecordings';
 import AdminFiles from './AdminFiles';
+import ProctoringTool from './ProctoringTool';
 
 const TestsList = () => {
   // ...existing code...
@@ -184,7 +185,7 @@ const TestsList = () => {
       <TestsSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <div className="flex-1 overflow-y-auto p-6">
-        {(activeTab !== 'manage-courses' && activeTab !== 'bulk-add' && activeTab !== 'email-center' && activeTab !== 'reminder-service' && activeTab !== 'recordings' && activeTab !== 'azure-files') && (
+        {(activeTab !== 'manage-courses' && activeTab !== 'bulk-add' && activeTab !== 'email-center' && activeTab !== 'reminder-service' && activeTab !== 'recordings' && activeTab !== 'azure-files' && activeTab !== 'proctoring-lab') && (
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               {activeTab === 'recordings' ? 'Recordings' : 'Tests'}
@@ -262,6 +263,8 @@ const TestsList = () => {
           <AdminRecordings />
         ) : activeTab === 'azure-files' ? (
           <AdminFiles />
+        ) : activeTab === 'proctoring-lab' ? (
+          <ProctoringTool />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sortedTests.map((test) => {

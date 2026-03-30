@@ -11,6 +11,7 @@ const TestsSidebar = ({ activeTab, setActiveTab }) => {
     { id: 'reminder-service', label: 'Reminder Service', icon: '⏰' },
     { id: 'recordings', label: 'Recordings', icon: '🎥' },
     { id: 'azure-files', label: 'Azure Files', icon: '📂' },
+    { id: 'proctoring-lab', label: 'Proctoring Lab', icon: '🔬' },
   ];
 
   return (

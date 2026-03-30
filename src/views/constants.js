@@ -155,46 +155,14 @@ public class Main {
         
     }
 }`,
-  python: `import sys
-
-def main():
-    # Write your code here
-    pass
-
-if __name__ == '__main__':
-    main()`,
-  javascript: `const readline = require('readline');
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-let inputLines = [];
-rl.on('line', (line) => {
-  inputLines.push(line);
-});
-
-rl.on('close', () => {
-  // Write your code here
-  
-});`,
-  typescript: `import * as readline from 'readline';
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-let inputLines: string[] = [];
-rl.on('line', (line: string) => {
-  inputLines.push(line);
-});
-
-rl.on('close', () => {
-  // Write your code here
-  
-});`,
+  python: `# Write your code here
+`,
+  javascript: `// Write your code here
+const input = require('fs').readFileSync('/dev/stdin', 'utf8').trim();
+`,
+  typescript: `// Write your code here
+const input: string = require('fs').readFileSync('/dev/stdin', 'utf8').trim();
+`,
   sql: `-- Write your SQL query here
 SELECT * FROM table_name;`
 };

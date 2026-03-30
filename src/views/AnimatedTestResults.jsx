@@ -70,7 +70,7 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
   };
 
   const HighlightedCode = ({ text, otherText, passed, isExpected, showDiff }) => {
-    if (!text && text !== 0 && text !== "") return <div className="p-4 text-gray-400 italic">No output</div>;
+    if (!text && text !== 0 && text !== "") return <div className="p-4 text-gray-400 italic">Hidden Case</div>;
 
     const normalizeLines = (val) => {
       if (!val && val !== "") return [];
@@ -121,7 +121,7 @@ export default function AnimatedTestResults({ testResults = [], runsubmit }) {
             );
           })}
           {displayLinesCount === 0 && (
-            <div className="p-4 text-gray-400 italic">Empty output</div>
+            <div className="p-4 text-gray-400 italic"> { "Empty output"}</div>
           )}
         </div>
       </div>

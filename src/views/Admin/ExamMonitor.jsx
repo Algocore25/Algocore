@@ -244,7 +244,10 @@ const ExamMonitor = () => {
             'fullscreen_exit': 'Exited Fullscreen',
             'window_blur': 'Window Lost Focus',
             'tab_switch': 'Tab Switch / Page Hidden',
-            'mouse_leave': 'Mouse Left Screen'
+            'mouse_leave': 'Mouse Left Screen',
+            'Mobile Phone Detected': 'Mobile Phone Usage',
+            'Multiple Persons Detected': 'Multiple Persons',
+            'No Person Detected': 'No Person in Frame'
         };
         return labels[reason] || reason;
     };
@@ -254,7 +257,10 @@ const ExamMonitor = () => {
             'fullscreen_exit': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
             'window_blur': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
             'tab_switch': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-            'mouse_leave': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+            'mouse_leave': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+            'Mobile Phone Detected': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+            'Multiple Persons Detected': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+            'No Person Detected': 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300'
         };
         return colors[reason] || 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
     };
