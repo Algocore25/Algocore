@@ -1,0 +1,206 @@
+{
+  "rules": {
+    // Helper function references (Realtime Database doesn't have functions, so we'll repeat logic)
+    
+    // User presence and online status
+    ".read": "auth != null",
+    ".write": "auth != null",
+    
+    // Users data
+    "Users": {
+      "$uid": {
+        ".read": "$uid === auth.uid || (auth.token.admin === true)",
+        ".write": "$uid === auth.uid || (auth.token.admin === true)",
+        ".validate": "newData.hasChildren(['email', 'name', 'role']) && newData.child('role').val() === 'student' || newData.child('role').val() === 'admin' || newData.child('role').val() === 'teacher'"
+      }
+    },
+    
+    // Online presence tracking
+    "presence": {
+      "$uid": {
+        ".read": "$uid === auth.uid || (auth.token.admin === true)",
+        ".write": "$uid === auth.uid",
+        ".validate": "newData.hasChildren(['online', 'lastSeen'])"
+      }
+    },
+    
+    // Live proctoring data
+    "LiveProctoring": {
+      "$testId": {
+        "$userId": {
+          ".read": "$userId === auth.uid || (auth.token.admin === true)",
+          ".write": "$userId === auth.uid",
+          ".validate": "newData.hasChildren(['cameraStream', 'screenStream', 'violations'])"
+        }
+      }
+    },
+    
+    // Real-time chat
+    "Chat": {
+      "$roomId": {
+        ".read": "root.child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)",
+        ".write": "root.child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)",
+        "$messageId": {
+          ".validate": "newData.hasChildren(['message', 'senderId', 'timestamp', 'roomId']) && newData.child('senderId').val() === auth.uid"
+        }
+      }
+    },
+    
+    // Chat rooms
+    "ChatRooms": {
+      "$roomId": {
+        ".read": "data.child('participants').hasChild(auth.uid) || (auth.token.admin === true)",
+        ".write": "data.child('participants').hasChild(auth.uid) || (auth.token.admin === true)",
+        ".validate": "newData.hasChildren(['name', 'participants', 'type']) && newData.child('participants').hasChild(auth.uid)"
+      }
+    },
+    
+    // Real-time test monitoring
+    "TestMonitoring": {
+      "$testId": {
+        ".read": "auth.token.admin === true",
+        ".write": "auth.token.admin === true",
+        "activeUsers": {
+          "$userId": {
+            ".read": "auth.token.admin === true",
+            ".write": "($userId === auth.uid) || (auth.token.admin === true)"
+          }
+        },
+        "violations": {
+          "$violationId": {
+            ".read": "auth.token.admin === true",
+            ".write": "auth.token.admin === true"
+          }
+        }
+      }
+    },
+    
+    // System notifications
+    "Notifications": {
+      "$uid": {
+        ".read": "$uid === auth.uid || (auth.token.admin === true)",
+        ".write": "auth.token.admin === true",
+        "$notificationId": {
+          ".validate": "newData.hasChildren(['title', 'message', 'timestamp', 'read'])"
+        }
+      }
+    },
+    
+    // Real-time collaboration (for pair programming)
+    "Collaboration": {
+      "$sessionId": {
+        ".read": "data.child('participants').hasChild(auth.uid)",
+        ".write": "data.child('participants').hasChild(auth.uid)",
+        "participants": {
+          "$userId": {
+            ".read": "data.parent().child('participants').hasChild(auth.uid)",
+            ".write": "$userId === auth.uid"
+          }
+        },
+        "code": {
+          ".read": "data.parent().child('participants').hasChild(auth.uid)",
+          ".write": "data.parent().child('participants').hasChild(auth.uid)"
+        },
+        "cursor": {
+          "$userId": {
+            ".read": "data.parent().parent().child('participants').hasChild(auth.uid)",
+            ".write": "$userId === auth.uid"
+          }
+        }
+      }
+    },
+    
+    // Real-time exam status
+    "ExamStatus": {
+      "$testId": {
+        ".read": "auth.token.admin === true",
+        ".write": "auth.token.admin === true",
+        "students": {
+          "$userId": {
+            ".read": "auth.token.admin === true",
+            ".write": "auth.token.admin === true"
+          }
+        }
+      }
+    },
+    
+    // System metrics (admin only)
+    "SystemMetrics": {
+      ".read": "auth.token.admin === true",
+      ".write": "auth.token.admin === true",
+      "activeUsers": {
+        ".read": "auth.token.admin === true",
+        ".write": "auth.token.admin === true"
+      },
+      "serverLoad": {
+        ".read": "auth.token.admin === true",
+        ".write": "auth.token.admin === true"
+      },
+      "errors": {
+        "$errorId": {
+          ".read": "auth.token.admin === true",
+          ".write": "auth.token.admin === true"
+        }
+      }
+    },
+    
+    // WebRTC signaling for video calls
+    "Signaling": {
+      "$roomId": {
+        ".read": "root.child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)",
+        ".write": "root.child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)",
+        "offers": {
+          "$offerId": {
+            ".read": "data.parent().parent().parent().child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)",
+            ".write": "data.parent().parent().parent().child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)"
+          }
+        },
+        "answers": {
+          "$answerId": {
+            ".read": "data.parent().parent().parent().child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)",
+            ".write": "data.parent().parent().parent().child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)"
+          }
+        },
+        "iceCandidates": {
+          "$candidateId": {
+            ".read": "data.parent().parent().parent().child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)",
+            ".write": "data.parent().parent().parent().child('ChatRooms').child($roomId).child('participants').hasChild(auth.uid)"
+          }
+        }
+      }
+    },
+    
+    // Queue system for background tasks
+    "Queue": {
+      ".read": "auth.token.admin === true",
+      ".write": "auth.token.admin === true",
+      "processing": {
+        "$taskId": {
+          ".read": "auth.token.admin === true",
+          ".write": "auth.token.admin === true"
+        }
+      },
+      "completed": {
+        "$taskId": {
+          ".read": "auth.token.admin === true",
+          ".write": "auth.token.admin === true"
+        }
+      }
+    },
+    
+    // Locks for preventing concurrent operations
+    "Locks": {
+      "$lockId": {
+        ".read": "auth.token.admin === true",
+        ".write": "auth.token.admin === true",
+        ".validate": "newData.isString() || newData.isNull()"
+      }
+    },
+    
+    // Default deny for everything else
+    "$other": {
+      ".read": "auth.token.admin === true",
+      ".write": "auth.token.admin === true"
+    }
+  }
+}

@@ -20,7 +20,8 @@ const AuthContext = createContext(null);
 
 // Session configuration
 const SESSION_CONFIG = {
-  HEARTBEAT_INTERVAL: 30000, // 30 seconds
+  HEARTBEAT_INTERVAL: 45000, // 45 seconds (increased from 30 for better stability)
+  SESSION_EXPIRY: 300000, // 5 minutes (stale session cleanup)
 };
 
 export const AuthProvider = ({ children }) => {
@@ -229,10 +230,11 @@ export const AuthProvider = ({ children }) => {
         isCurrent: true 
       };
 
-      // Set session data and schedule removal on disconnect
+      // Set session data
       await set(sessionRef, sessionData);
-      onDisconnect(sessionRef).remove();
-
+      // Removed onDisconnect().remove() to prevent brief network drops
+      // from automatically deleting the session and logging the user out.
+      
       // Set up heartbeat
       const sendHeartbeat = async () => {
         if (!sessionPathRef.current) return;
@@ -255,6 +257,38 @@ export const AuthProvider = ({ children }) => {
           logout(true, 'session-terminated');
         }
       });
+
+      // Periodic cleanup of stale sessions for this user
+      const cleanupStaleSessions = async () => {
+        try {
+          const sessionsRef = ref(database, `sessions/${uid}`);
+          const snapshot = await get(sessionsRef);
+          if (snapshot.exists()) {
+            const sessionsData = snapshot.val();
+            const now = Date.now();
+            const updates = {};
+            
+            Object.keys(sessionsData).forEach(key => {
+              const session = sessionsData[key];
+              // If session was last active more than 5 minutes ago, mark for removal
+              // unless it's the current session
+              if (key !== newSessionId && session.lastActive && (now - session.lastActive) > SESSION_CONFIG.SESSION_EXPIRY) {
+                updates[key] = null;
+              }
+            });
+
+            if (Object.keys(updates).length > 0) {
+              await update(sessionsRef, updates);
+              console.log('Cleaned up stale sessions:', Object.keys(updates));
+            }
+          }
+        } catch (error) {
+          console.warn('Silent failure cleaning up stale sessions:', error);
+        }
+      };
+
+      // Run cleanup once on init
+      cleanupStaleSessions();
 
     } catch (error) {
       console.error('Failed to initialize session:', error);
