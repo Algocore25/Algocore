@@ -418,6 +418,9 @@ function ProfilePage() {
   useEffect(() => {
     if (!auth.currentUser) return;
     setLinkedProviders(auth.currentUser.providerData.map(p => p.providerId));
+    if (auth.currentUser.email) {
+      setEmailLinkForm(prev => ({ ...prev, email: auth.currentUser.email }));
+    }
   }, [user]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -1607,8 +1610,8 @@ function ProfilePage() {
                       <input
                         type="email" placeholder="Email address"
                         value={emailLinkForm.email}
-                        onChange={e => setEmailLinkForm(f => ({ ...f, email: e.target.value }))}
-                        className="w-full text-sm px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        readOnly
+                        className="w-full text-sm px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/40 text-gray-500 dark:text-gray-400 focus:outline-none cursor-not-allowed"
                       />
                       <input
                         type="password" placeholder="New password (min 6 chars)"
