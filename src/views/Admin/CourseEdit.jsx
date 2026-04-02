@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { getDatabase, ref, get, set, update, child } from 'firebase/database';
 import { database } from '../../firebase';
 import { FiSave, FiPlus, FiTrash2, FiArrowLeft, FiArrowUp, FiArrowDown, FiX, FiMenu, FiEdit2 } from 'react-icons/fi';
@@ -13,7 +12,7 @@ import AddQuestionModal from './AddQuestionModal';
 
 const CourseEdit = () => {
     const { courseId } = useParams();
-    const [searchParams] = useSearchParams();
+    const searchParams = useSearchParams();
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
