@@ -51,6 +51,9 @@ export const useWebRTCStream = (testid, userId, localStream, screenStream = null
     // Close all peer connections
     peerConnectionsRef.current.forEach((pc, adminId) => {
       console.log('[WebRTC] Closing connection with admin:', adminId);
+      pc.ontrack = null;
+      pc.onicecandidate = null;
+      pc.onconnectionstatechange = null;
       pc.close();
     });
     peerConnectionsRef.current.clear();
@@ -62,9 +65,9 @@ export const useWebRTCStream = (testid, userId, localStream, screenStream = null
     });
     listenersRef.current = [];
 
-    // Remove presence
+    // Remove full presence node so admin sees no stale stream
     if (testid && userId) {
-      remove(ref(database, `LiveStreams/${testid}/${userId}`));
+      remove(ref(database, `LiveStreams/${testid}/${userId}`)).catch(() => {});
     }
     
     setConnectionStatus('disconnected');
@@ -102,12 +105,18 @@ export const useWebRTCStream = (testid, userId, localStream, screenStream = null
       console.log('[WebRTC] Active viewers:', Object.keys(viewers));
 
       for (const [viewerId, viewerData] of Object.entries(viewers)) {
-        // Skip if we already have a connection
+        // Skip if we already have a healthy connection for this viewer
         if (peerConnectionsRef.current.has(viewerId)) {
           const existingPc = peerConnectionsRef.current.get(viewerId);
-          if (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting') {
+          const healthyStates = ['connected', 'connecting'];
+          if (healthyStates.includes(existingPc.connectionState)) {
+            console.log('[WebRTC] Already connected/connecting for viewer:', viewerId, '– skipping');
             continue;
           }
+          // Connection is in a bad state – close it and re-initiate
+          console.log('[WebRTC] Re-initiating failed/disconnected connection for viewer:', viewerId);
+          existingPc.close();
+          peerConnectionsRef.current.delete(viewerId);
         }
 
         console.log('[WebRTC] Setting up connection for viewer:', viewerId);
