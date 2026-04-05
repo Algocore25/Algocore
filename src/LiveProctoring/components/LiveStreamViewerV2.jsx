@@ -30,8 +30,13 @@ const useAdminTalk = (testid, studentId) => {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
     ],
-    iceCandidatePoolSize: 5,
+    iceCandidatePoolSize: 10,
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
     sdpSemantics: 'unified-plan',
   };
 
@@ -67,6 +72,11 @@ const useAdminTalk = (testid, studentId) => {
     }
 
     try {
+      if (testid && studentId) {
+        // Deep purge of ANY lingering session data so student receiver strictly waits
+        await remove(ref(database, `AdminAudio/${testid}/${studentId}`));
+      }
+
       isStartingRef.current = true;
       setTalkStatus('connecting');
       iceCandidateQueueRef.current = [];
