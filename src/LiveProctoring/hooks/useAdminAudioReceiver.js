@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ref, set, onValue, remove, onDisconnect } from 'firebase/database';
+import { ref, set, onValue, remove, onDisconnect, push } from 'firebase/database';
 import { database } from '../../firebase';
 
 /**
@@ -89,6 +89,7 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
         if (!audioElementRef.current) {
           audioElementRef.current = document.createElement('audio');
           audioElementRef.current.autoplay = true;
+          audioElementRef.current.playsInline = true;
           audioElementRef.current.volume = 1.0;
           audioElementRef.current.muted = false;
           document.body.appendChild(audioElementRef.current);
@@ -123,9 +124,8 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           console.log('[AdminAudioReceiver] Sending ICE candidate:', event.candidate.type);
-          const candidateRef = ref(
-            database,
-            `AdminAudio/${testid}/${userId}/ice/${adminId}/student/${Date.now()}`
+          const candidateRef = push(
+            ref(database, `AdminAudio/${testid}/${userId}/ice/${adminId}/student`)
           );
           set(candidateRef, event.candidate.toJSON())
             .catch(error => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ref, onValue, set, remove } from 'firebase/database';
+import { ref, onValue, set, remove, push } from 'firebase/database';
 import { database } from '../../firebase';
 import {
   FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw,
@@ -18,7 +18,7 @@ import {
 const useAdminTalk = (testid, studentId) => {
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
-  const adminIdRef = useRef(`admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const adminIdRef = useRef(null);
   const unsubscribersRef = useRef([]);
   // ICE candidate queue – hold candidates until remote description is set
   const iceCandidateQueueRef = useRef([]);
@@ -68,6 +68,7 @@ const useAdminTalk = (testid, studentId) => {
     try {
       setTalkStatus('connecting');
       iceCandidateQueueRef.current = [];
+      adminIdRef.current = `admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
@@ -84,10 +85,8 @@ const useAdminTalk = (testid, studentId) => {
       // ICE candidates → Firebase
       pc.onicecandidate = (e) => {
         if (e.candidate) {
-          set(
-            ref(database, `AdminAudio/${testid}/${studentId}/ice/${adminIdRef.current}/admin/${Date.now()}`),
-            e.candidate.toJSON()
-          ).catch(() => {});
+          const candidateRef = push(ref(database, `AdminAudio/${testid}/${studentId}/ice/${adminIdRef.current}/admin`));
+          set(candidateRef, e.candidate.toJSON()).catch(() => {});
         }
       };
 
@@ -333,10 +332,8 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          set(
-            ref(database, `LiveStreams/${testid}/${userId}/ice/${adminIdRef.current}/viewer/${Date.now()}`),
-            event.candidate.toJSON()
-          );
+          const candidateRef = push(ref(database, `LiveStreams/${testid}/${userId}/ice/${adminIdRef.current}/viewer`));
+          set(candidateRef, event.candidate.toJSON());
         }
       };
 
