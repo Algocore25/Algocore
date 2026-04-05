@@ -23,6 +23,7 @@ const useAdminTalk = (testid, studentId) => {
   // ICE candidate queue – hold candidates until remote description is set
   const iceCandidateQueueRef = useRef([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const isStartingRef = useRef(false);
   const [talkStatus, setTalkStatus] = useState('idle'); // idle | connecting | connected | error
 
   const rtcConfig = {
@@ -60,12 +61,13 @@ const useAdminTalk = (testid, studentId) => {
   }, [testid, studentId]);
 
   const startTalking = useCallback(async () => {
-    if (isSpeaking) {
-      await stopTalking();
+    if (isSpeaking || isStartingRef.current) {
+      if (isSpeaking) await stopTalking();
       return;
     }
 
     try {
+      isStartingRef.current = true;
       setTalkStatus('connecting');
       iceCandidateQueueRef.current = [];
       adminIdRef.current = `admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -110,7 +112,18 @@ const useAdminTalk = (testid, studentId) => {
       });
 
       // Register admin presence AFTER offer is stored
-      await set(ref(database, `AdminAudio/${testid}/${studentId}/admin/${adminIdRef.current}`), {
+      const adminPresenceRef = ref(database, `AdminAudio/${testid}/${studentId}/admin/${adminIdRef.current}`);
+      const adminOfferRef = ref(database, `AdminAudio/${testid}/${studentId}/offers/${adminIdRef.current}`);
+      const adminAnswerRef = ref(database, `AdminAudio/${testid}/${studentId}/answers/${adminIdRef.current}`);
+      const adminIceRefPath = ref(database, `AdminAudio/${testid}/${studentId}/ice/${adminIdRef.current}`);
+
+      // Ensure cleanup if browser crashes or drops
+      onDisconnect(adminPresenceRef).remove();
+      onDisconnect(adminOfferRef).remove();
+      onDisconnect(adminAnswerRef).remove();
+      onDisconnect(adminIceRefPath).remove();
+
+      await set(adminPresenceRef, {
         active: true,
         timestamp: Date.now(),
       });
@@ -153,9 +166,11 @@ const useAdminTalk = (testid, studentId) => {
 
       unsubscribersRef.current.push(unsubAnswer, unsubIce);
       setIsSpeaking(true);
+      isStartingRef.current = false;
     } catch (err) {
       console.error('[AdminTalk] Error starting:', err);
       setTalkStatus('error');
+      isStartingRef.current = false;
       await stopTalking();
     }
   }, [isSpeaking, testid, studentId, stopTalking]);
