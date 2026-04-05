@@ -11,6 +11,7 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
   const adminPeerConnectionsRef = useRef(new Map());
   const adminListenersRef = useRef([]);
   const audioElementRef = useRef(null);
+  const initialPurgeDoneRef = useRef(false);
   // Per-admin ICE candidate queue: holds candidates until setRemoteDescription is done
   const iceCandidateQueuesRef = useRef(new Map());
 
@@ -100,11 +101,10 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
 
         audioElementRef.current.play()
           .then(() => {
-            console.log('[AdminAudioReceiver] ✅ Admin audio playback started successfully');
-            console.log('[AdminAudioReceiver] Audio element volume:', audioElementRef.current.volume);
-            console.log('[AdminAudioReceiver] Audio element muted:', audioElementRef.current.muted);
-            setIsReceivingAudio(true);
-            setAdminConnectionStatus('receiving');
+            console.log('[AdminAudioReceiver] ✅ Admin audio play() triggered successfully');
+            // We intentionally do NOT set isReceivingAudio to true here! 
+            // play() resolves on stale/empty tracks from setRemoteDescription.
+            // We only set it to true once pc.connectionState === 'connected'.
           })
           .catch(error => {
             console.error('[AdminAudioReceiver] Error playing admin audio:', error);
@@ -141,6 +141,7 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
         
         if (state === 'connected') {
           console.log('[AdminAudioReceiver] ✅ Admin audio connection established');
+          setIsReceivingAudio(true);
           setAdminConnectionStatus('receiving');
         } else if (state === 'failed' || state === 'disconnected') {
           console.error(`[AdminAudioReceiver] Connection ${state} with admin:`, adminId);
@@ -248,6 +249,13 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
       console.log('[AdminAudioReceiver] Not initializing:', { isActive, testid, userId });
       cleanup();
       return;
+    }
+
+    if (!initialPurgeDoneRef.current) {
+      // Brutal purge of any stale AdminAudio sessions for this specific student 
+      // when they first connect. This completely kills all ghost streams.
+      remove(ref(database, `AdminAudio/${testid}/${userId}`)).catch(() => {});
+      initialPurgeDoneRef.current = true;
     }
 
     console.log('[AdminAudioReceiver] ===== Listening for admin audio for user:', userId, '=====');
