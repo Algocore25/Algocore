@@ -11,6 +11,8 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
   const adminPeerConnectionsRef = useRef(new Map());
   const adminListenersRef = useRef([]);
   const audioElementRef = useRef(null);
+  // Per-admin ICE candidate queue: holds candidates until setRemoteDescription is done
+  const iceCandidateQueuesRef = useRef(new Map());
 
   const rtcConfig = {
     iceServers: [
@@ -34,6 +36,7 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
       pc.close();
     });
     adminPeerConnectionsRef.current.clear();
+    iceCandidateQueuesRef.current.clear();
 
     // Remove audio element
     if (audioElementRef.current) {
@@ -65,56 +68,55 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
 
       const pc = new RTCPeerConnection(rtcConfig);
       adminPeerConnectionsRef.current.set(adminId, pc);
+      iceCandidateQueuesRef.current.set(adminId, []);
 
-      // Handle incoming audio tracks
       pc.ontrack = (event) => {
         console.log('[AdminAudioReceiver] ===== ADMIN AUDIO TRACK RECEIVED =====');
         console.log('[AdminAudioReceiver] Track kind:', event.track.kind);
         console.log('[AdminAudioReceiver] Track readyState:', event.track.readyState);
         console.log('[AdminAudioReceiver] Track enabled:', event.track.enabled);
-        
-        if (event.streams && event.streams.length > 0) {
-          const stream = event.streams[0];
-          console.log('[AdminAudioReceiver] Stream ID:', stream.id);
-          console.log('[AdminAudioReceiver] Stream active:', stream.active);
-          console.log('[AdminAudioReceiver] Stream tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}`));
-          
-          // Create or reuse audio element
-          if (!audioElementRef.current) {
-            audioElementRef.current = document.createElement('audio');
-            audioElementRef.current.autoplay = true;
-            audioElementRef.current.volume = 1.0;
-            audioElementRef.current.muted = false;
-            document.body.appendChild(audioElementRef.current);
-            console.log('[AdminAudioReceiver] Audio element created and added to DOM');
-          }
 
-          // Set the stream to audio element
-          audioElementRef.current.srcObject = stream;
-          
-          // Force play
-          audioElementRef.current.play()
-            .then(() => {
-              console.log('[AdminAudioReceiver] ✅ Admin audio playback started successfully');
-              console.log('[AdminAudioReceiver] Audio element volume:', audioElementRef.current.volume);
-              console.log('[AdminAudioReceiver] Audio element muted:', audioElementRef.current.muted);
-              setIsReceivingAudio(true);
-              setAdminConnectionStatus('receiving');
-            })
-            .catch(error => {
-              console.error('[AdminAudioReceiver] Error playing admin audio:', error);
-              // Try to play on user interaction
-              const playOnInteraction = () => {
-                audioElementRef.current.play()
-                  .then(() => {
-                    console.log('[AdminAudioReceiver] ✅ Audio started after user interaction');
-                    document.removeEventListener('click', playOnInteraction);
-                  })
-                  .catch(e => console.error('[AdminAudioReceiver] Still failed:', e));
-              };
-              document.addEventListener('click', playOnInteraction, { once: true });
-            });
+        // Use provided streams or wrap the bare track in a new MediaStream
+        const streams = event.streams && event.streams.length > 0
+          ? event.streams
+          : [new MediaStream([event.track])];
+        const stream = streams[0];
+        console.log('[AdminAudioReceiver] Stream ID:', stream.id);
+        console.log('[AdminAudioReceiver] Stream active:', stream.active);
+        console.log('[AdminAudioReceiver] Stream tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}`));
+
+        // Create or reuse audio element
+        if (!audioElementRef.current) {
+          audioElementRef.current = document.createElement('audio');
+          audioElementRef.current.autoplay = true;
+          audioElementRef.current.volume = 1.0;
+          audioElementRef.current.muted = false;
+          document.body.appendChild(audioElementRef.current);
+          console.log('[AdminAudioReceiver] Audio element created and added to DOM');
         }
+
+        audioElementRef.current.srcObject = stream;
+
+        audioElementRef.current.play()
+          .then(() => {
+            console.log('[AdminAudioReceiver] ✅ Admin audio playback started successfully');
+            console.log('[AdminAudioReceiver] Audio element volume:', audioElementRef.current.volume);
+            console.log('[AdminAudioReceiver] Audio element muted:', audioElementRef.current.muted);
+            setIsReceivingAudio(true);
+            setAdminConnectionStatus('receiving');
+          })
+          .catch(error => {
+            console.error('[AdminAudioReceiver] Error playing admin audio:', error);
+            const playOnInteraction = () => {
+              audioElementRef.current?.play()
+                .then(() => {
+                  console.log('[AdminAudioReceiver] ✅ Audio started after user interaction');
+                  document.removeEventListener('click', playOnInteraction);
+                })
+                .catch(e => console.error('[AdminAudioReceiver] Still failed:', e));
+            };
+            document.addEventListener('click', playOnInteraction, { once: true });
+          });
       };
 
       // Handle ICE candidates
@@ -182,6 +184,13 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
           await pc.setLocalDescription(answer);
           console.log('[AdminAudioReceiver] Local description set');
 
+          // Drain queued ICE candidates now that remote description is set
+          const queue = iceCandidateQueuesRef.current.get(adminId) || [];
+          for (const c of queue) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+          }
+          iceCandidateQueuesRef.current.set(adminId, []);
+
           console.log('[AdminAudioReceiver] Sending answer to admin');
           await set(ref(database, `AdminAudio/${testid}/${userId}/answers/${adminId}`), {
             sdp: answer.sdp,
@@ -203,17 +212,22 @@ export const useAdminAudioReceiver = (testid, userId, isActive = false) => {
         if (!candidates) return;
 
         Object.values(candidates).forEach(async (candidate) => {
-          // Check if peer connection is still valid before adding candidate
           if (pc.signalingState === 'closed' || pc.connectionState === 'closed') {
             console.log('[AdminAudioReceiver] Peer connection closed, skipping ICE candidate');
             return;
           }
 
           try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            console.log('[AdminAudioReceiver] Added admin ICE candidate');
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              console.log('[AdminAudioReceiver] Added admin ICE candidate');
+            } else {
+              // Queue it — remote description not set yet
+              const queue = iceCandidateQueuesRef.current.get(adminId) || [];
+              queue.push(candidate);
+              iceCandidateQueuesRef.current.set(adminId, queue);
+            }
           } catch (error) {
-            // Only log error if connection is not closed (expected error)
             if (pc.signalingState !== 'closed' && pc.connectionState !== 'closed') {
               console.error('[AdminAudioReceiver] Error adding ICE candidate:', error);
             }

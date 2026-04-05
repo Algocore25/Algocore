@@ -20,6 +20,8 @@ const useAdminTalk = (testid, studentId) => {
   const localStreamRef = useRef(null);
   const adminIdRef = useRef(`admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const unsubscribersRef = useRef([]);
+  // ICE candidate queue – hold candidates until remote description is set
+  const iceCandidateQueueRef = useRef([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [talkStatus, setTalkStatus] = useState('idle'); // idle | connecting | connected | error
 
@@ -35,6 +37,7 @@ const useAdminTalk = (testid, studentId) => {
   const stopTalking = useCallback(async () => {
     unsubscribersRef.current.forEach(u => typeof u === 'function' && u());
     unsubscribersRef.current = [];
+    iceCandidateQueueRef.current = [];
 
     if (pcRef.current) {
       pcRef.current.close();
@@ -46,7 +49,6 @@ const useAdminTalk = (testid, studentId) => {
     }
 
     if (testid && studentId) {
-      // Remove admin presence so student's receiver cleans up
       await remove(ref(database, `AdminAudio/${testid}/${studentId}/admin/${adminIdRef.current}`)).catch(() => {});
       await remove(ref(database, `AdminAudio/${testid}/${studentId}/offers/${adminIdRef.current}`)).catch(() => {});
       await remove(ref(database, `AdminAudio/${testid}/${studentId}/answers/${adminIdRef.current}`)).catch(() => {});
@@ -65,6 +67,8 @@ const useAdminTalk = (testid, studentId) => {
 
     try {
       setTalkStatus('connecting');
+      iceCandidateQueueRef.current = [];
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
 
@@ -106,7 +110,7 @@ const useAdminTalk = (testid, studentId) => {
         timestamp: Date.now(),
       });
 
-      // Register admin presence
+      // Register admin presence AFTER offer is stored
       await set(ref(database, `AdminAudio/${testid}/${studentId}/admin/${adminIdRef.current}`), {
         active: true,
         timestamp: Date.now(),
@@ -120,13 +124,18 @@ const useAdminTalk = (testid, studentId) => {
         if (pc.signalingState === 'have-local-offer') {
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            // Drain queued ICE candidates
+            for (const c of iceCandidateQueueRef.current) {
+              try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+            }
+            iceCandidateQueueRef.current = [];
           } catch (err) {
             console.error('[AdminTalk] Error setting answer:', err);
           }
         }
       });
 
-      // Listen for student ICE candidates
+      // Listen for student ICE candidates – queue if remoteDescription not ready yet
       const studentIceRef = ref(database, `AdminAudio/${testid}/${studentId}/ice/${adminIdRef.current}/student`);
       const unsubIce = onValue(studentIceRef, (snap) => {
         const candidates = snap.val();
@@ -134,7 +143,11 @@ const useAdminTalk = (testid, studentId) => {
         Object.values(candidates).forEach(async (c) => {
           if (!c) return;
           try {
-            if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(c));
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(new RTCIceCandidate(c));
+            } else {
+              iceCandidateQueueRef.current.push(c);
+            }
           } catch (_) {}
         });
       });
@@ -166,6 +179,9 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
   const [screenConnected, setScreenConnected] = useState(false);
   const [audioConnected, setAudioConnected] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(true);  // student mic → admin
+  // Keep a ref in sync so assignStream's closure always sees the latest value
+  // without triggering a re-initialization of the WebRTC connection
+  const isAudioMutedRef = useRef(true);
   const [connectionState, setConnectionState] = useState('new');
   const [error, setError] = useState(null);
   const [activeView, setActiveView] = useState('camera');
@@ -215,21 +231,28 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
   };
 
   /* ── Assign incoming stream to the correct video (or audio) element ─────── */
+  // NOTE: no state in deps — we read mute state via ref to avoid re-creating
+  // this function (which would cascade into re-initializing the WebRTC connection)
   const assignStream = useCallback((stream) => {
     if (!stream?.active) return;
     const streamId = stream.id;
 
-    // Audio-only stream (student mic) → play via <audio> element unmuted
-    if (stream.getVideoTracks().length === 0 && stream.getAudioTracks().length > 0) {
+    const ensureAudioEl = () => {
       if (!audioElementRef.current) {
         const audioEl = document.createElement('audio');
         audioEl.autoplay = true;
-        audioEl.muted = true; // start muted, admin toggles
+        audioEl.muted = isAudioMutedRef.current; // use ref — no closure over state
         document.body.appendChild(audioEl);
         audioElementRef.current = audioEl;
       }
+    };
+
+    // Audio-only stream (student mic) → play via <audio> element
+    if (stream.getVideoTracks().length === 0 && stream.getAudioTracks().length > 0) {
+      ensureAudioEl();
       audioElementRef.current.srcObject = stream;
-      audioElementRef.current.muted = isAudioMuted;
+      audioElementRef.current.muted = isAudioMutedRef.current;
+      audioElementRef.current.play().catch(() => {});
       setAudioConnected(true);
       return;
     }
@@ -252,26 +275,21 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
       if (!assignedStreamIdsRef.current.camera) {
         assignedStreamIdsRef.current.camera = streamId;
         if (cameraVideoRef.current) {
-          // The camera stream includes audio; mute the <video> element but pipe audio through <audio>
           cameraVideoRef.current.srcObject = stream;
           cameraVideoRef.current.muted = true; // always mute video element (avoid echo)
           cameraVideoRef.current.play().catch(() => {});
 
-          // Create a separate audio element for the mic audio so admin can unmute it
-          if (!audioElementRef.current) {
-            const audioEl = document.createElement('audio');
-            audioEl.autoplay = true;
-            audioEl.muted = true; // admin must click unmute to hear
-            document.body.appendChild(audioEl);
-            audioElementRef.current = audioEl;
-          }
+          // Pipe the mic audio track through a dedicated <audio> element
+          ensureAudioEl();
           audioElementRef.current.srcObject = stream;
+          audioElementRef.current.muted = isAudioMutedRef.current;
+          audioElementRef.current.play().catch(() => {});
           setAudioConnected(true);
         }
         setCameraConnected(true);
       }
     }
-  }, [isAudioMuted]);
+  }, []); // stable — reads mute state via ref only
 
   /* ── Cleanup ────────────────────────────────────────────────────────────── */
   const cleanupPeerConnection = useCallback(() => {
@@ -422,11 +440,11 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
   /* ── Audio mute toggle ───────────────────────────────────────────────────── */
   const toggleStudentAudio = () => {
     const newMuted = !isAudioMuted;
+    isAudioMutedRef.current = newMuted; // keep ref in sync first
     setIsAudioMuted(newMuted);
     if (audioElementRef.current) {
       audioElementRef.current.muted = newMuted;
       if (!newMuted) {
-        // Force play if browser had blocked it
         audioElementRef.current.play().catch(() => {});
       }
     }
