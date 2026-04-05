@@ -19,6 +19,7 @@ import LoadingPage from '../LoadingPage';
 import toast from 'react-hot-toast';
 
 const AdminRecordings = () => {
+  const [downloading, setDownloading] = useState(null);
   const [recordings, setRecordings] = useState([]);
   const [users, setUsers] = useState({});
   const [exams, setExams] = useState({});
@@ -110,6 +111,31 @@ const AdminRecordings = () => {
         },
         error: 'Failed to delete recording'
     });
+  };
+
+  const handleDownload = async (url, fileName) => {
+    if (downloading) return;
+    setDownloading(fileName);
+    const toastId = toast.loading(`Downloading ${fileName}...`);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+      toast.success(`Downloaded ${fileName}`, { id: toastId });
+    } catch (err) {
+      console.error('Download failed:', err);
+      toast.error(`Download failed: ${err.message}`, { id: toastId });
+    } finally {
+      setDownloading(null);
+    }
   };
 
   const handleDeleteAll = async () => {
@@ -320,16 +346,27 @@ const AdminRecordings = () => {
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Note: Videos are streamed directly from Azure Blob Storage.
                 </p>
-                <a
-                  href={selectedVideo.url}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                <button
+                  onClick={() => {
+                    const ext = selectedVideo.url.split('?')[0].split('.').pop() || 'webm';
+                    const safeName = selectedVideo.title.replace(/[^a-z0-9_\-]/gi, '_');
+                    handleDownload(selectedVideo.url, `${safeName}.${ext}`);
+                  }}
+                  disabled={!!downloading}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm font-medium"
                 >
-                  <FiDownload />
-                  Download
-                </a>
+                  {downloading ? (
+                    <>
+                      <FiRefreshCw className="animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <FiDownload />
+                      Download
+                    </>
+                  )}
+                </button>
               </div>
             </motion.div>
           </div>
