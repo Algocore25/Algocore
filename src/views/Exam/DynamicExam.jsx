@@ -408,6 +408,24 @@ const DynamicExam = () => {
     } catch (_) { }
   };
 
+  // --- Clean up media when exam is finished or interrupted ---
+  useEffect(() => {
+    if (stage === "completed" || stage === "resume" || stage === "blocked") {
+      cleanupMedia();
+      setPermVerified(false);
+      setProctorStream(null);
+      setScreenStream(null);
+      proctorStreamRef.current = null;
+    }
+  }, [stage]);
+
+  // Cleanup on unmount (refresh/leave)
+  useEffect(() => {
+    return () => {
+      cleanupMedia();
+    };
+  }, []);
+
   const startScreenShare = async () => {
     try {
       console.log('[ScreenShare] Requesting FULLSCREEN capture (entire monitor required)...');

@@ -237,22 +237,12 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
     if (!stream?.active) return;
     const streamId = stream.id;
 
-    const ensureAudioEl = () => {
-      if (!audioElementRef.current) {
-        const audioEl = document.createElement('audio');
-        audioEl.autoplay = true;
-        audioEl.muted = isAudioMutedRef.current; // use ref — no closure over state
-        document.body.appendChild(audioEl);
-        audioElementRef.current = audioEl;
-      }
-    };
-
     // Audio-only stream (student mic) → play via <audio> element
     if (stream.getVideoTracks().length === 0 && stream.getAudioTracks().length > 0) {
-      ensureAudioEl();
-      audioElementRef.current.srcObject = stream;
-      audioElementRef.current.muted = isAudioMutedRef.current;
-      audioElementRef.current.play().catch(() => {});
+      if (audioElementRef.current) {
+        audioElementRef.current.srcObject = stream;
+        audioElementRef.current.play().catch(() => {});
+      }
       setAudioConnected(true);
       return;
     }
@@ -280,10 +270,10 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
           cameraVideoRef.current.play().catch(() => {});
 
           // Pipe the mic audio track through a dedicated <audio> element
-          ensureAudioEl();
-          audioElementRef.current.srcObject = stream;
-          audioElementRef.current.muted = isAudioMutedRef.current;
-          audioElementRef.current.play().catch(() => {});
+          if (audioElementRef.current) {
+            audioElementRef.current.srcObject = stream;
+            audioElementRef.current.play().catch(() => {});
+          }
           setAudioConnected(true);
         }
         setCameraConnected(true);
@@ -310,8 +300,6 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
     if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
     if (audioElementRef.current) {
       audioElementRef.current.srcObject = null;
-      audioElementRef.current.remove();
-      audioElementRef.current = null;
     }
 
     assignedStreamIdsRef.current = { camera: null, screen: null };
@@ -442,11 +430,9 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
     const newMuted = !isAudioMuted;
     isAudioMutedRef.current = newMuted; // keep ref in sync first
     setIsAudioMuted(newMuted);
-    if (audioElementRef.current) {
-      audioElementRef.current.muted = newMuted;
-      if (!newMuted) {
-        audioElementRef.current.play().catch(() => {});
-      }
+    // When unmuting, force a play attempt in case autoplay was blocked
+    if (!newMuted && audioElementRef.current) {
+      audioElementRef.current.play().catch(() => {});
     }
   };
 
@@ -492,6 +478,15 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
           playsInline
           muted
           className={`w-full h-full object-contain bg-black ${activeView === 'camera' ? 'hidden' : ''}`}
+        />
+
+        {/* Audio stream for student mic */}
+        <audio
+          ref={audioElementRef}
+          autoPlay
+          playsInline
+          muted={isAudioMuted}
+          className="hidden"
         />
 
         {/* Not connected overlay */}
