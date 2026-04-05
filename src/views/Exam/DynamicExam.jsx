@@ -49,6 +49,7 @@ const DynamicExam = () => {
   const [proctorStream, setProctorStream] = useState(null);
   const screenStreamRef = useRef(null);
   const [screenStream, setScreenStream] = useState(null);
+  const [needsScreenShare, setNeedsScreenShare] = useState(false);
   const noPersonStartTime = useRef(null);
   const multiPersonStartTime = useRef(null);
   const mobilePhoneStartTime = useRef(null);
@@ -448,6 +449,7 @@ const DynamicExam = () => {
 
       screenStreamRef.current = stream;
       setScreenStream(stream);
+      setNeedsScreenShare(false);
 
       // Handle when user stops sharing via browser UI
       stream.getVideoTracks()[0].addEventListener('ended', () => {
@@ -455,14 +457,9 @@ const DynamicExam = () => {
         screenStreamRef.current = null;
         setScreenStream(null);
 
-        // If screen sharing stops during exam, show warning and potentially block
+        // Stay in exam – just show a re-share prompt (no stage change)
         if (stage === 'exam') {
-          setToastMsg('⚠️ Screen sharing stopped! You must share your screen to continue the exam.');
-          setShowToast(true);
-          setTimeout(() => setShowToast(false), 5000);
-
-          // Optionally force user back to permission screen
-          setStage('warning');
+          setNeedsScreenShare(true);
         }
       });
 
@@ -481,6 +478,14 @@ const DynamicExam = () => {
         setPermError('❌ Failed to start screen sharing. Please try again.');
       }
       return false;
+    }
+  };
+
+  // Resume screen share mid-exam (does NOT leave exam stage)
+  const resumeScreenShare = async () => {
+    const success = await startScreenShare();
+    if (success) {
+      setNeedsScreenShare(false);
     }
   };
 
@@ -1517,6 +1522,33 @@ const DynamicExam = () => {
                   <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
                 </svg>
                 <span className="text-sm font-medium">Admin is speaking</span>
+              </div>
+            </div>
+          )}
+
+          {/* Screen sharing stopped – non-blocking overlay prompting re-share */}
+          {needsScreenShare && proctorSettings.enableVideoProctoring && (
+            <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 text-center space-y-5">
+                <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mx-auto">
+                  <svg className="w-8 h-8 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Screen Sharing Stopped</h2>
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
+                  Screen sharing is required for this exam. Your exam is paused — your progress is safe.
+                  Please re-share your screen to continue.
+                </p>
+                {permError && (
+                  <p className="text-red-500 text-sm bg-red-50 dark:bg-red-900/20 rounded-lg p-3">{permError}</p>
+                )}
+                <button
+                  onClick={resumeScreenShare}
+                  className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold transition-colors shadow-lg"
+                >
+                  🖥️ Re-share My Screen &amp; Resume Exam
+                </button>
               </div>
             </div>
           )}

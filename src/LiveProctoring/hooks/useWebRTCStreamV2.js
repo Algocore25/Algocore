@@ -149,73 +149,24 @@ export const useWebRTCStream = (testid, userId, localStream, screenStream = null
       peerConnectionsRef.current.set(viewerId, pc);
       iceCandidateQueuesRef.current.set(viewerId, []);
 
-      // Add camera tracks first
+      // Add camera tracks first (video + audio)
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => {
-          // IMPORTANT: Ensure track is enabled before adding
           track.enabled = true;
-          
-          const sender = pc.addTrack(track, cameraStream);
-          console.log('[WebRTC] Added CAMERA track:', track.kind, 'with label:', track.label, 'enabled:', track.enabled, 'muted:', track.muted, 'readyState:', track.readyState);
-          
-          // Set encoding parameters for better quality
-          if (track.kind === 'video') {
-            const parameters = sender.getParameters();
-            if (!parameters.encodings || parameters.encodings.length === 0) {
-              parameters.encodings = [{}];
-            }
-            
-            // Optimize video encoding
-            parameters.encodings[0].maxBitrate = 2000000; // 2 Mbps max
-            parameters.encodings[0].maxFramerate = 30;
-            parameters.encodings[0].scaleResolutionDownBy = 1; // No downscaling
-            
-            sender.setParameters(parameters)
-              .then(() => console.log('[WebRTC] Camera video encoding parameters set'))
-              .catch(e => console.error('[WebRTC] Failed to set camera encoding params:', e));
-          } else if (track.kind === 'audio') {
-            // Optimize audio encoding for clarity
-            const parameters = sender.getParameters();
-            if (!parameters.encodings || parameters.encodings.length === 0) {
-              parameters.encodings = [{}];
-            }
-            
-            // Set audio bitrate for clear voice
-            parameters.encodings[0].maxBitrate = 128000; // 128 kbps for audio
-            
-            sender.setParameters(parameters)
-              .then(() => console.log('[WebRTC] Camera audio encoding parameters set'))
-              .catch(e => console.error('[WebRTC] Failed to set audio encoding params:', e));
-          }
+          pc.addTrack(track, cameraStream);
+          console.log('[WebRTC] Added CAMERA track:', track.kind, 'label:', track.label, 'enabled:', track.enabled, 'readyState:', track.readyState);
         });
       }
       
-      // Add screen share tracks if available
+      // Add screen share tracks if available (screen video only – no audio needed)
       if (screenStream) {
         screenStream.getTracks().forEach(track => {
-          const sender = pc.addTrack(track, screenStream);
-          console.log('[WebRTC] Added SCREEN SHARE track:', track.kind, 'with label:', track.label);
-          
-          // Set encoding parameters for screen share (higher quality for screen content)
-          if (track.kind === 'video') {
-            const parameters = sender.getParameters();
-            if (!parameters.encodings || parameters.encodings.length === 0) {
-              parameters.encodings = [{}];
-            }
-            
-            // Screen share needs higher bitrate and frame rate for clarity
-            parameters.encodings[0].maxBitrate = 3000000; // 3 Mbps for screen
-            parameters.encodings[0].maxFramerate = 30;
-            parameters.encodings[0].scaleResolutionDownBy = 1;
-            
-            sender.setParameters(parameters)
-              .then(() => console.log('[WebRTC] Screen share encoding parameters set'))
-              .catch(e => console.error('[WebRTC] Failed to set screen encoding params:', e));
-          }
+          pc.addTrack(track, screenStream);
+          console.log('[WebRTC] Added SCREEN SHARE track:', track.kind, 'label:', track.label);
         });
       }
 
-      // Handle ICE candidates
+      // Send ICE candidates to viewer via Firebase
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           const candidateRef = ref(
@@ -229,23 +180,36 @@ export const useWebRTCStream = (testid, userId, localStream, screenStream = null
       // Track ICE restart attempts per viewer
       const restartAttemptedRef = { value: false };
 
-      // Handle connection state changes
+      // After connection is established, update bitrates for quality
       pc.onconnectionstatechange = () => {
         console.log(`[WebRTC] Connection state [${viewerId}]:`, pc.connectionState);
         
         if (pc.connectionState === 'connected') {
           setConnectionStatus('streaming');
           updateActiveConnections();
+          // Apply bitrate limits after connection is established
+          pc.getSenders().forEach(sender => {
+            if (!sender.track) return;
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) return;
+            if (sender.track.kind === 'video') {
+              // Detect if this is screen share by track label
+              const isScreen = sender.track.label.toLowerCase().includes('screen') ||
+                               sender.track.label.toLowerCase().includes('display') ||
+                               sender.track.label.toLowerCase().includes('monitor');
+              params.encodings[0].maxBitrate = isScreen ? 3000000 : 2000000;
+              params.encodings[0].maxFramerate = 30;
+            } else if (sender.track.kind === 'audio') {
+              params.encodings[0].maxBitrate = 128000;
+            }
+            sender.setParameters(params).catch(e => console.warn('[WebRTC] setParameters failed:', e.message));
+          });
         } else if (pc.connectionState === 'failed') {
           // Try a one-time ICE restart to recover
           if (!restartAttemptedRef.value && typeof pc.restartIce === 'function') {
             console.warn('[WebRTC] Connection failed, attempting ICE restart for viewer:', viewerId);
             restartAttemptedRef.value = true;
-            try {
-              pc.restartIce();
-            } catch (e) {
-              console.error('[WebRTC] ICE restart error:', e);
-            }
+            try { pc.restartIce(); } catch (e) { console.error('[WebRTC] ICE restart error:', e); }
           } else {
             peerConnectionsRef.current.delete(viewerId);
             updateActiveConnections();

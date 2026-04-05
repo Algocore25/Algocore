@@ -1,26 +1,171 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ref, onValue, set, get } from 'firebase/database';
+import { ref, onValue, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
-import { FiVideo, FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw, FiMonitor, FiUser } from 'react-icons/fi';
+import {
+  FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw,
+  FiMonitor, FiUser, FiMic, FiMicOff,
+} from 'react-icons/fi';
 
-/**
- * Single student's livestream card – handles both camera and screen-share streams
- * sent by the student through a single WebRTC PeerConnection.
- *
- * The key insight: student adds camera tracks to `cameraStream` and screen tracks
- * to `screenStream`, so each arrives as a separate MediaStream.  We identify
- * which is which by checking whether a stream's video track has a displaySurface
- * setting (screen-share) or not (camera).  If that is unavailable we fall back to
- * label matching.  The FIRST video-only stream defaults to the screen-share and
- * the stream with an audio track defaults to the camera.
- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   ADMIN-TALK HOOK
+   Opens a mic → sends audio to one student via Firebase signalling path:
+     AdminAudio/{testid}/{studentId}/admin/{adminId}  ← presence
+     AdminAudio/{testid}/{studentId}/offers/{adminId} ← SDP offer
+     AdminAudio/{testid}/{studentId}/answers/{adminId}← SDP answer
+     AdminAudio/{testid}/{studentId}/ice/{adminId}/admin|student ← ICE
+   The student side (useAdminAudioReceiver) already handles the receiving end.
+───────────────────────────────────────────────────────────────────────────── */
+const useAdminTalk = (testid, studentId) => {
+  const pcRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const adminIdRef = useRef(`admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const unsubscribersRef = useRef([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [talkStatus, setTalkStatus] = useState('idle'); // idle | connecting | connected | error
+
+  const rtcConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+    iceCandidatePoolSize: 5,
+    sdpSemantics: 'unified-plan',
+  };
+
+  const stopTalking = useCallback(async () => {
+    unsubscribersRef.current.forEach(u => typeof u === 'function' && u());
+    unsubscribersRef.current = [];
+
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+    }
+
+    if (testid && studentId) {
+      // Remove admin presence so student's receiver cleans up
+      await remove(ref(database, `AdminAudio/${testid}/${studentId}/admin/${adminIdRef.current}`)).catch(() => {});
+      await remove(ref(database, `AdminAudio/${testid}/${studentId}/offers/${adminIdRef.current}`)).catch(() => {});
+      await remove(ref(database, `AdminAudio/${testid}/${studentId}/answers/${adminIdRef.current}`)).catch(() => {});
+      await remove(ref(database, `AdminAudio/${testid}/${studentId}/ice/${adminIdRef.current}`)).catch(() => {});
+    }
+
+    setIsSpeaking(false);
+    setTalkStatus('idle');
+  }, [testid, studentId]);
+
+  const startTalking = useCallback(async () => {
+    if (isSpeaking) {
+      await stopTalking();
+      return;
+    }
+
+    try {
+      setTalkStatus('connecting');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+
+      const pc = new RTCPeerConnection(rtcConfig);
+      pcRef.current = pc;
+
+      // Add mic audio track
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+        pc.addTrack(track, stream);
+      });
+
+      // ICE candidates → Firebase
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          set(
+            ref(database, `AdminAudio/${testid}/${studentId}/ice/${adminIdRef.current}/admin/${Date.now()}`),
+            e.candidate.toJSON()
+          ).catch(() => {});
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          setTalkStatus('connected');
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          setTalkStatus('error');
+          stopTalking();
+        }
+      };
+
+      // Create and send offer
+      const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+      await pc.setLocalDescription(offer);
+
+      await set(ref(database, `AdminAudio/${testid}/${studentId}/offers/${adminIdRef.current}`), {
+        sdp: offer.sdp,
+        type: offer.type,
+        timestamp: Date.now(),
+      });
+
+      // Register admin presence
+      await set(ref(database, `AdminAudio/${testid}/${studentId}/admin/${adminIdRef.current}`), {
+        active: true,
+        timestamp: Date.now(),
+      });
+
+      // Listen for student answer
+      const answerRef = ref(database, `AdminAudio/${testid}/${studentId}/answers/${adminIdRef.current}`);
+      const unsubAnswer = onValue(answerRef, async (snap) => {
+        const answer = snap.val();
+        if (!answer?.sdp) return;
+        if (pc.signalingState === 'have-local-offer') {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          } catch (err) {
+            console.error('[AdminTalk] Error setting answer:', err);
+          }
+        }
+      });
+
+      // Listen for student ICE candidates
+      const studentIceRef = ref(database, `AdminAudio/${testid}/${studentId}/ice/${adminIdRef.current}/student`);
+      const unsubIce = onValue(studentIceRef, (snap) => {
+        const candidates = snap.val();
+        if (!candidates) return;
+        Object.values(candidates).forEach(async (c) => {
+          if (!c) return;
+          try {
+            if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(c));
+          } catch (_) {}
+        });
+      });
+
+      unsubscribersRef.current.push(unsubAnswer, unsubIce);
+      setIsSpeaking(true);
+    } catch (err) {
+      console.error('[AdminTalk] Error starting:', err);
+      setTalkStatus('error');
+      await stopTalking();
+    }
+  }, [isSpeaking, testid, studentId, stopTalking]);
+
+  // Cleanup on unmount
+  useEffect(() => () => { stopTalking(); }, [stopTalking]);
+
+  return { isSpeaking, talkStatus, startTalking, stopTalking };
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SINGLE STUDENT STREAM CARD
+───────────────────────────────────────────────────────────────────────────── */
 const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
   const cameraVideoRef = useRef(null);
   const screenVideoRef = useRef(null);
+  const audioElementRef = useRef(null); // Separate <audio> for student mic audio (unmuted)
   const peerConnectionRef = useRef(null);
   const [cameraConnected, setCameraConnected] = useState(false);
   const [screenConnected, setScreenConnected] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [audioConnected, setAudioConnected] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState(true);  // student mic → admin
   const [connectionState, setConnectionState] = useState('new');
   const [error, setError] = useState(null);
   const [activeView, setActiveView] = useState('camera');
@@ -30,8 +175,10 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
   const connectionTimeoutRef = useRef(null);
   const retryTimeoutRef = useRef(null);
   const unsubscribersRef = useRef([]);
-  // Track stream IDs that have been assigned to each video element
   const assignedStreamIdsRef = useRef({ camera: null, screen: null });
+
+  // Admin-talk (admin speaks TO this student)
+  const { isSpeaking, talkStatus, startTalking } = useAdminTalk(testid, userId);
 
   const rtcConfig = {
     iceServers: [
@@ -48,97 +195,90 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
     sdpSemantics: 'unified-plan',
   };
 
-  /**
-   * Determine whether the stream is a screen-share or a camera feed.
-   * Priority order:
-   *  1. displaySurface setting on the video track (most reliable)
-   *  2. Track label containing 'screen', 'display', 'monitor'
-   *  3. Stream has NO audio tracks → likely screen-share (camera always has audio)
-   */
+  /* ── Stream identification ─────────────────────────────────────────────── */
   const isScreenStream = (stream) => {
     const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
-      // Method-based check
       if (typeof videoTrack.getSettings === 'function') {
         const settings = videoTrack.getSettings();
-        if (settings.displaySurface) return true; // 'monitor', 'window', 'browser'
+        if (settings.displaySurface) return true;
       }
-      // Label-based check
       const label = videoTrack.label.toLowerCase();
       if (
-        label.includes('screen') ||
-        label.includes('display') ||
-        label.includes('monitor') ||
-        label.includes('entire screen') ||
+        label.includes('screen') || label.includes('display') ||
+        label.includes('monitor') || label.includes('entire screen') ||
         label.includes('window:')
-      ) {
-        return true;
-      }
+      ) return true;
     }
-    // Audio presence heuristic: camera streams always have audio, screen-shares usually don't
-    if (stream.getAudioTracks().length === 0 && stream.getVideoTracks().length > 0) {
-      return true;
-    }
-    return false;
+    // Screen share streams have no audio
+    return stream.getAudioTracks().length === 0 && stream.getVideoTracks().length > 0;
   };
 
-  /**
-   * Assign a stream to the correct video element.
-   * Uses the stream's own ID so duplicate events are ignored.
-   */
+  /* ── Assign incoming stream to the correct video (or audio) element ─────── */
   const assignStream = useCallback((stream) => {
-    if (!stream || !stream.active) return;
-
+    if (!stream?.active) return;
     const streamId = stream.id;
 
-    // Already assigned
-    if (
-      assignedStreamIdsRef.current.camera === streamId ||
-      assignedStreamIdsRef.current.screen === streamId
-    ) {
+    // Audio-only stream (student mic) → play via <audio> element unmuted
+    if (stream.getVideoTracks().length === 0 && stream.getAudioTracks().length > 0) {
+      if (!audioElementRef.current) {
+        const audioEl = document.createElement('audio');
+        audioEl.autoplay = true;
+        audioEl.muted = true; // start muted, admin toggles
+        document.body.appendChild(audioEl);
+        audioElementRef.current = audioEl;
+      }
+      audioElementRef.current.srcObject = stream;
+      audioElementRef.current.muted = isAudioMuted;
+      setAudioConnected(true);
       return;
     }
 
-    const determineAsScreen = isScreenStream(stream);
+    if (
+      assignedStreamIdsRef.current.camera === streamId ||
+      assignedStreamIdsRef.current.screen === streamId
+    ) return;
 
-    if (determineAsScreen) {
+    if (isScreenStream(stream)) {
       if (!assignedStreamIdsRef.current.screen) {
-        console.log('[Viewer] Assigning stream as SCREEN:', streamId);
         assignedStreamIdsRef.current.screen = streamId;
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = stream;
           screenVideoRef.current.play().catch(() => {});
         }
         setScreenConnected(true);
-        setActiveView(prev => (prev === 'camera' ? prev : 'screen'));
       }
     } else {
       if (!assignedStreamIdsRef.current.camera) {
-        console.log('[Viewer] Assigning stream as CAMERA:', streamId);
         assignedStreamIdsRef.current.camera = streamId;
         if (cameraVideoRef.current) {
+          // The camera stream includes audio; mute the <video> element but pipe audio through <audio>
           cameraVideoRef.current.srcObject = stream;
+          cameraVideoRef.current.muted = true; // always mute video element (avoid echo)
           cameraVideoRef.current.play().catch(() => {});
+
+          // Create a separate audio element for the mic audio so admin can unmute it
+          if (!audioElementRef.current) {
+            const audioEl = document.createElement('audio');
+            audioEl.autoplay = true;
+            audioEl.muted = true; // admin must click unmute to hear
+            document.body.appendChild(audioEl);
+            audioElementRef.current = audioEl;
+          }
+          audioElementRef.current.srcObject = stream;
+          setAudioConnected(true);
         }
         setCameraConnected(true);
       }
     }
-  }, []);
+  }, [isAudioMuted]);
 
-  // Clean up peer connection
+  /* ── Cleanup ────────────────────────────────────────────────────────────── */
   const cleanupPeerConnection = useCallback(() => {
-    if (connectionTimeoutRef.current) {
-      clearTimeout(connectionTimeoutRef.current);
-      connectionTimeoutRef.current = null;
-    }
-    if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current);
-      retryTimeoutRef.current = null;
-    }
+    if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null; }
+    if (retryTimeoutRef.current) { clearTimeout(retryTimeoutRef.current); retryTimeoutRef.current = null; }
 
-    unsubscribersRef.current.forEach(unsub => {
-      if (typeof unsub === 'function') unsub();
-    });
+    unsubscribersRef.current.forEach(u => typeof u === 'function' && u());
     unsubscribersRef.current = [];
 
     if (peerConnectionRef.current) {
@@ -148,32 +288,30 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
-
     if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
     if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
+    if (audioElementRef.current) {
+      audioElementRef.current.srcObject = null;
+      audioElementRef.current.remove();
+      audioElementRef.current = null;
+    }
 
     assignedStreamIdsRef.current = { camera: null, screen: null };
     candidatesQueueRef.current = [];
     setCameraConnected(false);
     setScreenConnected(false);
+    setAudioConnected(false);
     setConnectionState('closed');
     isInitializingRef.current = false;
   }, []);
 
-  // Initialize peer connection and request stream from student
+  /* ── Initialize peer connection ─────────────────────────────────────────── */
   const initializeConnection = useCallback(async () => {
-    if (isInitializingRef.current) {
-      console.log('[Viewer] Already initializing for', userId);
-      return;
-    }
-
+    if (isInitializingRef.current) return;
     isInitializingRef.current = true;
     setError(null);
 
-    // Fully tear down the previous connection first
     cleanupPeerConnection();
-
-    // cleanupPeerConnection resets the flag; set it again
     isInitializingRef.current = true;
     setConnectionState('connecting');
 
@@ -181,52 +319,28 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
       const pc = new RTCPeerConnection(rtcConfig);
       peerConnectionRef.current = pc;
 
-      // ── Handle incoming tracks ──────────────────────────────────────────────
       pc.ontrack = (event) => {
-        console.log(
-          '[Viewer] ontrack for', userId,
-          '| kind:', event.track.kind,
-          '| label:', event.track.label,
-          '| streams:', event.streams.length
-        );
-
-        // Each MediaStream that arrives may be camera OR screen.
-        // Try to assign all streams delivered with this track event.
-        event.streams.forEach(stream => {
-          assignStream(stream);
-        });
-
-        // Fallback: if no stream object, wrap the track in a new MediaStream
-        if (event.streams.length === 0) {
-          const fallbackStream = new MediaStream([event.track]);
-          assignStream(fallbackStream);
-        }
+        console.log('[Viewer] ontrack', userId, event.track.kind, event.track.label, 'streams:', event.streams.length);
+        event.streams.forEach(s => assignStream(s));
+        if (event.streams.length === 0) assignStream(new MediaStream([event.track]));
       };
 
-      // ── ICE candidates ──────────────────────────────────────────────────────
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          const candidateRef = ref(
-            database,
-            `LiveStreams/${testid}/${userId}/ice/${adminIdRef.current}/viewer/${Date.now()}`
+          set(
+            ref(database, `LiveStreams/${testid}/${userId}/ice/${adminIdRef.current}/viewer/${Date.now()}`),
+            event.candidate.toJSON()
           );
-          set(candidateRef, event.candidate.toJSON());
         }
       };
 
-      // ── Connection state ────────────────────────────────────────────────────
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState;
-        console.log(`[Viewer] Connection state for ${userId}: ${state}`);
         setConnectionState(state);
-
         if (state === 'connected') {
           setError(null);
           isInitializingRef.current = false;
-          if (connectionTimeoutRef.current) {
-            clearTimeout(connectionTimeoutRef.current);
-            connectionTimeoutRef.current = null;
-          }
+          if (connectionTimeoutRef.current) { clearTimeout(connectionTimeoutRef.current); connectionTimeoutRef.current = null; }
         } else if (state === 'failed') {
           setError('Connection failed. Click Retry.');
           isInitializingRef.current = false;
@@ -236,16 +350,10 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
         }
       };
 
-      // ── ICE connection state (for additional debug) ─────────────────────────
       pc.oniceconnectionstatechange = () => {
-        console.log(`[Viewer] ICE state for ${userId}: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === 'failed') {
-          console.warn('[Viewer] ICE failed – attempting restart');
-          if (typeof pc.restartIce === 'function') pc.restartIce();
-        }
+        if (pc.iceConnectionState === 'failed' && typeof pc.restartIce === 'function') pc.restartIce();
       };
 
-      // 30-second connection timeout
       connectionTimeoutRef.current = setTimeout(() => {
         if (pc.connectionState !== 'connected') {
           setError('Connection timed out. Click Retry.');
@@ -254,110 +362,73 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
         }
       }, 30000);
 
-      // Register ourselves as an active viewer
-      const viewerRef = ref(database, `LiveStreams/${testid}/${userId}/viewers/${adminIdRef.current}`);
-      await set(viewerRef, {
+      // Register as viewer
+      await set(ref(database, `LiveStreams/${testid}/${userId}/viewers/${adminIdRef.current}`), {
         adminId: adminIdRef.current,
         timestamp: Date.now(),
         type: 'admin',
       });
 
-      // ── Listen for SDP offer from student ──────────────────────────────────
+      // Listen for SDP offer from student
       const offerRef = ref(database, `LiveStreams/${testid}/${userId}/offers/${adminIdRef.current}`);
-      const unsubscribeOffer = onValue(offerRef, async (snapshot) => {
-        const data = snapshot.val();
-        if (!data || !data.sdp) return;
-        if (!pc || pc.signalingState === 'closed') return;
-        // Only process if we haven't already set a remote description
-        if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') {
-          // Already processing or have-local-offer (student re-sent) – safe to proceed
-        }
-
+      const unsubOffer = onValue(offerRef, async (snap) => {
+        const data = snap.val();
+        if (!data?.sdp || !pc || pc.signalingState === 'closed') return;
         try {
-          console.log('[Viewer] Received offer from student:', userId);
           await pc.setRemoteDescription(new RTCSessionDescription(data));
-
-          // Drain queued ICE candidates
           while (candidatesQueueRef.current.length > 0) {
-            const candidate = candidatesQueueRef.current.shift();
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (err) {
-              // Ignore — some candidates are expected to fail after connection
-            }
+            try { await pc.addIceCandidate(new RTCIceCandidate(candidatesQueueRef.current.shift())); } catch (_) {}
           }
-
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-
-          const answerRef = ref(
-            database,
-            `LiveStreams/${testid}/${userId}/answers/${adminIdRef.current}`
+          await set(
+            ref(database, `LiveStreams/${testid}/${userId}/answers/${adminIdRef.current}`),
+            { sdp: answer.sdp, type: answer.type, timestamp: Date.now() }
           );
-          await set(answerRef, {
-            sdp: answer.sdp,
-            type: answer.type,
-            timestamp: Date.now(),
-          });
-
-          console.log('[Viewer] Sent answer to student:', userId);
         } catch (err) {
-          console.error('[Viewer] Error handling offer:', err);
-          setError('Failed to establish connection. Click Retry.');
+          console.error('[Viewer] Offer handling error:', err);
+          setError('Failed to connect. Click Retry.');
         }
       });
 
-      // ── Listen for ICE candidates from student ──────────────────────────────
-      const candidatesRef = ref(
-        database,
-        `LiveStreams/${testid}/${userId}/ice/${adminIdRef.current}/student`
-      );
-      const unsubscribeCandidates = onValue(candidatesRef, (snapshot) => {
-        const candidates = snapshot.val();
-        if (!candidates || !pc || pc.connectionState === 'closed') return;
-
-        Object.values(candidates).forEach(async (candidate) => {
-          if (!candidate) return;
+      // Listen for student ICE candidates
+      const candRef = ref(database, `LiveStreams/${testid}/${userId}/ice/${adminIdRef.current}/student`);
+      const unsubCand = onValue(candRef, (snap) => {
+        const cands = snap.val();
+        if (!cands || !pc || pc.connectionState === 'closed') return;
+        Object.values(cands).forEach(async (c) => {
+          if (!c) return;
           try {
-            if (pc.remoteDescription) {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } else {
-              candidatesQueueRef.current.push(candidate);
-            }
-          } catch (err) {
-            if (pc.connectionState !== 'connected') {
-              console.warn('[Viewer] ICE candidate error (may be harmless):', err.message);
-            }
-          }
+            if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(c));
+            else candidatesQueueRef.current.push(c);
+          } catch (_) {}
         });
       });
 
-      unsubscribersRef.current.push(unsubscribeOffer, unsubscribeCandidates);
+      unsubscribersRef.current.push(unsubOffer, unsubCand);
       isInitializingRef.current = false;
     } catch (err) {
-      console.error('[Viewer] Error initializing connection:', err);
-      setError('Failed to start connection. Click Retry.');
+      console.error('[Viewer] Init error:', err);
+      setError('Failed to start. Click Retry.');
       isInitializingRef.current = false;
     }
   }, [testid, userId, cleanupPeerConnection, assignStream]);
 
-  // Mount: delayed init to avoid race conditions
   useEffect(() => {
-    const timer = setTimeout(() => {
-      initializeConnection();
-    }, 600);
-
-    return () => {
-      clearTimeout(timer);
-      cleanupPeerConnection();
-    };
+    const t = setTimeout(initializeConnection, 600);
+    return () => { clearTimeout(t); cleanupPeerConnection(); };
   }, [initializeConnection, cleanupPeerConnection]);
 
-  const toggleMute = () => {
-    const vid = activeView === 'camera' ? cameraVideoRef.current : screenVideoRef.current;
-    if (vid) {
-      vid.muted = !vid.muted;
-      setIsMuted(vid.muted);
+  /* ── Audio mute toggle ───────────────────────────────────────────────────── */
+  const toggleStudentAudio = () => {
+    const newMuted = !isAudioMuted;
+    setIsAudioMuted(newMuted);
+    if (audioElementRef.current) {
+      audioElementRef.current.muted = newMuted;
+      if (!newMuted) {
+        // Force play if browser had blocked it
+        audioElementRef.current.play().catch(() => {});
+      }
     }
   };
 
@@ -369,33 +440,30 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
   const retry = () => {
     if (isInitializingRef.current) return;
     if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
-    retryTimeoutRef.current = setTimeout(() => {
-      initializeConnection();
-    }, 800);
+    retryTimeoutRef.current = setTimeout(initializeConnection, 800);
   };
 
-  const statusColor = () => {
+  const statusDot = () => {
     switch (connectionState) {
       case 'connected': return 'bg-green-500';
       case 'connecting': return 'bg-yellow-500';
-      case 'failed':
-      case 'disconnected': return 'bg-red-500';
+      case 'failed': case 'disconnected': return 'bg-red-500';
       default: return 'bg-gray-500';
     }
   };
 
-  const anyConnected = cameraConnected || screenConnected;
+  const anyVideoConnected = cameraConnected || screenConnected;
 
   return (
     <div className="relative bg-gray-900 rounded-lg overflow-hidden shadow-lg border border-gray-700">
-      {/* Video container */}
+      {/* ── Video area ────────────────────────────────────────────────────── */}
       <div className="relative aspect-video bg-black">
-        {/* Camera video */}
+        {/* Camera video – always muted here; audio goes to <audio> element */}
         <video
           ref={cameraVideoRef}
           autoPlay
           playsInline
-          muted={isMuted}
+          muted
           className={`w-full h-full object-cover ${activeView === 'screen' ? 'hidden' : ''}`}
         />
 
@@ -404,23 +472,19 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
           ref={screenVideoRef}
           autoPlay
           playsInline
-          muted={isMuted}
+          muted
           className={`w-full h-full object-contain bg-black ${activeView === 'camera' ? 'hidden' : ''}`}
         />
 
-        {/* Overlay when not connected */}
-        {!anyConnected && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 bg-opacity-90">
+        {/* Not connected overlay */}
+        {!anyVideoConnected && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800/90">
             {error ? (
               <>
                 <FiVideoOff className="text-red-400 text-4xl mb-2" />
                 <p className="text-red-400 text-sm mb-3 text-center px-4">{error}</p>
-                <button
-                  onClick={retry}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm transition-colors"
-                >
-                  <FiRefreshCw size={14} />
-                  Retry
+                <button onClick={retry} className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">
+                  <FiRefreshCw size={14} /> Retry
                 </button>
               </>
             ) : (
@@ -435,44 +499,35 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
         )}
 
         {/* View toggle buttons */}
-        {anyConnected && (
-          <div className="absolute top-2 left-2 flex gap-2">
+        {anyVideoConnected && (
+          <div className="absolute top-2 left-2 flex gap-1">
             {cameraConnected && (
-              <button
-                onClick={() => setActiveView('camera')}
-                className={`p-2 rounded-md transition-colors ${
-                  activeView === 'camera'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
+              <button onClick={() => setActiveView('camera')}
+                className={`p-1.5 rounded transition-colors ${activeView === 'camera' ? 'bg-blue-600 text-white' : 'bg-gray-700/80 text-gray-300 hover:bg-gray-600'}`}
                 title="Camera View"
-              >
-                <FiUser size={16} />
-              </button>
+              ><FiUser size={14} /></button>
             )}
             {screenConnected && (
-              <button
-                onClick={() => setActiveView('screen')}
-                className={`p-2 rounded-md transition-colors ${
-                  activeView === 'screen'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
+              <button onClick={() => setActiveView('screen')}
+                className={`p-1.5 rounded transition-colors ${activeView === 'screen' ? 'bg-blue-600 text-white' : 'bg-gray-700/80 text-gray-300 hover:bg-gray-600'}`}
                 title="Screen Share"
-              >
-                <FiMonitor size={16} />
-              </button>
+              ><FiMonitor size={14} /></button>
             )}
           </div>
         )}
 
-        {/* Connection dot */}
-        <div
-          className={`absolute top-2 right-2 w-3 h-3 rounded-full ${statusColor()} ${anyConnected ? 'animate-pulse' : ''}`}
-        />
+        {/* Admin is speaking indicator */}
+        {isSpeaking && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-blue-600/90 text-white text-xs px-2 py-1 rounded-full animate-pulse">
+            <FiMic size={11} /> Speaking…
+          </div>
+        )}
+
+        {/* Connection state dot */}
+        <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${statusDot()} ${anyVideoConnected ? 'animate-pulse' : ''}`} />
       </div>
 
-      {/* Student info and controls */}
+      {/* ── Student info + controls ──────────────────────────────────────── */}
       <div className="p-3 bg-gray-800">
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
@@ -481,53 +536,69 @@ const StudentStreamCardV2 = ({ testid, userId, userName, userEmail }) => {
             <div className="mt-1 flex gap-2 text-xs">
               {cameraConnected && <span className="text-green-400">📷 Camera</span>}
               {screenConnected && <span className="text-blue-400">🖥️ Screen</span>}
+              {audioConnected && (
+                <span className={isAudioMuted ? 'text-gray-500' : 'text-yellow-400'}>
+                  {isAudioMuted ? '🔇 Mic (muted)' : '🎙️ Mic (live)'}
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 ml-3">
+          <div className="flex items-center gap-1.5 ml-2">
+            {/* Student mic audio toggle */}
             <button
-              onClick={toggleMute}
-              className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors"
-              title={isMuted ? 'Unmute' : 'Mute'}
+              onClick={toggleStudentAudio}
+              title={isAudioMuted ? 'Unmute student mic' : 'Mute student mic'}
+              className={`p-2 rounded-md transition-colors ${isAudioMuted ? 'bg-gray-700 hover:bg-gray-600 text-gray-400' : 'bg-yellow-600 hover:bg-yellow-700 text-white'}`}
             >
-              {isMuted ? <FiVolumeX size={16} /> : <FiVolume2 size={16} />}
+              {isAudioMuted ? <FiVolumeX size={15} /> : <FiVolume2 size={15} />}
             </button>
 
+            {/* Admin talk to student */}
             <button
-              onClick={toggleFullscreen}
-              className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors"
-              title="Fullscreen"
+              onClick={startTalking}
+              title={isSpeaking ? 'Stop speaking to student' : 'Speak to student'}
+              className={`p-2 rounded-md transition-colors ${
+                isSpeaking
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white animate-pulse'
+                  : talkStatus === 'error'
+                  ? 'bg-red-700 hover:bg-red-800 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
             >
-              <FiMaximize2 size={16} />
+              {isSpeaking ? <FiMicOff size={15} /> : <FiMic size={15} />}
             </button>
 
+            {/* Fullscreen */}
+            <button onClick={toggleFullscreen} title="Fullscreen" className="p-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors">
+              <FiMaximize2 size={15} />
+            </button>
+
+            {/* Retry on error */}
             {(error || connectionState === 'disconnected' || connectionState === 'failed') && (
-              <button
-                onClick={retry}
-                className="p-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md transition-colors"
-                title="Retry Connection"
-              >
-                <FiRefreshCw size={16} />
+              <button onClick={retry} title="Retry Connection" className="p-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md transition-colors">
+                <FiRefreshCw size={15} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Connection state text */}
-        <div className="mt-2 text-xs text-gray-500">
-          Status:{' '}
-          <span className={`font-medium ${anyConnected ? 'text-green-400' : 'text-yellow-400'}`}>
-            {connectionState}
-          </span>
+        <div className="mt-1.5 text-xs text-gray-500">
+          Status: <span className={`font-medium ${anyVideoConnected ? 'text-green-400' : 'text-yellow-400'}`}>{connectionState}</span>
+          {talkStatus !== 'idle' && (
+            <span className={`ml-3 font-medium ${talkStatus === 'connected' ? 'text-blue-400' : talkStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>
+              Talk: {talkStatus}
+            </span>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-/**
- * Main component – displays all active livestreams for an exam
- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT – All live streams for an exam
+───────────────────────────────────────────────────────────────────────────── */
 const LiveStreamViewerV2 = ({ testid }) => {
   const [activeStreams, setActiveStreams] = useState([]);
   const [users, setUsers] = useState({});
@@ -536,51 +607,39 @@ const LiveStreamViewerV2 = ({ testid }) => {
   useEffect(() => {
     if (!testid) return;
 
-    // Listen for students who are actively streaming
     const streamsRef = ref(database, `LiveStreams/${testid}`);
-    const unsubscribeStreams = onValue(streamsRef, (snapshot) => {
-      const streams = snapshot.val();
+    const unsubStreams = onValue(streamsRef, (snap) => {
+      const streams = snap.val();
       if (streams) {
-        const activeUserIds = Object.keys(streams).filter(
-          (uid) => streams[uid]?.active === true
-        );
-        setActiveStreams(activeUserIds);
+        setActiveStreams(Object.keys(streams).filter(uid => streams[uid]?.active === true));
       } else {
         setActiveStreams([]);
       }
       setIsLoading(false);
     });
 
-    // Fetch user metadata
     const usersRef = ref(database, 'users');
-    const unsubscribeUsers = onValue(usersRef, (snapshot) => {
-      const usersData = snapshot.val();
-      if (usersData) setUsers(usersData);
+    const unsubUsers = onValue(usersRef, (snap) => {
+      const d = snap.val();
+      if (d) setUsers(d);
     });
 
-    return () => {
-      unsubscribeStreams();
-      unsubscribeUsers();
-    };
+    return () => { unsubStreams(); unsubUsers(); };
   }, [testid]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
-      </div>
-    );
-  }
+  if (isLoading) return (
+    <div className="flex items-center justify-center py-12">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
+    </div>
+  );
 
-  if (activeStreams.length === 0) {
-    return (
-      <div className="text-center py-12 bg-gray-800 rounded-lg border border-gray-700">
-        <FiVideoOff className="text-gray-500 text-5xl mx-auto mb-4" />
-        <p className="text-gray-400 text-lg">No active livestreams</p>
-        <p className="text-gray-500 text-sm mt-2">Students will appear here when they start their exam</p>
-      </div>
-    );
-  }
+  if (activeStreams.length === 0) return (
+    <div className="text-center py-12 bg-gray-800 rounded-lg border border-gray-700">
+      <FiVideoOff className="text-gray-500 text-5xl mx-auto mb-4" />
+      <p className="text-gray-400 text-lg">No active livestreams</p>
+      <p className="text-gray-500 text-sm mt-2">Students will appear here when they start their exam</p>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -588,25 +647,25 @@ const LiveStreamViewerV2 = ({ testid }) => {
         <h3 className="text-xl font-semibold text-white">
           Live Camera &amp; Screen Feeds ({activeStreams.length})
         </h3>
-        <div className="flex items-center gap-2 text-sm text-gray-400">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span>Live</span>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span>Live</span>
+          </div>
+          <p className="text-xs text-gray-500">Click 🔇 to unmute mic · Click 🎙️ to speak to student</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {activeStreams.map((userId) => {
-          const user = users[userId];
-          return (
-            <StudentStreamCardV2
-              key={userId}
-              testid={testid}
-              userId={userId}
-              userName={user?.name || 'Unknown Student'}
-              userEmail={user?.email || 'No email'}
-            />
-          );
-        })}
+        {activeStreams.map(uid => (
+          <StudentStreamCardV2
+            key={uid}
+            testid={testid}
+            userId={uid}
+            userName={users[uid]?.name || 'Unknown Student'}
+            userEmail={users[uid]?.email || 'No email'}
+          />
+        ))}
       </div>
     </div>
   );
