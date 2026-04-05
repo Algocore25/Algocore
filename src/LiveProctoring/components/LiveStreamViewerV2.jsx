@@ -74,7 +74,7 @@ const useAdminTalk = (testid, studentId) => {
     try {
       if (testid && studentId) {
         // Deep purge of ANY lingering session data so student receiver strictly waits
-        await remove(ref(database, `AdminAudio/${testid}/${studentId}`));
+        remove(ref(database, `AdminAudio/${testid}/${studentId}`)).catch(() => {});
       }
 
       isStartingRef.current = true;
