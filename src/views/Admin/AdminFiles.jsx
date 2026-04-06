@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FiFile, FiFolder, FiExternalLink, FiSearch, FiRefreshCw, 
-  FiDownload, FiTrash2, FiInfo, FiChevronRight 
+  FiDownload, FiTrash2, FiInfo, FiChevronRight, FiCpu, FiSettings, FiPlay
 } from 'react-icons/fi';
 import LoadingPage from '../LoadingPage';
 import toast from 'react-hot-toast';
@@ -12,6 +12,9 @@ const AdminFiles = () => {
     const [blobs, setBlobs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [downloadingBlob, setDownloadingBlob] = useState(null); // stores blob name
+    const [convertingBlob, setConvertingBlob] = useState(null);   // stores blob name
+    const [conversionProgress, setConversionProgress] = useState(null);
 
     const fetchContainers = async () => {
         setLoading(true);
@@ -58,6 +61,107 @@ const AdminFiles = () => {
             fetchBlobs(selectedContainer);
         }
     }, [selectedContainer]);
+
+    const handleDownload = async (blob, containerName) => {
+        if (downloadingBlob) return;
+        const fileName = blob.name.split('/').pop() || 'file';
+        setDownloadingBlob(blob.name);
+        const toastId = toast.loading(`Preparing ${fileName} for download...`);
+        try {
+            // Use proxy to bypass CORS and set attachment headers
+            const proxyUrl = `/api/proxy-blob?container=${containerName}&blobName=${encodeURIComponent(blob.name)}&downloadName=${encodeURIComponent(fileName)}`;
+            
+            const a = document.createElement('a');
+            a.href = proxyUrl;
+            a.setAttribute('download', fileName);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            toast.success(`Download started for ${fileName}`, { id: toastId });
+        } catch (err) {
+            console.error('Download failed:', err);
+            toast.error(`Download failed: ${err.message}`, { id: toastId });
+        } finally {
+            setTimeout(() => setDownloadingBlob(null), 1000);
+        }
+    };
+
+    const handleConvertToMp4 = async (blob, containerName) => {
+        if (convertingBlob) return;
+        setConvertingBlob(blob.name);
+        setConversionProgress(0);
+        const fileName = blob.name.split('/').pop() || 'recording.webm';
+        const toastId = toast.loading(`Initializing conversion for ${fileName}...`, { duration: 0 });
+        
+        try {
+            const response = await fetch('/api/convert-to-mp4', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blobName: blob.name, container: containerName })
+            });
+            
+            if (!response.ok) throw new Error('Network response was not ok');
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let lastData = null;
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(Boolean);
+
+                for (const line of lines) {
+                    try {
+                        const data = JSON.parse(line);
+                        lastData = data;
+
+                        if (data.status === 'converting') {
+                            setConversionProgress(data.progress);
+                            toast.loading(`Converting ${fileName}: ${data.progress}%`, { id: toastId });
+                        } else if (data.status === 'downloading') {
+                            toast.loading(`Downloading source from Azure...`, { id: toastId });
+                        } else if (data.status === 'uploading') {
+                            toast.loading(`Uploading formatted MP4...`, { id: toastId });
+                        } else if (data.status === 'error') {
+                            throw new Error(data.error);
+                        }
+                    } catch (e) {
+                        console.error('Error parsing chunk:', e);
+                    }
+                }
+            }
+            
+            if (lastData && lastData.status === 'completed') {
+                const mp4Url = lastData.url;
+                const mp4FileName = fileName.replace('.webm', '.mp4');
+                
+                toast.success(lastData.isCached ? 'Found cached MP4!' : 'Conversion complete!', { id: toastId });
+                
+                // Trigger download using proxy for the newly created MP4
+                const proxyUrl = `/api/proxy-blob?container=${containerName}&blobName=${encodeURIComponent(lastData.blobName)}&downloadName=${encodeURIComponent(mp4FileName)}`;
+                const a = document.createElement('a');
+                a.href = proxyUrl;
+                a.setAttribute('download', mp4FileName);
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            } else {
+                throw new Error('Conversion ended prematurely');
+            }
+        } catch (err) {
+            console.error('Conversion failed:', err);
+            toast.error(`Conversion error: ${err.message}`, { id: toastId });
+        } finally {
+            setConvertingBlob(null);
+            setConversionProgress(null);
+            setTimeout(() => toast.dismiss(toastId), 3000);
+            fetchBlobs(containerName); // Refresh to show NEW mp4 if it was created
+        }
+    };
 
     const filteredBlobs = blobs.filter(blob => 
         blob.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -225,6 +329,16 @@ const AdminFiles = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-2">
+                                                        {blob.name.toLowerCase().endsWith('.webm') && (
+                                                            <button 
+                                                                onClick={() => handleConvertToMp4(blob, selectedContainer)}
+                                                                disabled={Boolean(convertingBlob)}
+                                                                className="p-2 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30 rounded-lg transition-all disabled:opacity-50"
+                                                                title="Convert to MP4"
+                                                            >
+                                                                {convertingBlob === blob.name ? <FiRefreshCw className="animate-spin" /> : <FiCpu />}
+                                                            </button>
+                                                        )}
                                                         <a 
                                                             href={blob.url} 
                                                             target="_blank" 
@@ -234,14 +348,14 @@ const AdminFiles = () => {
                                                         >
                                                             <FiExternalLink />
                                                         </a>
-                                                        <a 
-                                                            href={blob.url} 
-                                                            download={blob.name}
-                                                            className="p-2 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30 rounded-lg transition-all"
+                                                        <button 
+                                                            onClick={() => handleDownload(blob, selectedContainer)}
+                                                            disabled={Boolean(downloadingBlob)}
+                                                            className="p-2 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30 rounded-lg transition-all disabled:opacity-50"
                                                             title="Download"
                                                         >
-                                                            <FiDownload />
-                                                        </a>
+                                                            {downloadingBlob === blob.name ? <FiRefreshCw className="animate-spin" /> : <FiDownload />}
+                                                        </button>
                                                         <button 
                                                             onClick={() => handleDelete(selectedContainer, blob.name)}
                                                             className="p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-all"

@@ -78,9 +78,9 @@ export async function POST(req) {
         const ffmpeg = await getFfmpegInstance();
         const dataObj = await req.json();
         const blobName = dataObj.blobName;
+        const CONTAINER_NAME = dataObj.container || 'exam-recordings';
 
         const CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
-        const CONTAINER_NAME = 'exam-recordings';
 
         if (!CONNECTION_STRING) throw new Error('Azure storage is not configured');
         if (!blobName) throw new Error('No blobName provided');

@@ -19,8 +19,8 @@ import LoadingPage from '../LoadingPage';
 import toast from 'react-hot-toast';
 
 const AdminRecordings = () => {
-  const [downloading, setDownloading] = useState(null);
-  const [converting, setConverting] = useState(false);
+  const [downloadingUrl, setDownloadingUrl] = useState(null);
+  const [convertingUrl, setConvertingUrl] = useState(null);
   const [recordings, setRecordings] = useState([]);
   const [users, setUsers] = useState({});
   const [exams, setExams] = useState({});
@@ -131,8 +131,8 @@ const AdminRecordings = () => {
   };
 
   const handleDownload = async (url, fileName) => {
-    if (downloading) return;
-    setDownloading(fileName);
+    if (downloadingUrl) return;
+    setDownloadingUrl(url);
     const toastId = toast.loading(`Preparing ${fileName} for download...`);
     try {
       const blobName = getBlobNameFromUrl(url);
@@ -154,15 +154,15 @@ const AdminRecordings = () => {
       console.error('Download failed:', err);
       toast.error(`Download failed: ${err.message}`, { id: toastId });
     } finally {
-      setTimeout(() => setDownloading(null), 1000);
+      setTimeout(() => setDownloadingUrl(null), 1000);
     }
   };
 
   const [conversionProgress, setConversionProgress] = useState(null);
 
   const handleConvertToMp4 = async (url, fileName) => {
-    if (converting) return;
-    setConverting(true);
+    if (convertingUrl) return;
+    setConvertingUrl(url);
     setConversionProgress(0);
     const toastId = toast.loading(`Initializing conversion...`, { duration: 0 });
     
@@ -224,7 +224,7 @@ const AdminRecordings = () => {
       console.error('Conversion failed:', err);
       toast.error(`Conversion error: ${err.message}`, { id: toastId });
     } finally {
-      setConverting(false);
+      setConvertingUrl(null);
       setConversionProgress(null);
       setTimeout(() => toast.dismiss(toastId), 3000);
     }
@@ -445,10 +445,10 @@ const AdminRecordings = () => {
                         const fileName = blobName.split('/').pop() || 'recording.webm';
                         handleConvertToMp4(selectedVideo.url, fileName);
                       }}
-                      disabled={converting || !!downloading}
+                      disabled={Boolean(convertingUrl) || Boolean(downloadingUrl)}
                       className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm font-medium"
                     >
-                      {converting ? (
+                      {convertingUrl === selectedVideo.url ? (
                         <>
                           <FiRefreshCw className="animate-spin" />
                           {conversionProgress !== null && conversionProgress > 0 
@@ -468,10 +468,10 @@ const AdminRecordings = () => {
                         const safeName = selectedVideo.title.replace(/[^a-z0-9_\-]/gi, '_');
                         handleDownload(selectedVideo.url, `${safeName}.${ext}`);
                       }}
-                      disabled={!!downloading || converting}
+                      disabled={Boolean(downloadingUrl) || Boolean(convertingUrl)}
                       className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm font-medium"
                     >
-                      {downloading ? (
+                      {downloadingUrl === selectedVideo.url ? (
                         <>
                           <FiRefreshCw className="animate-spin" />
                           Downloading...
