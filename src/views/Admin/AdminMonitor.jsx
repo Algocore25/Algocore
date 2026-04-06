@@ -403,15 +403,21 @@ const AdminMonitor = () => {
         Object.entries(progress).forEach(([courseKey, courseData]) => {
           // Resolve real course ID from key (which might be a title)
           const realCourseId = titleToId[courseKey] || courseKey;
-          const totalQuestions = calculateTotalQuestions(realCourseId);
+          const courseDef = courses[realCourseId];
+          const totalQuestions = courseTotals[realCourseId] || 0;
           let completed = 0;
 
-          if (courseData && typeof courseData === 'object') {
-            Object.values(courseData).forEach(subcourse => {
-              if (subcourse && typeof subcourse === 'object') {
-                // EXACT SAME LOGIC AS COURSE PAGE: only count items that are exactly true
-                Object.values(subcourse).forEach(problemStatus => {
-                  if (problemStatus === true) {
+          // Robust checking: only count if it exists in the definition
+          if (courseDef && courseDef.lessons && courseData && typeof courseData === 'object') {
+            Object.entries(courseDef.lessons).forEach(([topicId, topicDef]) => {
+              const topicProgress = courseData[topicId];
+              if (topicProgress && typeof topicProgress === 'object' && topicDef && topicDef.questions) {
+                const questionsInTopic = Array.isArray(topicDef.questions) 
+                    ? topicDef.questions 
+                    : Object.keys(topicDef.questions);
+                
+                questionsInTopic.forEach(qName => {
+                  if (topicProgress[qName] === true) {
                     completed++;
                   }
                 });
@@ -420,9 +426,11 @@ const AdminMonitor = () => {
           }
 
           if (totalQuestions > 0) {
-            const percentageRaw = (completed / totalQuestions) * 100;
+            // Cap completed at total just in case of any remaining edge cases
+            const validCompleted = Math.min(completed, totalQuestions);
+            const percentageRaw = (validCompleted / totalQuestions) * 100;
             processedUsers[userId].courseProgress[realCourseId] = {
-              completed,
+              completed: validCompleted,
               total: totalQuestions,
               percentage: percentageRaw.toFixed(1)
             };

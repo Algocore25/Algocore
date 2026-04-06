@@ -158,36 +158,74 @@ const AdminRecordings = () => {
     }
   };
 
+  const [conversionProgress, setConversionProgress] = useState(null);
+
   const handleConvertToMp4 = async (url, fileName) => {
     if (converting) return;
     setConverting(true);
-    const toastId = toast.loading(`Converting ${fileName} to MP4 in background...`, { duration: 0 });
+    setConversionProgress(0);
+    const toastId = toast.loading(`Initializing conversion...`, { duration: 0 });
+    
     try {
       const blobName = getBlobNameFromUrl(url);
       if (!blobName) throw new Error('Could not identify recording file');
       
-      const res = await fetch('/api/convert-to-mp4', {
+      const response = await fetch('/api/convert-to-mp4', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ blobName })
       });
       
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Conversion failed');
+      if (!response.ok) throw new Error('Network response was not ok');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let lastData = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(Boolean);
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            lastData = data;
+
+            if (data.status === 'converting') {
+              setConversionProgress(data.progress);
+              toast.loading(`Converting ${fileName}: ${data.progress}%`, { id: toastId });
+            } else if (data.status === 'downloading') {
+              toast.loading(`Downloading source from Azure...`, { id: toastId });
+            } else if (data.status === 'uploading') {
+              toast.loading(`Uploading formatted MP4...`, { id: toastId });
+            } else if (data.status === 'error') {
+              throw new Error(data.error);
+            }
+          } catch (e) {
+            console.error('Error parsing chunk:', e);
+          }
+        }
+      }
       
-      // The API returns the new MP4 URL
-      const mp4Url = data.url;
-      const mp4FileName = fileName.replace('.webm', '.mp4');
-      
-      toast.success(data.isCached ? 'Found pre-converted MP4, starting download...' : 'Conversion successful! Starting download...', { id: toastId });
-      
-      // Trigger download using the same handleDownload logic
-      await handleDownload(mp4Url, mp4FileName);
+      if (lastData && lastData.status === 'completed') {
+        const mp4Url = lastData.url;
+        const mp4FileName = fileName.replace('.webm', '.mp4');
+        
+        toast.success(lastData.isCached ? 'Found cached MP4!' : 'Conversion complete!', { id: toastId });
+        await handleDownload(mp4Url, mp4FileName);
+      } else {
+        throw new Error('Conversion ended prematurely');
+      }
+
     } catch (err) {
       console.error('Conversion failed:', err);
       toast.error(`Conversion error: ${err.message}`, { id: toastId });
     } finally {
       setConverting(false);
+      setConversionProgress(null);
       setTimeout(() => toast.dismiss(toastId), 3000);
     }
   };
@@ -413,7 +451,9 @@ const AdminRecordings = () => {
                       {converting ? (
                         <>
                           <FiRefreshCw className="animate-spin" />
-                          Converting...
+                          {conversionProgress !== null && conversionProgress > 0 
+                            ? `Converting (${conversionProgress}%)` 
+                            : 'Preparing...'}
                         </>
                       ) : (
                         <>

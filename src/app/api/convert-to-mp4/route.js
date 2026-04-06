@@ -64,89 +64,115 @@ export async function POST(req) {
   let tempWebmPath = '';
   let tempMp4Path = '';
 
-  try {
-    const ffmpeg = await getFfmpegInstance();
-    const dataObj = await req.json();
-    const blobName = dataObj.blobName;
+  const { searchParams } = new URL(req.url);
+  const encoder = new TextEncoder();
 
-    const CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
-    const CONTAINER_NAME = 'exam-recordings';
+  // We'll use a ReadableStream to send progress updates to the client
+  const stream = new ReadableStream({
+    async start(controller) {
+      const sendStatus = (data) => {
+        controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
+      };
 
-    if (!CONNECTION_STRING) {
-        return NextResponse.json({ error: 'Azure storage is not configured' }, { status: 500 });
-    }
+      try {
+        const ffmpeg = await getFfmpegInstance();
+        const dataObj = await req.json();
+        const blobName = dataObj.blobName;
 
-    if (!blobName) {
-        return NextResponse.json({ error: 'No blobName provided' }, { status: 400 });
-    }
+        const CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+        const CONTAINER_NAME = 'exam-recordings';
 
-    const mp4BlobName = blobName.replace('.webm', '-processed.mp4');
-    const blobServiceClient = BlobServiceClient.fromConnectionString(CONNECTION_STRING);
-    const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-    const mp4BlobClient = containerClient.getBlockBlobClient(mp4BlobName);
+        if (!CONNECTION_STRING) throw new Error('Azure storage is not configured');
+        if (!blobName) throw new Error('No blobName provided');
 
-    // Cache check
-    const mp4Exists = await mp4BlobClient.exists().catch(() => false);
-    if (mp4Exists) {
-        return NextResponse.json({ 
-            success: true, 
+        const mp4BlobName = blobName.replace('.webm', '-processed.mp4');
+        const blobServiceClient = BlobServiceClient.fromConnectionString(CONNECTION_STRING);
+        const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+        const mp4BlobClient = containerClient.getBlockBlobClient(mp4BlobName);
+
+        sendStatus({ status: 'checking_cache' });
+        const mp4Exists = await mp4BlobClient.exists().catch(() => false);
+        if (mp4Exists) {
+            sendStatus({ 
+                status: 'completed', 
+                url: mp4BlobClient.url, 
+                blobName: mp4BlobName,
+                isCached: true,
+                progress: 100
+            });
+            controller.close();
+            return;
+        }
+
+        const webmBlobClient = containerClient.getBlockBlobClient(blobName);
+        if (!(await webmBlobClient.exists())) throw new Error('Source file not found');
+
+        // 1. Download
+        sendStatus({ status: 'downloading', progress: 0 });
+        const tmpDir = os.tmpdir();
+        const uniqueId = Date.now();
+        tempWebmPath = path.join(tmpDir, `input-${uniqueId}.webm`);
+        tempMp4Path = path.join(tmpDir, `output-${uniqueId}.mp4`);
+
+        const downloadResponse = await webmBlobClient.download(0);
+        const writeStream = fs.createWriteStream(tempWebmPath);
+        await new Promise((resolve, reject) => {
+            downloadResponse.readableStreamBody.pipe(writeStream).on('finish', resolve).on('error', reject);
+        });
+
+        // 2. Convert
+        sendStatus({ status: 'converting', progress: 0 });
+        await new Promise((resolve, reject) => {
+            ffmpeg(tempWebmPath)
+                .outputOptions([
+                    '-c:v libx264', '-preset ultrafast', '-crf 28', '-threads 0',
+                    '-c:a aac', '-b:a 64k', '-movflags +faststart'
+                ])
+                .videoFilters('scale=-2:720')
+                .toFormat('mp4')
+                .on('progress', (progress) => {
+                    if (progress.percent) {
+                        sendStatus({ status: 'converting', progress: Math.min(99, Math.round(progress.percent)) });
+                    }
+                })
+                .on('end', resolve)
+                .on('error', (err) => {
+                    console.error('[FFmpeg] Error:', err.message);
+                    reject(err);
+                })
+                .save(tempMp4Path);
+        });
+
+        // 3. Upload
+        sendStatus({ status: 'uploading', progress: 99 });
+        await mp4BlobClient.uploadFile(tempMp4Path, {
+            blobHTTPHeaders: { blobContentType: 'video/mp4' },
+            concurrency: 5
+        });
+
+        sendStatus({ 
+            status: 'completed', 
             url: mp4BlobClient.url, 
             blobName: mp4BlobName,
-            isCached: true 
+            isCached: false,
+            progress: 100
         });
+        controller.close();
+
+      } catch (error) {
+        console.error('[API] Error:', error.message);
+        sendStatus({ status: 'error', error: error.message });
+        controller.close();
+      } finally {
+        try {
+            if (tempWebmPath && fs.existsSync(tempWebmPath)) fs.unlinkSync(tempWebmPath);
+            if (tempMp4Path && fs.existsSync(tempMp4Path)) fs.unlinkSync(tempMp4Path);
+        } catch(e) {}
+      }
     }
+  });
 
-    const webmBlobClient = containerClient.getBlockBlobClient(blobName);
-    const webmExists = await webmBlobClient.exists();
-    if (!webmExists) {
-        return NextResponse.json({ error: 'Source file not found' }, { status: 404 });
-    }
-
-    // 1. Download
-    const tmpDir = os.tmpdir();
-    const uniqueId = Date.now();
-    tempWebmPath = path.join(tmpDir, `input-${uniqueId}.webm`);
-    tempMp4Path = path.join(tmpDir, `output-${uniqueId}.mp4`);
-
-    const downloadResponse = await webmBlobClient.download(0);
-    const writeStream = fs.createWriteStream(tempWebmPath);
-    await new Promise((resolve, reject) => {
-        downloadResponse.readableStreamBody.pipe(writeStream).on('finish', resolve).on('error', reject);
-    });
-
-    // 2. Convert
-    await new Promise((resolve, reject) => {
-        ffmpeg(tempWebmPath)
-            .outputOptions(['-c:v libx264', '-preset ultrafast', '-crf 26', '-c:a aac', '-b:a 96k', '-movflags +faststart'])
-            .toFormat('mp4')
-            .on('end', resolve)
-            .on('error', reject)
-            .save(tempMp4Path);
-    });
-
-    // 3. Upload
-    const mp4Data = fs.readFileSync(tempMp4Path);
-    await mp4BlobClient.uploadData(mp4Data, {
-        blobHTTPHeaders: { blobContentType: 'video/mp4' }
-    });
-
-    return NextResponse.json({ 
-        success: true, 
-        url: mp4BlobClient.url, 
-        blobName: mp4BlobName,
-        isCached: false 
-    });
-
-  } catch (error) {
-    console.error('[API] Error:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-    });
-  } finally {
-    try {
-        if (tempWebmPath && fs.existsSync(tempWebmPath)) fs.unlinkSync(tempWebmPath);
-        if (tempMp4Path && fs.existsSync(tempMp4Path)) fs.unlinkSync(tempMp4Path);
-    } catch(e) {}
-  }
+  return new Response(stream, {
+    headers: { 'Content-Type': 'application/x-ndjson' }
+  });
 }
