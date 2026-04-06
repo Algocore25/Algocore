@@ -13,30 +13,51 @@ export const dynamic = 'force-dynamic';
 async function getFfmpegInstance() {
     const { default: ffmpeg } = await import('fluent-ffmpeg');
     
-    // Strategy 1: Standard installer
+    // Strategy 1: Standard installer import
     try {
         const ffmpegInstaller = await import('@ffmpeg-installer/ffmpeg');
         if (ffmpegInstaller && ffmpegInstaller.path && fs.existsSync(ffmpegInstaller.path)) {
             ffmpeg.setFfmpegPath(ffmpegInstaller.path);
             return ffmpeg;
         }
-    } catch (e) {}
-
-    // Strategy 2: Absolute path fallback (Fixes the issue with complex project paths in Next.js)
-    const localWinPath = path.join(process.cwd(), 'node_modules', '@ffmpeg-installer', 'win32-x64', 'ffmpeg.exe');
-    if (fs.existsSync(localWinPath)) {
-        ffmpeg.setFfmpegPath(localWinPath);
-        return ffmpeg;
+    } catch (e) {
+        console.error('[FFmpeg API] Error importing @ffmpeg-installer/ffmpeg:', e.message);
     }
 
-    // Strategy 3: Check common installer subfolders if the above fails
-    const alternativeWinPath = path.join(process.cwd(), '..', 'node_modules', '@ffmpeg-installer', 'win32-x64', 'ffmpeg.exe');
-    if (fs.existsSync(alternativeWinPath)) {
-        ffmpeg.setFfmpegPath(alternativeWinPath);
-        return ffmpeg;
+    // Strategy 2: Dynamic path discovery based on platform
+    const platform = os.platform(); // 'win32', 'linux', 'darwin'
+    const arch = os.arch(); // 'x64', 'arm64'
+    const binaryName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+    const platformFolder = `${platform}-${arch}`;
+
+    // Common possible locations in Next.js standalone and production environments
+    const basePaths = [
+        process.cwd(),
+        path.join(process.cwd(), '..'), // For standalone mode
+        path.join(process.cwd(), 'Algocore-NQT'), // Possible specific structure
+    ];
+
+    const subpaths = [
+        path.join('node_modules', '@ffmpeg-installer', platformFolder, binaryName),
+        // Linux system defaults
+        '/usr/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg'
+    ];
+
+    for (const base of basePaths) {
+        for (const sub of subpaths) {
+            const p = path.isAbsolute(sub) ? sub : path.join(base, sub);
+            try {
+                if (fs.existsSync(p)) {
+                    console.log(`[FFmpeg API] Found FFmpeg binary at: ${p}`);
+                    ffmpeg.setFfmpegPath(p);
+                    return ffmpeg;
+                }
+            } catch (err) {}
+        }
     }
 
-    throw new Error('FFmpeg binary not found. Please ensure @ffmpeg-installer/ffmpeg is properly installed.');
+    throw new Error(`FFmpeg binary not found for platform ${platformFolder}. Path explored: ${subpaths.join(', ')} in multiple base directories.`);
 }
 
 export async function POST(req) {
