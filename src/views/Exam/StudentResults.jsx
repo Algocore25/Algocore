@@ -71,35 +71,47 @@ export default function StudentResult() {
 
                 setResultsAvailable(canShowResults);
 
-                const questionsData = testData.questions || [];
+                const rawQuestions = testData.questions || {};
+                const questionsDataArray = Array.isArray(rawQuestions) ? rawQuestions : Object.keys(rawQuestions);
 
-                // Fetch individual submission
-                const submissionRef = ref(database, `ExamSubmissions/${testid}/${user.uid}`);
-                const submissionSnapshot = await get(submissionRef);
+                // Fetch individual submission and marks
+                const [submissionSnapshot, marksSnapshot] = await Promise.all([
+                    get(ref(database, `ExamSubmissions/${testid}/${user.uid}`)),
+                    get(ref(database, `Marks/${testid}/${user.uid}`))
+                ]);
+                
                 const submissionData = submissionSnapshot.val();
+                const userMarks = marksSnapshot.val() || {};
 
                 if (submissionData) {
-                    let correctCount = 0;
-                    let score = 0;
+                    let totalMarksSum = 0;
                     let questionDetails = [];
-                    if (questionsData.length > 0) {
-                        correctCount = questionsData.filter(qId => submissionData[qId] === 'true').length;
-                        score = Math.round((correctCount / questionsData.length) * 100);
-                        questionDetails = questionsData.map((qId, index) => ({
-                            id: qId,
-                            questionNumber: index + 1,
-                            correct: submissionData[qId] === 'true',
-                        }));
+                    
+                    if (questionsDataArray.length > 0) {
+                        questionsDataArray.forEach((qId, index) => {
+                            const mark = userMarks[qId] || 0;
+                            totalMarksSum += mark;
+                            questionDetails.push({
+                                id: qId,
+                                questionNumber: index + 1,
+                                correct: submissionData[qId] === 'true',
+                                score: mark
+                            });
+                        });
+                        
+                        const score = Math.round(totalMarksSum / questionsDataArray.length);
+                        const correctCount = questionsDataArray.filter(qId => submissionData[qId] === 'true').length;
+
+                        setResult({
+                            uid: user.uid,
+                            studentName: user.displayName || user.email,
+                            correctCount,
+                            totalQuestions: questionsDataArray.length,
+                            score,
+                            questions: questionDetails,
+                            timeTaken: submissionData.timeTaken || 0
+                        });
                     }
-                    setResult({
-                        uid: user.uid,
-                        studentName: user.displayName || user.email,
-                        correctCount,
-                        totalQuestions: questionsData.length,
-                        score,
-                        questions: questionDetails,
-                        timeTaken: submissionData.timeTaken || 0
-                    });
                 }
 
                 // Fetch rankings and analysis if results are available
@@ -126,10 +138,17 @@ export default function StudentResult() {
                     }
                     console.log('Eligible students list:', eligibleList);
 
-                    // Fetch all submissions
-                    const allSubmissionsRef = ref(database, `ExamSubmissions/${testid}`);
-                    const allSubmissionsSnapshot = await get(allSubmissionsRef);
+                    const rawQuestions = testSnapshot.val().questions || {};
+                    const questionsDataArray = Array.isArray(rawQuestions) ? rawQuestions : Object.keys(rawQuestions);
+
+                    // Fetch all submissions and all marks
+                    const [allSubmissionsSnapshot, allMarksSnapshot] = await Promise.all([
+                        get(ref(database, `ExamSubmissions/${testid}`)),
+                        get(ref(database, `Marks/${testid}`))
+                    ]);
+                    
                     const allSubmissions = allSubmissionsSnapshot.val() || {};
+                    const allMarks = allMarksSnapshot.val() || {};
 
                     // Fetch user data
                     const usersRef = ref(database, 'users');
@@ -159,12 +178,18 @@ export default function StudentResult() {
                             if (!userData) userData = { name: studentName, email: studentEmail };
 
                             const subData = allSubmissions[uid];
+                            const studentMarks = allMarks[uid] || {};
+                            let totalMarksSum = 0;
                             let correctCount = 0;
                             let score = 0;
                             let timeTaken = null;
-                            if (subData && typeof subData === 'object' && questionsData.length > 0) {
-                                correctCount = questionsData.filter(qId => subData[qId] === 'true').length;
-                                score = Math.round((correctCount / questionsData.length) * 100);
+                            
+                            if (subData && typeof subData === 'object' && questionsDataArray.length > 0) {
+                                questionsDataArray.forEach(qId => {
+                                    totalMarksSum += (studentMarks[qId] || 0);
+                                    if (subData[qId] === 'true') correctCount++;
+                                });
+                                score = Math.round(totalMarksSum / questionsDataArray.length);
                                 timeTaken = subData.timeTaken || 0;
                             }
                             return {
@@ -185,8 +210,20 @@ export default function StudentResult() {
                         if (usersData[uid]) {
                             name = usersData[uid].name || usersData[uid].email || uid;
                         }
-                        const correctCount = questionsData.length > 0 ? questionsData.filter(qId => subData[qId] === 'true').length : 0;
-                        const score = questionsData.length > 0 ? Math.round((correctCount / questionsData.length) * 100) : 0;
+                        
+                        const studentMarks = allMarks[uid] || {};
+                        let totalMarksSum = 0;
+                        let correctCount = 0;
+                        
+                        if (questionsDataArray.length > 0) {
+                            questionsDataArray.forEach(qId => {
+                                totalMarksSum += (studentMarks[qId] || 0);
+                                if (subData[qId] === 'true') correctCount++;
+                            });
+                        }
+                        
+                        const score = questionsDataArray.length > 0 ? Math.round(totalMarksSum / questionsDataArray.length) : 0;
+                        
                         studentRankings.push({
                             uid,
                             name,

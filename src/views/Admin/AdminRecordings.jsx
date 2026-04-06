@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 
 const AdminRecordings = () => {
   const [downloading, setDownloading] = useState(null);
+  const [converting, setConverting] = useState(false);
   const [recordings, setRecordings] = useState([]);
   const [users, setUsers] = useState({});
   const [exams, setExams] = useState({});
@@ -83,6 +84,22 @@ const AdminRecordings = () => {
     );
   }, [recordings, searchTerm]);
 
+  const getBlobNameFromUrl = (url) => {
+    if (!url) return '';
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      // pathname is like /exam-recordings/testId/uid/recording.webm
+      const containerIdx = pathParts.indexOf('exam-recordings');
+      if (containerIdx !== -1) {
+        return pathParts.slice(containerIdx + 1).join('/');
+      }
+    } catch (e) {
+      console.error('Invalid URL:', url);
+    }
+    return '';
+  };
+
   const handleDelete = async (rec) => {
     if (!window.confirm(`Are you sure you want to delete the recording for ${rec.userName}?`)) {
         return;
@@ -116,25 +133,62 @@ const AdminRecordings = () => {
   const handleDownload = async (url, fileName) => {
     if (downloading) return;
     setDownloading(fileName);
-    const toastId = toast.loading(`Downloading ${fileName}...`);
+    const toastId = toast.loading(`Preparing ${fileName} for download...`);
     try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
+      const blobName = getBlobNameFromUrl(url);
+      if (!blobName) throw new Error('Could not identify recording file');
+      
+      // Use our proxy to bypass CORS and set attachment headers
+      const proxyUrl = `/api/proxy-recording?blobName=${encodeURIComponent(blobName)}&downloadName=${encodeURIComponent(fileName)}`;
+      
+      // Creating a hidden link to trigger the download explicitly
       const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = fileName;
+      a.href = proxyUrl;
+      a.setAttribute('download', fileName);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-      toast.success(`Downloaded ${fileName}`, { id: toastId });
+      
+      toast.success(`Download started for ${fileName}`, { id: toastId });
     } catch (err) {
       console.error('Download failed:', err);
       toast.error(`Download failed: ${err.message}`, { id: toastId });
     } finally {
-      setDownloading(null);
+      setTimeout(() => setDownloading(null), 1000);
+    }
+  };
+
+  const handleConvertToMp4 = async (url, fileName) => {
+    if (converting) return;
+    setConverting(true);
+    const toastId = toast.loading(`Converting ${fileName} to MP4 in background...`, { duration: 0 });
+    try {
+      const blobName = getBlobNameFromUrl(url);
+      if (!blobName) throw new Error('Could not identify recording file');
+      
+      const res = await fetch('/api/convert-to-mp4', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ blobName })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Conversion failed');
+      
+      // The API returns the new MP4 URL
+      const mp4Url = data.url;
+      const mp4FileName = fileName.replace('.webm', '.mp4');
+      
+      toast.success(data.isCached ? 'Found pre-converted MP4, starting download...' : 'Conversion successful! Starting download...', { id: toastId });
+      
+      // Trigger download using the same handleDownload logic
+      await handleDownload(mp4Url, mp4FileName);
+    } catch (err) {
+      console.error('Conversion failed:', err);
+      toast.error(`Conversion error: ${err.message}`, { id: toastId });
+    } finally {
+      setConverting(false);
+      setTimeout(() => toast.dismiss(toastId), 3000);
     }
   };
 
@@ -335,39 +389,62 @@ const AdminRecordings = () => {
 
               <div className="aspect-video bg-black flex items-center justify-center">
                 <video
-                  src={selectedVideo.url}
+                  src={`/api/proxy-recording?blobName=${encodeURIComponent(getBlobNameFromUrl(selectedVideo.url))}`}
                   controls
                   autoPlay
                   className="w-full h-full"
                 />
               </div>
 
-              <div className="p-4 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Note: Videos are streamed directly from Azure Blob Storage.
-                </p>
-                <button
-                  onClick={() => {
-                    const ext = selectedVideo.url.split('?')[0].split('.').pop() || 'webm';
-                    const safeName = selectedVideo.title.replace(/[^a-z0-9_\-]/gi, '_');
-                    handleDownload(selectedVideo.url, `${safeName}.${ext}`);
-                  }}
-                  disabled={!!downloading}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-                >
-                  {downloading ? (
-                    <>
-                      <FiRefreshCw className="animate-spin" />
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <FiDownload />
-                      Download
-                    </>
-                  )}
-                </button>
-              </div>
+                <div className="p-4 flex flex-col md:flex-row justify-between items-center bg-gray-50 dark:bg-gray-800/50 gap-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    Videos are streamed from Azure. Large conversions may take 1-2 mins.
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => {
+                        const blobName = getBlobNameFromUrl(selectedVideo.url);
+                        const fileName = blobName.split('/').pop() || 'recording.webm';
+                        handleConvertToMp4(selectedVideo.url, fileName);
+                      }}
+                      disabled={converting || !!downloading}
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                    >
+                      {converting ? (
+                        <>
+                          <FiRefreshCw className="animate-spin" />
+                          Converting...
+                        </>
+                      ) : (
+                        <>
+                          <FiCpu />
+                          Convert to MP4 & Download
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const ext = selectedVideo.url.split('?')[0].split('.').pop() || 'webm';
+                        const safeName = selectedVideo.title.replace(/[^a-z0-9_\-]/gi, '_');
+                        handleDownload(selectedVideo.url, `${safeName}.${ext}`);
+                      }}
+                      disabled={!!downloading || converting}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                    >
+                      {downloading ? (
+                        <>
+                          <FiRefreshCw className="animate-spin" />
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <FiDownload />
+                          Download WebM
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
             </motion.div>
           </div>
         )}

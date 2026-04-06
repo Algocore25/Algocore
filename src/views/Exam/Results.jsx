@@ -44,8 +44,12 @@ const Results = () => {
                     if (!user) return false;
 
                     const isAllowAll = test.allowAllStudents === true;
-                    const isEligible = Array.isArray(Object.values(test.Eligible || {})) &&
-                        Object.values(test.Eligible || {}).includes(user?.email);
+                    // Check eligibility from Eligible object
+                    const eligibleData = test.Eligible || {};
+                    const isEligible = Object.values(eligibleData).some(val => 
+                        String(val).toLowerCase() === user?.email?.toLowerCase() || 
+                        String(Object.keys(eligibleData).find(key => eligibleData[key] === val)).toLowerCase() === user?.email?.toLowerCase()
+                    );
 
                     // Check visibility
                     const isVisible = test.isVisible !== false; // Default to visible if not set
@@ -65,15 +69,26 @@ const Results = () => {
                 // Fetch scores for filtered tests
                 const testsWithScores = await Promise.all(filtered.map(async (test) => {
                     try {
-                        const submissionRef = ref(database, `ExamSubmissions/${test.id}/${user.uid}`);
-                        const subSnapshot = await get(submissionRef);
+                        const [subSnapshot, marksSnapshot] = await Promise.all([
+                            get(ref(database, `ExamSubmissions/${test.id}/${user.uid}`)),
+                            get(ref(database, `Marks/${test.id}/${user.uid}`))
+                        ]);
+                        
                         const subData = subSnapshot.val();
+                        const userMarks = marksSnapshot.val() || {};
 
                         if (subData) {
-                            const questionsData = test.questions || [];
-                            const correctCount = questionsData.filter(qId => subData[qId] === 'true').length;
-                            const score = Math.round((correctCount / questionsData.length) * 100);
-                            return { ...test, userScore: score, userId: user.uid };
+                            const rawQuestions = test.questions || {};
+                            const questionsDataArray = Array.isArray(rawQuestions) ? rawQuestions : Object.keys(rawQuestions);
+                            let totalMarksSum = 0;
+                            
+                            if (questionsDataArray.length > 0) {
+                                questionsDataArray.forEach(qId => {
+                                    totalMarksSum += (userMarks[qId] || 0);
+                                });
+                                const score = Math.round(totalMarksSum / questionsDataArray.length);
+                                return { ...test, userScore: score, userId: user.uid };
+                            }
                         }
                     } catch (err) {
                         console.error("Error fetching score for test:", test.id, err);
@@ -98,10 +113,7 @@ const Results = () => {
         // Find the test object
         const testObj = filteredTests.find(t => t.id === testId);
         console.log(testObj)
-        const schedulingType = testObj?.Properties?.type || 'anytime';
         router.push(`/studentresults/${testId}`);
-
-     
     };
 
     return (

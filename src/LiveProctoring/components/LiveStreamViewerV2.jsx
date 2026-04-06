@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { ref, onValue, set, remove, push } from 'firebase/database';
+import { ref, onValue, set, remove, push, onDisconnect } from 'firebase/database';
 import { database } from '../../firebase';
 import {
   FiVideoOff, FiVolume2, FiVolumeX, FiMaximize2, FiRefreshCw,
