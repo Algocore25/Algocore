@@ -12,9 +12,21 @@ export const VideoCanvas = ({ videoRef, detections, isActive }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Read live dimensions — video must be playing for these to be non-zero
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+
+    if (!vw || !vh) {
+      // Video not ready yet — clear and bail
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    // Keep canvas pixel dimensions in sync with actual video resolution
+    if (canvas.width !== vw || canvas.height !== vh) {
+      canvas.width = vw;
+      canvas.height = vh;
+    }
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -34,20 +46,20 @@ export const VideoCanvas = ({ videoRef, detections, isActive }) => {
       let color = '#10b981'; // Default green
       if (isPhone) {
         // Phone: amber at high confidence, orange-red at low (partial detection)
-        color = confidence >= 0.4 ? '#f59e0b' : '#ef4444';
+        color = confidence >= 0.40 ? '#f59e0b' : '#ef4444';
       } else if (isPerson) {
         color = personCount === 1 ? '#10b981' : '#ef4444';
       }
 
       // Opacity: lower for weak phone detections so admins can gauge confidence
-      const alpha = isPhone ? Math.max(0.55, Math.min(1.0, confidence / 0.4)) : 1.0;
+      const alpha = isPhone ? Math.max(0.60, Math.min(1.0, confidence / 0.35)) : 1.0;
 
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = color;
       ctx.lineWidth = isPhone && confidence < 0.4 ? 2 : 3;
 
       // Dashed border for low-confidence / partial phone detections
-      if (isPhone && confidence < 0.35) {
+      if (isPhone && confidence < 0.30) {
         ctx.setLineDash([8, 4]);
       } else {
         ctx.setLineDash([]);
@@ -60,27 +72,30 @@ export const VideoCanvas = ({ videoRef, detections, isActive }) => {
       // Label
       let label = '';
       if (isPerson) {
-        label = `Person (${Math.round(confidence * 100)}%)`;
+        label = `Person${personCount > 1 ? ' ⚠️' : ''} (${Math.round(confidence * 100)}%)`;
       } else if (isPhone) {
-        const qualifier = confidence < 0.35 ? ' partial' : confidence < 0.5 ? '' : '';
-        label = `📱 Phone${qualifier} (${Math.round(confidence * 100)}%)`;
+        label = `📱 Phone (${Math.round(confidence * 100)}%)`;
       } else {
         label = `${detection.class} (${Math.round(confidence * 100)}%)`;
       }
 
       ctx.font = 'bold 13px Arial';
-      const labelWidth = ctx.measureText(label).width + 12;
+      const labelWidth = ctx.measureText(label).width + 14;
+      const labelHeight = 24;
+      const labelY = y >= labelHeight ? y - labelHeight : y + height;
+
+      // Label background
       ctx.fillStyle = color;
-      ctx.fillRect(x, y - 24, labelWidth, 24);
+      ctx.fillRect(x, labelY, labelWidth, labelHeight);
 
       // Label text
       ctx.globalAlpha = 1.0;
       ctx.fillStyle = 'white';
-      ctx.fillText(label, x + 6, y - 7);
+      ctx.fillText(label, x + 7, labelY + 16);
     });
 
     ctx.globalAlpha = 1.0;
-  }, [detections, isActive]);
+  }, [detections, isActive, videoRef]);
 
   return (
     <canvas

@@ -1,10 +1,10 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 
 // ─── Thresholds ──────────────────────────────────────────────────────────────
-const PERSON_MIN_SCORE = 0.45;  // Standard threshold for persons
-const PHONE_MIN_SCORE  = 0.25;  // Increased from 0.12 to reduce false positives
-const REMOTE_AS_PHONE_MIN_SCORE = 0.35; // Increased from 0.20 for better accuracy
-const IOU_DEDUP_THRESHOLD = 0.35; // Suppress duplicate phone boxes
+const PERSON_MIN_SCORE = 0.40;  // Slightly lower to detect partially occluded persons
+const PHONE_MIN_SCORE  = 0.20;  // Lower to catch angled / partially occluded phones
+const REMOTE_AS_PHONE_MIN_SCORE = 0.25; // Remote controls often misclassified as phone
+const IOU_DEDUP_THRESHOLD = 0.40; // Suppress duplicate phone boxes
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -24,27 +24,30 @@ function iou([ax, ay, aw, ah], [bx, by, bw, bh]) {
 
 /**
  * Filter phone detections by realistic size constraints.
- * Phones are typically small objects relative to the frame.
+ * Phones can range from a small object in the background to filling
+ * most of the frame if held close to the camera.
  */
 function filterBySize(detections, frameWidth, frameHeight) {
-  const minPhoneSize = Math.min(frameWidth, frameHeight) * 0.03; // 3% of smaller dimension
-  const maxPhoneSize = Math.min(frameWidth, frameHeight) * 0.15; // 15% of smaller dimension
-  
+  const frameArea = frameWidth * frameHeight;
+  const minPhoneArea = frameArea * 0.003;  // at least 0.3% of frame area
+  const maxPhoneArea = frameArea * 0.60;   // at most 60% (held very close)
+
   return detections.filter(d => {
     const [x, y, w, h] = d.bbox;
     const area = w * h;
     const aspectRatio = w / h;
-    
-    // Filter by size
-    if (area < minPhoneSize * minPhoneSize || area > maxPhoneSize * maxPhoneSize) {
+
+    // Filter by area
+    if (area < minPhoneArea || area > maxPhoneArea) {
       return false;
     }
-    
-    // Filter by aspect ratio (phones are typically taller than wide)
-    if (aspectRatio < 0.3 || aspectRatio > 2.0) {
+
+    // Filter by aspect ratio (phones are typically portrait or landscape)
+    // Allow wider range: 0.2 (very tall/narrow) to 3.5 (very wide/landscape)
+    if (aspectRatio < 0.20 || aspectRatio > 3.5) {
       return false;
     }
-    
+
     return true;
   });
 }
@@ -75,10 +78,11 @@ export const usePersonDetection = () => {
   const [model, setModel] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Temporal consistency tracking
-  const phoneDetectionHistory = useRef([]);
-  const lastFrameTime = useRef(0);
+
+  // Temporal smoothing: track phone presence over sliding window
+  const phoneHistoryRef = useRef([]); // array of booleans (was phone detected?)
+  const HISTORY_WINDOW = 3;           // look at last N frames
+  const CONFIRM_THRESHOLD = 1;        // phone confirmed if detected in >= 1 of N frames
 
   useEffect(() => {
     const loadModel = async () => {
@@ -88,10 +92,12 @@ export const usePersonDetection = () => {
         if (!globalThis.cocoSsd) {
           throw new Error('CocoSsd script not found on globalThis. Ensure the script is included in layout.jsx.');
         }
-        const loadedModel = await globalThis.cocoSsd.load();
+        const loadedModel = await globalThis.cocoSsd.load({
+          base: 'mobilenet_v2', // faster & more accurate than lite_mobilenet_v2
+        });
         setModel(loadedModel);
         setError(null);
-        console.log('Detection model loaded successfully');
+        console.log('✅ Detection model loaded successfully');
       } catch (err) {
         setError(err.message || 'Failed to load detection model');
         console.error('Model loading error:', err);
@@ -120,87 +126,94 @@ export const usePersonDetection = () => {
   const detectObjects = useCallback(async (videoElement) => {
     if (!model || !videoElement) return { persons: [], phones: [] };
 
+    // Guard: video must have valid dimensions
+    const frameWidth = videoElement.videoWidth;
+    const frameHeight = videoElement.videoHeight;
+    if (!frameWidth || !frameHeight) return { persons: [], phones: [] };
+
     try {
-      const currentTime = Date.now();
-      const frameWidth = videoElement.videoWidth || 640;
-      const frameHeight = videoElement.videoHeight || 480;
-      
-      // ── Pass 1: standard detection (used for persons) ──────────────────
+      // ── Pass 1: standard detection at default threshold ──────────────────
       const standard = await model.detect(videoElement);
 
+      // Persons from standard pass
       const persons = standard
         .filter((p) => p.class === 'person' && p.score >= PERSON_MIN_SCORE)
         .map((p) => ({ class: p.class, score: p.score, bbox: p.bbox }));
 
-      // ── Pass 2: aggressive low-threshold detection for phones ──────────
-      // maxNumBoxes=20, minScore very low so partial / angled phones are caught
+      // ── Pass 2: low-threshold detection for phones ───────────────────────
+      // Increase box count and lower score to catch partially-visible phones
       let sensitive = [];
       try {
         sensitive = await model.detect(videoElement, 20, PHONE_MIN_SCORE);
       } catch (_) {
-        sensitive = standard; // fallback if overload not supported
+        sensitive = standard; // fallback if overloaded args not supported
       }
 
-      // Collect phone-class detections from both passes
+      // Collect phone-class detections from both passes into a map
       const phoneMap = new Map(); // bbox key → detection
 
       const addPhone = (p, label = 'cell phone') => {
-        const key = p.bbox.map(Math.round).join(',');
+        const key = p.bbox.map(v => Math.round(v)).join(',');
         if (!phoneMap.has(key) || phoneMap.get(key).score < p.score) {
           phoneMap.set(key, { class: label, score: p.score, bbox: p.bbox });
         }
       };
 
-      // From standard pass
+      // From standard pass — cell phone
       standard
         .filter((p) => p.class === 'cell phone')
         .forEach((p) => addPhone(p));
 
-      // From sensitive pass — cell phone + remote (common misclassification)
+      // From sensitive pass — cell phone
       sensitive
         .filter((p) => p.class === 'cell phone' && p.score >= PHONE_MIN_SCORE)
         .forEach((p) => addPhone(p));
 
+      // From sensitive pass — remote (common COCO misclassification for phones)
       sensitive
         .filter((p) => p.class === 'remote' && p.score >= REMOTE_AS_PHONE_MIN_SCORE)
-        .forEach((p) => addPhone(p, 'cell phone')); // relabel as cell phone
+        .forEach((p) => addPhone(p, 'cell phone'));
 
-      // Convert to array and apply size filtering
+      // Also catch 'book' class sometimes confused for a phone in partial views
+      sensitive
+        .filter((p) => p.class === 'book' && p.score >= 0.40)
+        .forEach((p) => addPhone(p, 'cell phone'));
+
+      // Convert to array
       let phones = Array.from(phoneMap.values());
+
+      // Size filter (generous limits)
       phones = filterBySize(phones, frameWidth, frameHeight);
 
       // Dedup via IoU-based NMS
       phones = nms(phones);
 
-      // Apply temporal consistency - require phone to be detected consistently
-      const currentDetection = {
-        phones: phones,
-        timestamp: currentTime,
-        count: phones.length
-      };
-
-      // Maintain history of last 3 detections
-      phoneDetectionHistory.current.push(currentDetection);
-      if (phoneDetectionHistory.current.length > 3) {
-        phoneDetectionHistory.current.shift();
+      // ── Temporal smoothing ───────────────────────────────────────────────
+      // Track whether a phone was detected this frame
+      phoneHistoryRef.current.push(phones.length > 0);
+      if (phoneHistoryRef.current.length > HISTORY_WINDOW) {
+        phoneHistoryRef.current.shift();
       }
 
-      // Only report phone if detected in at least 2 of last 3 frames
-      const recentDetections = phoneDetectionHistory.current.slice(-3);
-      const framesWithPhone = recentDetections.filter(d => d.count > 0).length;
-      
-      if (framesWithPhone < 2 && recentDetections.length === 3) {
-        // Not consistently detected, clear phones
+      // Count how many recent frames had a phone detection
+      const recentPositive = phoneHistoryRef.current.filter(Boolean).length;
+
+      // Suppress only if we have a full history AND zero recent positives
+      // This is intentionally lenient — 1 positive in 3 frames is enough to report
+      if (
+        phoneHistoryRef.current.length >= HISTORY_WINDOW &&
+        recentPositive < CONFIRM_THRESHOLD
+      ) {
         phones = [];
       }
 
-      // Log detection info for debugging
-      if (phones.length > 0) {
-        console.log('📱 Phone detected:', {
-          count: phones.length,
-          scores: phones.map(p => p.score.toFixed(3)),
-          consistency: `${framesWithPhone}/3 frames`,
-          history: recentDetections.map(d => d.count)
+      // Debug logging
+      if (phones.length > 0 || persons.length !== 1) {
+        console.log('🔍 Detection:', {
+          persons: persons.length,
+          phones: phones.length,
+          phoneScores: phones.map(p => p.score.toFixed(3)),
+          consistency: `${recentPositive}/${phoneHistoryRef.current.length}`,
         });
       }
 
