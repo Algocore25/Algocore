@@ -227,14 +227,14 @@ export const AuthProvider = ({ children }) => {
         lastActive: serverTimestamp(),
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
         platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
-        isCurrent: true 
+        isCurrent: true
       };
 
       // Set session data
       await set(sessionRef, sessionData);
       // Removed onDisconnect().remove() to prevent brief network drops
       // from automatically deleting the session and logging the user out.
-      
+
       // Set up heartbeat
       const sendHeartbeat = async () => {
         if (!sessionPathRef.current) return;
@@ -267,7 +267,7 @@ export const AuthProvider = ({ children }) => {
             const sessionsData = snapshot.val();
             const now = Date.now();
             const updates = {};
-            
+
             Object.keys(sessionsData).forEach(key => {
               const session = sessionsData[key];
               // If session was last active more than 5 minutes ago, mark for removal

@@ -276,16 +276,17 @@ function ProfilePage() {
 
       // Display name fallback: profile.displayName → auth name → email prefix
       const displayName = profileNode.displayName || user.displayName || user.email?.split('@')[0] || 'Coder';
-      const photoURL = user.photoURL || null;
+      const defaultPhotoURL = user.photoURL || null;
 
       // Persist displayName + photoURL to DB so public profile can read them
       const updates = {};
       if (!profileNode.displayName && displayName) updates[`users/${user.uid}/profile/displayName`] = displayName;
-      if (photoURL && photoURL !== profileNode.photoURL) updates[`users/${user.uid}/profile/photoURL`] = photoURL;
+      if (!profileNode.photoURL && defaultPhotoURL) updates[`users/${user.uid}/profile/photoURL`] = defaultPhotoURL;
       if (Object.keys(updates).length > 0) {
         await Promise.all(Object.entries(updates).map(([path, val]) => set(ref(database, path), val)));
       }
 
+      const finalPhotoURL = profileNode.photoURL || defaultPhotoURL;
 
       // GitHub link
       const gh = profileNode.githubLink || '';
@@ -303,7 +304,7 @@ function ProfilePage() {
         username: profileNode.username,
         displayName,
         email: user.email || "No email",
-        photoURL,
+        photoURL: finalPhotoURL,
         joinDate: formatJoinDate(user.metadata?.creationTime ? new Date(user.metadata.creationTime).getTime() : Date.now()),
         totalSubmissions: 0,
         acceptedSubmissions: 0,
@@ -722,11 +723,13 @@ function ProfilePage() {
     setSettingsSaving(false);
   };
 
+  const BLOB_KEY = `profile_blob_${user?.uid}`;
+
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validate size (e.g., 5MB limit)
+    // Validate size (5MB limit)
     if (file.size > 5 * 1024 * 1024) {
       alert("Image size should be less than 5MB.");
       return;
@@ -737,6 +740,14 @@ function ProfilePage() {
     formData.append('file', file);
 
     try {
+      // Delete old blob from Azure if one is stored
+      const oldBlobName = localStorage.getItem(BLOB_KEY);
+      if (oldBlobName) {
+        try {
+          await fetch(`/api/delete-blob?container=profiles&blob=${encodeURIComponent(oldBlobName)}`, { method: 'DELETE' });
+        } catch (_) { /* silent — old blob cleanup is best-effort */ }
+      }
+
       const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
@@ -744,11 +755,16 @@ function ProfilePage() {
 
       if (!res.ok) throw new Error('Upload failed');
 
-      const { imageUrl } = await res.json();
+      const { imageUrl, blobName } = await res.json();
+
+      // Persist blob key in localStorage so it can be deleted later
+      if (blobName) {
+        localStorage.setItem(BLOB_KEY, blobName);
+      }
 
       // Update Firebase Profile in RTDB
       await set(ref(database, `users/${user.uid}/profile/photoURL`), imageUrl);
-      
+
       // Update local state
       setProfileData(prev => ({ ...prev, photoURL: imageUrl }));
     } catch (error) {
@@ -767,6 +783,15 @@ function ProfilePage() {
     }
     setUploadingPhoto(true);
     try {
+      // Delete blob from Azure and clear localStorage key
+      const oldBlobName = localStorage.getItem(BLOB_KEY);
+      if (oldBlobName) {
+        try {
+          await fetch(`/api/delete-blob?container=profiles&blob=${encodeURIComponent(oldBlobName)}`, { method: 'DELETE' });
+          localStorage.removeItem(BLOB_KEY);
+        } catch (_) { /* silent — cleanup is best-effort */ }
+      }
+
       await set(ref(database, `users/${user.uid}/profile/photoURL`), user.photoURL);
       setProfileData(prev => ({ ...prev, photoURL: user.photoURL }));
     } catch (error) {

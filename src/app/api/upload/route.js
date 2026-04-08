@@ -46,7 +46,7 @@ export async function POST(req) {
 
     const imageUrl = blockBlobClient.url;
 
-    return NextResponse.json({ imageUrl });
+    return NextResponse.json({ imageUrl, blobName: fileName });
   } catch (error) {
     console.error('Azure upload error details:', {
       message: error.message,
