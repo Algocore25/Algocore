@@ -16,9 +16,11 @@ const TestsSidebar = ({ activeTab, setActiveTab }) => {
   ];
 
   return (
-    <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 h-full overflow-y-auto">
-      <div className="p-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Test Management</h2>
+    <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 h-full flex flex-col">
+      <div className="p-4 pb-2 flex-shrink-0 sticky top-0 bg-white dark:bg-gray-800 z-10">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Test Management</h2>
+      </div>
+      <div className="p-4 pt-2 flex-1 overflow-y-auto">
         <nav className="space-y-2">
           {menuItems.map((item) => {
             const isActive = activeTab === item.id;
