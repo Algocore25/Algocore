@@ -8,6 +8,7 @@ import {
     FiUsers, FiCalendar, FiArrowRight, FiRefreshCw, FiMail,
     FiCheck, FiX, FiActivity
 } from 'react-icons/fi';
+import { ALGOCORE_BASE_URL } from '../api';
 
 const formatTimestamp = (ts, includeSeconds = false) => {
     if (!ts) return 'Unknown Time';
@@ -194,7 +195,7 @@ const ReminderPage = () => {
 
         try {
             const response = await axios.post(
-                "https://algocorefunctions.netlify.app/.netlify/functions/remainder"
+                `${ALGOCORE_BASE_URL}remainder`
             );
 
             if (response.data.success) {

@@ -6,6 +6,7 @@ import { ref, get } from 'firebase/database';
 import { MessageSquare, X, Send, Bot, User } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
+import { ALGOCORE_BASE_URL } from '../views/api';
 
 const FloatingChatbot = ({ contextCode, isCompiler }) => {
     const { theme } = useTheme();
@@ -113,7 +114,7 @@ const FloatingChatbot = ({ contextCode, isCompiler }) => {
         }
 
         try {
-            const response = await axios.post("https://algocorefunctions.netlify.app/.netlify/functions/chat", {
+            const response = await axios.post(`${ALGOCORE_BASE_URL}chat`, {
                 messages: apiMessages
             });
 

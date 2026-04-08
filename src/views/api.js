@@ -57,12 +57,16 @@ export const executeCode = async (language, sourceCode, input) => {
     }
     throw new Error(`Code execution failed. ${err.message}`);
   }
+  
 };
 
+
+export const ALGOCORE_BASE_URL = "https://algocore-runner.kindcliff-a86dac7a.southindia.azurecontainerapps.io/";
+
 export const aiApi = {
-  chat: (messages) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/chat", { messages }),
-  solveAptitude: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/aptitude-solve", { text }),
-  evaluateCode: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/coding-evaluate", { text }),
-  analyzeComplexity: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/coding-complexity", { text }),
-  summarize: (text) => axios.post("https://algocorefunctions.netlify.app/.netlify/functions/ai", { task: "summarization", text }),
+  chat: (messages) => axios.post(  ALGOCORE_BASE_URL +"chat", { messages }),
+  solveAptitude: (text) => axios.post(  ALGOCORE_BASE_URL +"aptitude-solve", { text }),
+  evaluateCode: (text) => axios.post(  ALGOCORE_BASE_URL +"coding-evaluate", { text }),
+  analyzeComplexity: (text) => axios.post(  ALGOCORE_BASE_URL +"coding-complexity", { text }),
+  summarize: (text) => axios.post(  ALGOCORE_BASE_URL +"ai", { task: "summarization", text }),
 };

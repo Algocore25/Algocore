@@ -1,6 +1,7 @@
 import emailjs from '@emailjs/browser';
 import { ref, get } from 'firebase/database';
 import { database } from '../firebase';
+import { ALGOCORE_BASE_URL } from '../views/api';
 
 /**
  * Enhanced Utility to send emails with fallback and retry logic.
@@ -12,9 +13,9 @@ export const sendEmailService = async ({ to, subject, text, html }, maxRetries =
   // ── Method 1: Netlify Functions (Primary) ─────────────────────────────────
   for (let i = 0; i < maxRetries; i++) {
     try {
-      console.log(`Sending email via Netlify (Attempt ${i + 1})...`);
+      console.log(`Sending email via Next.js backend (Attempt ${i + 1})...`);
       const response = await fetch(
-        "https://algocorefunctions.netlify.app/.netlify/functions/send-email",
+        `${ALGOCORE_BASE_URL}send-email`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
