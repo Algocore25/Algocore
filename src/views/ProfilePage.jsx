@@ -286,7 +286,25 @@ function ProfilePage() {
         await Promise.all(Object.entries(updates).map(([path, val]) => set(ref(database, path), val)));
       }
 
-      const finalPhotoURL = profileNode.photoURL || defaultPhotoURL;
+      // Auto-migrate direct Azure blob URLs → proxy URL (fixes images not loading on refresh)
+      let finalPhotoURL = profileNode.photoURL || defaultPhotoURL;
+      const AZURE_BLOB_ORIGIN = 'blob.core.windows.net';
+      if (finalPhotoURL && finalPhotoURL.includes(AZURE_BLOB_ORIGIN)) {
+        try {
+          // Extract container + blobName from the Azure URL
+          // Format: https://<account>.blob.core.windows.net/<container>/<blobName>
+          const urlObj = new URL(finalPhotoURL);
+          const parts = urlObj.pathname.split('/').filter(Boolean); // ['profiles', 'uuid.jpg']
+          if (parts.length >= 2) {
+            const container = parts[0];
+            const blobName = parts.slice(1).join('/');
+            const proxyURL = `/api/proxy-blob?container=${container}&blobName=${encodeURIComponent(blobName)}`;
+            // Persist proxy URL to Firebase so migration runs only once
+            await set(ref(database, `users/${user.uid}/profile/photoURL`), proxyURL);
+            finalPhotoURL = proxyURL;
+          }
+        } catch (_) { /* silent — keep original URL if parse fails */ }
+      }
 
       // GitHub link
       const gh = profileNode.githubLink || '';

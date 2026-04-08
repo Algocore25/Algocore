@@ -44,9 +44,10 @@ export async function POST(req) {
       blobHTTPHeaders: { blobContentType: file.type }
     });
 
-    const imageUrl = blockBlobClient.url;
+    // Use a server-side proxy URL so images always load (bypasses CORS / private container)
+    const proxyUrl = `/api/proxy-blob?container=${containerName}&blobName=${encodeURIComponent(fileName)}`;
 
-    return NextResponse.json({ imageUrl, blobName: fileName });
+    return NextResponse.json({ imageUrl: proxyUrl, blobName: fileName });
   } catch (error) {
     console.error('Azure upload error details:', {
       message: error.message,

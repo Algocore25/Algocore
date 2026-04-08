@@ -53,7 +53,7 @@ export async function GET(req) {
 
     // Explicitly allow CORS
     response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Cache-Control', 'no-store, max-age=0');
+    response.headers.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
 
     return response;
   } catch (error) {
